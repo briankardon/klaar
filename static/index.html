@@ -27,7 +27,11 @@
         <h2 id="list-title" contenteditable="true"></h2>
         <button id="btn-delete-list" title="Delete list">&#x1f5d1;</button>
       </div>
-      <ul id="items"></ul>
+      <div id="collapse-bar" class="hidden"></div>
+      <div id="items-container">
+        <div id="fold-gutter"></div>
+        <ul id="items"></ul>
+      </div>
       <form id="add-item-form">
         <input type="text" id="new-item-text" placeholder="Add an item…" autocomplete="off">
         <button type="submit">Add</button>

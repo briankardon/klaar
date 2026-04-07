@@ -12,8 +12,12 @@ const addForm = document.getElementById("add-item-form");
 const newItemText = document.getElementById("new-item-text");
 const btnNewList = document.getElementById("btn-new-list");
 const btnDeleteList = document.getElementById("btn-delete-list");
+const collapseBar = document.getElementById("collapse-bar");
+const foldGutter = document.getElementById("fold-gutter");
 
 let currentListId = null;
+let currentItems = [];          // latest items from server
+const collapsedIds = new Set();  // client-side collapse state
 
 // -------------------------------------------------------------------
 // API helpers
@@ -48,6 +52,7 @@ async function loadLists() {
 
 async function selectList(id) {
   currentListId = id;
+  collapsedIds.clear();
   const data = await api(`/lists/${id}`);
   if (!data || data.error) {
     currentListId = null;
@@ -56,14 +61,21 @@ async function selectList(id) {
     await loadLists();
     return;
   }
+  currentItems = data.items;
   listTitle.textContent = data.name;
   emptyState.classList.add("hidden");
   listView.classList.remove("hidden");
-  renderItems(data.items);
-  // update active state in sidebar
+  renderItems();
   listIndex.querySelectorAll("li").forEach((li) => {
     li.classList.toggle("active", li.dataset.id === id);
   });
+}
+
+async function refreshItems() {
+  const data = await api(`/lists/${currentListId}`);
+  if (!data || data.error) return;
+  currentItems = data.items;
+  renderItems();
 }
 
 btnNewList.addEventListener("click", async () => {
@@ -84,7 +96,6 @@ btnDeleteList.addEventListener("click", async () => {
   await loadLists();
 });
 
-// Rename on blur
 listTitle.addEventListener("blur", async () => {
   if (!currentListId) return;
   const name = listTitle.textContent.trim();
@@ -95,23 +106,111 @@ listTitle.addEventListener("blur", async () => {
 });
 
 listTitle.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") {
-    e.preventDefault();
-    listTitle.blur();
-  }
+  if (e.key === "Enter") { e.preventDefault(); listTitle.blur(); }
 });
+
+// -------------------------------------------------------------------
+// Collapse helpers
+// -------------------------------------------------------------------
+
+function hasChildren(index) {
+  if (index >= currentItems.length - 1) return false;
+  return currentItems[index + 1].depth > currentItems[index].depth;
+}
+
+function getChildRange(index) {
+  // Returns [start, end) of children indices for item at index.
+  const parentDepth = currentItems[index].depth;
+  let end = index + 1;
+  while (end < currentItems.length && currentItems[end].depth > parentDepth) {
+    end++;
+  }
+  return [index + 1, end];
+}
+
+function isHiddenByCollapse(index) {
+  // Walk backwards to see if any ancestor is collapsed and hides this item.
+  const item = currentItems[index];
+  for (let i = index - 1; i >= 0; i--) {
+    if (currentItems[i].depth < item.depth) {
+      // This is the nearest ancestor at a shallower depth
+      if (collapsedIds.has(currentItems[i].id)) return true;
+      // Check if *that* ancestor is itself hidden
+      if (isHiddenByCollapse(i)) return true;
+      // Continue searching for higher ancestors
+    }
+  }
+  return false;
+}
+
+function toggleCollapse(itemId) {
+  if (collapsedIds.has(itemId)) {
+    collapsedIds.delete(itemId);
+  } else {
+    collapsedIds.add(itemId);
+  }
+  renderItems();
+}
+
+function collapseAllAtDepth(depth) {
+  // Collapse every item at the given depth that has children
+  for (let i = 0; i < currentItems.length; i++) {
+    if (currentItems[i].depth === depth && hasChildren(i)) {
+      collapsedIds.add(currentItems[i].id);
+    }
+  }
+  renderItems();
+}
+
+function expandAllAtDepth(depth) {
+  for (let i = 0; i < currentItems.length; i++) {
+    if (currentItems[i].depth === depth) {
+      collapsedIds.delete(currentItems[i].id);
+    }
+  }
+  renderItems();
+}
+
+function expandAll() {
+  collapsedIds.clear();
+  renderItems();
+}
 
 // -------------------------------------------------------------------
 // Items
 // -------------------------------------------------------------------
 
-function renderItems(items) {
+function renderItems() {
   itemsEl.innerHTML = "";
-  for (const item of items) {
+  foldGutter.innerHTML = "";
+  const maxDepth = currentItems.reduce((m, it) => Math.max(m, it.depth), 0);
+  updateCollapseBar(maxDepth);
+
+  let visibleRow = 0;
+  for (let i = 0; i < currentItems.length; i++) {
+    const item = currentItems[i];
+    if (isHiddenByCollapse(i)) continue;
+
+    const isParent = hasChildren(i);
+    const isCollapsed = collapsedIds.has(item.id);
+    const row = visibleRow++;
+
+    // Gutter toggle — positioned absolutely to align with the item row
+    if (isParent) {
+      const btn = document.createElement("button");
+      btn.className = "gutter-toggle";
+      btn.style.top = (row * 26) + "px";
+      btn.textContent = isCollapsed ? "\u25b6" : "\u25bc";
+      btn.title = isCollapsed ? "Expand (Ctrl+.)" : "Collapse (Ctrl+.)";
+      btn.addEventListener("click", () => toggleCollapse(item.id));
+      foldGutter.appendChild(btn);
+    }
+
     const li = document.createElement("li");
     li.className = "item" + (item.done ? " done" : "");
     li.dataset.id = item.id;
     li.dataset.depth = item.depth;
+    li.dataset.index = i;
 
     // checkbox
     const cb = document.createElement("input");
@@ -131,7 +230,6 @@ function renderItems(items) {
     });
     txt.addEventListener("keydown", (e) => {
       if (e.key === "Enter") { e.preventDefault(); txt.blur(); }
-      // Tab to indent, Shift+Tab to outdent
       if (e.key === "Tab") {
         e.preventDefault();
         const newDepth = item.depth + (e.shiftKey ? -1 : 1);
@@ -139,7 +237,15 @@ function renderItems(items) {
       }
     });
 
-    // indent button
+    // child count badge when collapsed
+    const badge = document.createElement("span");
+    badge.className = "child-count";
+    if (isParent && isCollapsed) {
+      const [start, end] = getChildRange(i);
+      badge.textContent = `(${end - start})`;
+    }
+
+    // indent/outdent buttons
     const btnOut = document.createElement("button");
     btnOut.className = "btn-icon";
     btnOut.textContent = "\u2190";
@@ -163,9 +269,50 @@ function renderItems(items) {
     btnDel.title = "Delete";
     btnDel.addEventListener("click", () => deleteItem(item.id));
 
-    li.append(cb, txt, btnOut, btnIn, btnDel);
+    li.append(cb, txt, badge, btnOut, btnIn, btnDel);
     itemsEl.appendChild(li);
   }
+}
+
+function updateCollapseBar(maxDepth) {
+  collapseBar.innerHTML = "";
+  if (maxDepth === 0) {
+    collapseBar.classList.add("hidden");
+    return;
+  }
+  collapseBar.classList.remove("hidden");
+
+  const label = document.createElement("span");
+  label.className = "collapse-label";
+  label.textContent = "Depth:";
+  collapseBar.appendChild(label);
+
+  for (let d = 0; d <= maxDepth; d++) {
+    const btn = document.createElement("button");
+    btn.className = "collapse-depth-btn";
+    btn.textContent = d;
+    btn.title = `Toggle collapse at depth ${d} (Ctrl+${d})`;
+    btn.addEventListener("click", () => {
+      // If any at this depth are expanded, collapse all; otherwise expand all
+      let anyExpanded = false;
+      for (let i = 0; i < currentItems.length; i++) {
+        if (currentItems[i].depth === d && hasChildren(i) && !collapsedIds.has(currentItems[i].id)) {
+          anyExpanded = true;
+          break;
+        }
+      }
+      if (anyExpanded) collapseAllAtDepth(d);
+      else expandAllAtDepth(d);
+    });
+    collapseBar.appendChild(btn);
+  }
+
+  const btnAll = document.createElement("button");
+  btnAll.className = "collapse-depth-btn";
+  btnAll.textContent = "All";
+  btnAll.title = "Expand all (Ctrl+E)";
+  btnAll.addEventListener("click", expandAll);
+  collapseBar.appendChild(btnAll);
 }
 
 async function toggleDone(item) {
@@ -177,12 +324,12 @@ async function updateItem(itemId, fields) {
     method: "PATCH",
     body: fields,
   });
-  await selectList(currentListId);
+  await refreshItems();
 }
 
 async function deleteItem(itemId) {
   await api(`/lists/${currentListId}/items/${itemId}`, { method: "DELETE" });
-  await selectList(currentListId);
+  await refreshItems();
 }
 
 addForm.addEventListener("submit", async (e) => {
@@ -191,7 +338,56 @@ addForm.addEventListener("submit", async (e) => {
   if (!text) return;
   await api(`/lists/${currentListId}/items`, { method: "POST", body: { text } });
   newItemText.value = "";
-  await selectList(currentListId);
+  await refreshItems();
+});
+
+// -------------------------------------------------------------------
+// Keyboard shortcuts
+// -------------------------------------------------------------------
+
+document.addEventListener("keydown", (e) => {
+  if (!currentListId) return;
+
+  // Ctrl+. — toggle collapse on focused item
+  if (e.ctrlKey && e.key === ".") {
+    e.preventDefault();
+    const focused = document.activeElement;
+    const itemEl = focused?.closest?.(".item");
+    if (itemEl) {
+      const id = itemEl.dataset.id;
+      const idx = parseInt(itemEl.dataset.index, 10);
+      if (hasChildren(idx)) toggleCollapse(id);
+    }
+    return;
+  }
+
+  // Ctrl+0..9 — toggle collapse at depth N
+  if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key >= "0" && e.key <= "9") {
+    const depth = parseInt(e.key, 10);
+    const maxDepth = currentItems.reduce((m, it) => Math.max(m, it.depth), 0);
+    if (depth <= maxDepth) {
+      e.preventDefault();
+      let anyExpanded = false;
+      for (let i = 0; i < currentItems.length; i++) {
+        if (currentItems[i].depth === depth && hasChildren(i) && !collapsedIds.has(currentItems[i].id)) {
+          anyExpanded = true;
+          break;
+        }
+      }
+      if (anyExpanded) collapseAllAtDepth(depth);
+      else expandAllAtDepth(depth);
+    }
+    return;
+  }
+
+  // Ctrl+E — expand all
+  if (e.ctrlKey && e.key === "e" && !e.shiftKey && !e.altKey) {
+    // Only intercept if not in a text input
+    if (document.activeElement?.classList?.contains("item-text")) return;
+    e.preventDefault();
+    expandAll();
+    return;
+  }
 });
 
 // -------------------------------------------------------------------
