@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Klaar</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <h1>Klaar</h1>
+  </header>
+
+  <main>
+    <!-- Sidebar: list of todo lists -->
+    <nav id="sidebar">
+      <div class="sidebar-header">
+        <h2>Lists</h2>
+        <button id="btn-new-list" title="New list">+</button>
+      </div>
+      <ul id="list-index"></ul>
+    </nav>
+
+    <!-- Main content: selected todo list -->
+    <section id="list-view" class="hidden">
+      <div class="list-header">
+        <h2 id="list-title" contenteditable="true"></h2>
+        <button id="btn-delete-list" title="Delete list">&#x1f5d1;</button>
+      </div>
+      <ul id="items"></ul>
+      <form id="add-item-form">
+        <input type="text" id="new-item-text" placeholder="Add an item…" autocomplete="off">
+        <button type="submit">Add</button>
+      </form>
+    </section>
+
+    <section id="empty-state">
+      <p>Select or create a list to get started.</p>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
