@@ -244,11 +244,15 @@ function renderItems() {
       if (e.key === "Backspace" && txt.value === "") {
         e.preventDefault();
         deleted = true;
-        const allTexts = Array.from(itemsEl.querySelectorAll(".item-text"));
-        const idx = allTexts.indexOf(txt);
-        const prev = allTexts[idx - 1];
+        // Find previous item's ID before delete re-renders the DOM
+        const allItems = Array.from(itemsEl.querySelectorAll(".item"));
+        const idx = allItems.findIndex((el) => el.dataset.id === item.id);
+        const prevId = idx > 0 ? allItems[idx - 1].dataset.id : null;
         deleteItem(item.id);
-        if (prev) prev.focus();
+        if (prevId) {
+          const el = itemsEl.querySelector(`.item[data-id="${prevId}"] .item-text`);
+          if (el) el.focus();
+        }
         return;
       }
       if (e.key === "ArrowUp" || e.key === "ArrowDown") {
