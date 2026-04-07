@@ -2,6 +2,7 @@
 
 import json
 import os
+import tempfile
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,8 +37,15 @@ def _load_list(list_id: str) -> dict | None:
 
 def _save_list(data: dict) -> None:
     path = _list_path(data["id"])
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+    # Atomic write: write to temp file, then rename to avoid corruption
+    fd, tmp = tempfile.mkstemp(dir=DATA_DIR, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        os.replace(tmp, path)
+    except BaseException:
+        os.unlink(tmp)
+        raise
 
 
 def _new_item(text: str, depth: int = 0) -> dict:
@@ -204,15 +212,18 @@ def reorder_item(list_id: str):
     body = request.get_json(force=True)
     item_id = body.get("item_id")
     target_index = body.get("index")
+    count = max(1, int(body.get("count", 1)))
     if item_id is None or target_index is None:
         return jsonify({"error": "item_id and index required"}), 400
     items = data["items"]
     src = next((i for i, it in enumerate(items) if it["id"] == item_id), None)
     if src is None:
         return jsonify({"error": "item not found"}), 404
-    item = items.pop(src)
+    block = items[src:src + count]
+    del items[src:src + count]
     target_index = max(0, min(target_index, len(items)))
-    items.insert(target_index, item)
+    for i, it in enumerate(block):
+        items.insert(target_index + i, it)
     _save_list(data)
     return jsonify(data)
 

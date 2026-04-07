@@ -8,8 +8,6 @@ const listView = document.getElementById("list-view");
 const emptyState = document.getElementById("empty-state");
 const listTitle = document.getElementById("list-title");
 const itemsEl = document.getElementById("items");
-const addForm = document.getElementById("add-item-form");
-const newItemText = document.getElementById("new-item-text");
 const btnNewList = document.getElementById("btn-new-list");
 const btnDeleteList = document.getElementById("btn-delete-list");
 const collapseBar = document.getElementById("collapse-bar");
@@ -69,6 +67,9 @@ async function selectList(id) {
   listIndex.querySelectorAll("li").forEach((li) => {
     li.classList.toggle("active", li.dataset.id === id);
   });
+  if (currentItems.length === 0) {
+    addItemAfter(null, 0);
+  }
 }
 
 async function refreshItems() {
@@ -163,12 +164,16 @@ function collapseAllAtDepth(depth) {
 }
 
 function expandAllAtDepth(depth) {
+  expandAllAtDepthNoRender(depth);
+  renderItems();
+}
+
+function expandAllAtDepthNoRender(depth) {
   for (let i = 0; i < currentItems.length; i++) {
     if (currentItems[i].depth === depth) {
       collapsedIds.delete(currentItems[i].id);
     }
   }
-  renderItems();
 }
 
 function expandAll() {
@@ -231,8 +236,9 @@ function renderItems() {
     txt.value = item.text;
     txt.draggable = false;
     let deleted = false;
+    let skipBlur = false;
     txt.addEventListener("blur", () => {
-      if (deleted) return;
+      if (deleted || skipBlur) return;
       const val = txt.value.trim();
       if (val !== item.text) {
         updateItem(item.id, { text: val });
@@ -264,6 +270,17 @@ function renderItems() {
       }
       if (e.key === "ArrowUp" || e.key === "ArrowDown") {
         e.preventDefault();
+        // Save pending edit without re-render, then navigate
+        const val = txt.value.trim();
+        if (val !== item.text) {
+          skipBlur = true;
+          item.text = val;
+          api(`/lists/${currentListId}/items/${item.id}`, {
+            method: "PATCH",
+            body: { text: val },
+          }).then(() => scheduleSyncFromServer())
+            .catch(() => refreshItems());
+        }
         const allTexts = Array.from(itemsEl.querySelectorAll(".item-text"));
         const focused = document.activeElement;
         const idx = allTexts.indexOf(focused);
@@ -334,16 +351,24 @@ function updateCollapseBar(maxDepth) {
     btn.textContent = d;
     btn.title = `Toggle collapse at depth ${d} (Ctrl+${d})`;
     btn.addEventListener("click", () => {
-      // If any at this depth are expanded, collapse all; otherwise expand all
-      let anyExpanded = false;
+      // Check if all parents at this depth are already collapsed
+      let allCollapsed = true;
       for (let i = 0; i < currentItems.length; i++) {
         if (currentItems[i].depth === d && hasChildren(i) && !collapsedIds.has(currentItems[i].id)) {
-          anyExpanded = true;
+          allCollapsed = false;
           break;
         }
       }
-      if (anyExpanded) collapseAllAtDepth(d);
-      else expandAllAtDepth(d);
+      if (allCollapsed) {
+        // Already collapsed at this depth — expand everything
+        expandAll();
+      } else {
+        // Expand above, collapse at depth d
+        for (let above = 0; above < d; above++) {
+          expandAllAtDepthNoRender(above);
+        }
+        collapseAllAtDepth(d);
+      }
     });
     collapseBar.appendChild(btn);
   }
@@ -357,12 +382,13 @@ function updateCollapseBar(maxDepth) {
 }
 
 async function addItemAfter(afterId, depth) {
+  const body = { text: "", depth };
+  if (afterId) body.after_id = afterId;
   const result = await api(`/lists/${currentListId}/items`, {
     method: "POST",
-    body: { text: "", after_id: afterId, depth },
+    body,
   });
   await refreshItems();
-  // Focus the new item's text input
   if (result && result.id) {
     const newEl = itemsEl.querySelector(`.item[data-id="${result.id}"] .item-text`);
     if (newEl) {
@@ -433,14 +459,6 @@ function deleteItem(itemId) {
     .catch(() => refreshItems());
 }
 
-addForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const text = newItemText.value.trim();
-  if (!text) return;
-  await api(`/lists/${currentListId}/items`, { method: "POST", body: { text } });
-  newItemText.value = "";
-  await refreshItems();
-});
 
 // -------------------------------------------------------------------
 // Keyboard shortcuts
@@ -501,6 +519,7 @@ const DRAG_THRESHOLD = 5;
 function prepareDrag(e, itemId) {
   const startX = e.clientX;
   const startY = e.clientY;
+  const shiftKey = e.shiftKey;
   let started = false;
 
   function onMove(me) {
@@ -515,7 +534,7 @@ function prepareDrag(e, itemId) {
       if (document.activeElement?.classList?.contains("item-text")) {
         document.activeElement.blur();
       }
-      startDrag(me, itemId, startY);
+      startDrag(me, itemId, startY, shiftKey);
     }
     if (started && dragState) {
       onDragMove(me);
@@ -535,30 +554,46 @@ function prepareDrag(e, itemId) {
   document.addEventListener("mouseup", onUp);
 }
 
-function startDrag(e, itemId, startY) {
+function startDrag(e, itemId, startY, shiftKey) {
   const sourceEl = itemsEl.querySelector(`.item[data-id="${itemId}"]`);
   if (!sourceEl) return;
 
   const rect = sourceEl.getBoundingClientRect();
   const itemsRect = itemsEl.getBoundingClientRect();
 
+  // Determine block: if shift, include children
+  const dataIdx = currentItems.findIndex((it) => it.id === itemId);
+  let blockSize = 1;
+  if (shiftKey && dataIdx !== -1) {
+    const [start, end] = getChildRange(dataIdx);
+    blockSize = end - dataIdx;
+  }
+  // Collect IDs in the block
+  const blockIds = new Set(currentItems.slice(dataIdx, dataIdx + blockSize).map((it) => it.id));
+
   // Create ghost
   const ghost = document.createElement("div");
   ghost.className = "drag-ghost";
   ghost.style.width = rect.width + "px";
-  ghost.textContent = sourceEl.querySelector(".item-text")?.value || "";
+  const label = sourceEl.querySelector(".item-text")?.value || "";
+  ghost.textContent = blockSize > 1 ? `${label} (+${blockSize - 1})` : label;
   const depth = parseInt(sourceEl.dataset.depth) || 0;
   ghost.style.paddingLeft = (depth * 1.8 + 0.3) + "rem";
   ghost.style.left = rect.left + "px";
   ghost.style.top = rect.top + "px";
   document.body.appendChild(ghost);
 
-  // Mark source
-  sourceEl.classList.add("drag-source");
+  // Mark all block items as drag-source
+  for (const id of blockIds) {
+    const el = itemsEl.querySelector(`.item[data-id="${id}"]`);
+    if (el) el.classList.add("drag-source");
+  }
 
   dragState = {
     itemId,
     ghost,
+    blockIds,
+    blockSize,
     offsetY: startY - rect.top,
     itemHeight: 26,
     itemsRect,
@@ -590,7 +625,7 @@ function getDataIndexOfVisibleRow(visibleRow) {
 
 function onDragMove(e) {
   if (!dragState) return;
-  const { ghost, itemId, offsetY, itemHeight, itemsRect } = dragState;
+  const { ghost, itemId, blockIds, blockSize, offsetY, itemHeight, itemsRect } = dragState;
 
   // Move ghost
   ghost.style.left = itemsRect.left + "px";
@@ -604,21 +639,23 @@ function onDragMove(e) {
 
   if (targetRow === dragState.currentVisibleIdx) return;
 
-  // Move item in the data model
+  // Move block in the data model
   const srcDataIdx = currentItems.findIndex((it) => it.id === itemId);
   const destDataIdx = getDataIndexOfVisibleRow(targetRow);
   if (srcDataIdx === -1 || srcDataIdx === destDataIdx) return;
 
-  const [moved] = currentItems.splice(srcDataIdx, 1);
-  const insertIdx = destDataIdx > srcDataIdx ? destDataIdx - 1 : destDataIdx;
-  currentItems.splice(insertIdx, 0, moved);
+  const block = currentItems.splice(srcDataIdx, blockSize);
+  const insertIdx = destDataIdx > srcDataIdx ? destDataIdx - blockSize : destDataIdx;
+  currentItems.splice(Math.max(0, insertIdx), 0, ...block);
 
   dragState.currentVisibleIdx = targetRow;
   renderItems();
 
-  // Re-mark the source element after re-render
-  const newSourceEl = itemsEl.querySelector(`.item[data-id="${itemId}"]`);
-  if (newSourceEl) newSourceEl.classList.add("drag-source");
+  // Re-mark block elements after re-render
+  for (const id of blockIds) {
+    const el = itemsEl.querySelector(`.item[data-id="${id}"]`);
+    if (el) el.classList.add("drag-source");
+  }
 }
 
 function onDragEnd() {
@@ -626,12 +663,14 @@ function onDragEnd() {
   document.removeEventListener("mousemove", onDragMove);
   document.removeEventListener("mouseup", onDragEnd);
 
-  const { itemId, ghost } = dragState;
+  const { itemId, blockIds, blockSize, ghost } = dragState;
   ghost.remove();
 
   // Remove drag-source styling
-  const sourceEl = itemsEl.querySelector(`.item[data-id="${itemId}"]`);
-  if (sourceEl) sourceEl.classList.remove("drag-source");
+  for (const id of blockIds) {
+    const el = itemsEl.querySelector(`.item[data-id="${id}"]`);
+    if (el) el.classList.remove("drag-source");
+  }
 
   const finalIdx = currentItems.findIndex((it) => it.id === itemId);
   dragState = null;
@@ -639,7 +678,7 @@ function onDragEnd() {
   // Send final position to server
   api(`/lists/${currentListId}/items/reorder`, {
     method: "POST",
-    body: { item_id: itemId, index: finalIdx },
+    body: { item_id: itemId, index: finalIdx, count: blockSize },
   }).then(() => scheduleSyncFromServer())
     .catch(() => refreshItems());
 }
