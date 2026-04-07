@@ -223,17 +223,46 @@ function renderItems() {
     txt.type = "text";
     txt.className = "item-text";
     txt.value = item.text;
+    let deleted = false;
     txt.addEventListener("blur", () => {
-      if (txt.value.trim() !== item.text) {
-        updateItem(item.id, { text: txt.value.trim() });
+      if (deleted) return;
+      const val = txt.value.trim();
+      if (val !== item.text) {
+        updateItem(item.id, { text: val });
       }
     });
     txt.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") { e.preventDefault(); txt.blur(); }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        // Save any pending edit, then create a new sibling after this item
+        if (txt.value.trim() !== item.text) {
+          updateItem(item.id, { text: txt.value.trim() });
+        }
+        addItemAfter(item.id, item.depth);
+        return;
+      }
+      if (e.key === "Backspace" && txt.value === "") {
+        e.preventDefault();
+        deleted = true;
+        const allTexts = Array.from(itemsEl.querySelectorAll(".item-text"));
+        const idx = allTexts.indexOf(txt);
+        const prev = allTexts[idx - 1];
+        deleteItem(item.id);
+        if (prev) prev.focus();
+        return;
+      }
+      if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+        e.preventDefault();
+        const allTexts = Array.from(itemsEl.querySelectorAll(".item-text"));
+        const idx = allTexts.indexOf(txt);
+        const target = allTexts[idx + (e.key === "ArrowUp" ? -1 : 1)];
+        if (target) target.focus();
+        return;
+      }
       if (e.key === "Tab") {
         e.preventDefault();
         const newDepth = item.depth + (e.shiftKey ? -1 : 1);
-        updateItem(item.id, { depth: Math.max(0, newDepth) });
+        updateItem(item.id, { depth: Math.max(0, newDepth) }, { refocusId: item.id });
       }
     });
 
@@ -315,21 +344,81 @@ function updateCollapseBar(maxDepth) {
   collapseBar.appendChild(btnAll);
 }
 
+async function addItemAfter(afterId, depth) {
+  const result = await api(`/lists/${currentListId}/items`, {
+    method: "POST",
+    body: { text: "", after_id: afterId, depth },
+  });
+  await refreshItems();
+  // Focus the new item's text input
+  if (result && result.id) {
+    const newEl = itemsEl.querySelector(`.item[data-id="${result.id}"] .item-text`);
+    if (newEl) {
+      newEl.value = "";
+      newEl.focus();
+    }
+  }
+}
+
 async function toggleDone(item) {
   await updateItem(item.id, { done: !item.done });
 }
 
-async function updateItem(itemId, fields) {
-  await api(`/lists/${currentListId}/items/${itemId}`, {
-    method: "PATCH",
-    body: fields,
-  });
-  await refreshItems();
+// Schedule a full server refresh after edits go idle
+let syncTimer = null;
+function scheduleSyncFromServer() {
+  if (syncTimer) clearTimeout(syncTimer);
+  syncTimer = setTimeout(async () => {
+    const data = await api(`/lists/${currentListId}`);
+    if (data && !data.error) {
+      currentItems = data.items;
+      // Don't re-render if user is mid-edit — just update the data
+      const focused = document.activeElement;
+      const focusedId = focused?.closest?.(".item")?.dataset?.id;
+      renderItems();
+      if (focusedId) {
+        const el = itemsEl.querySelector(`.item[data-id="${focusedId}"] .item-text`);
+        if (el) el.focus();
+      }
+    }
+  }, 1000);
 }
 
-async function deleteItem(itemId) {
-  await api(`/lists/${currentListId}/items/${itemId}`, { method: "DELETE" });
-  await refreshItems();
+function updateItem(itemId, fields, {refocusId} = {}) {
+  // Optimistic: update local data and re-render immediately
+  const item = currentItems.find((it) => it.id === itemId);
+  if (item) {
+    if ("text" in fields) item.text = fields.text;
+    if ("depth" in fields) item.depth = fields.depth;
+    if ("done" in fields) {
+      const wasDone = item.done;
+      item.done = fields.done;
+      if (item.done && !wasDone) item.completed = new Date().toISOString();
+      else if (!item.done && wasDone) item.completed = null;
+    }
+    if ("tags" in fields) item.tags = fields.tags;
+    renderItems();
+    if (refocusId) {
+      const el = itemsEl.querySelector(`.item[data-id="${refocusId}"] .item-text`);
+      if (el) el.focus();
+    }
+  }
+  // Background: send to server, reconcile later
+  api(`/lists/${currentListId}/items/${itemId}`, {
+    method: "PATCH",
+    body: fields,
+  }).then(() => scheduleSyncFromServer())
+    .catch(() => refreshItems());
+}
+
+function deleteItem(itemId) {
+  // Optimistic: remove locally and re-render
+  currentItems = currentItems.filter((it) => it.id !== itemId);
+  renderItems();
+  // Background: send to server
+  api(`/lists/${currentListId}/items/${itemId}`, { method: "DELETE" })
+    .then(() => scheduleSyncFromServer())
+    .catch(() => refreshItems());
 }
 
 addForm.addEventListener("submit", async (e) => {

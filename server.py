@@ -139,9 +139,7 @@ def add_item(list_id: str):
     if data is None:
         return jsonify({"error": "list not found"}), 404
     body = request.get_json(force=True)
-    text = body.get("text", "").strip()
-    if not text:
-        return jsonify({"error": "text is required"}), 400
+    text = body.get("text", "").strip() or ""
     depth = max(0, int(body.get("depth", 0)))
     item = _new_item(text, depth)
     after_id = body.get("after_id")
