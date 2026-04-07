@@ -212,6 +212,12 @@ function renderItems() {
     li.dataset.depth = item.depth;
     li.dataset.index = i;
 
+    // drag handle
+    const grip = document.createElement("span");
+    grip.className = "drag-handle";
+    grip.textContent = "\u2847";
+    grip.addEventListener("mousedown", (e) => startDrag(e, item.id));
+
     // checkbox
     const cb = document.createElement("input");
     cb.type = "checkbox";
@@ -302,7 +308,7 @@ function renderItems() {
     btnDel.title = "Delete";
     btnDel.addEventListener("click", () => deleteItem(item.id));
 
-    li.append(cb, txt, badge, btnOut, btnIn, btnDel);
+    li.append(grip, cb, txt, badge, btnOut, btnIn, btnDel);
     itemsEl.appendChild(li);
   }
 }
@@ -482,6 +488,125 @@ document.addEventListener("keydown", (e) => {
     return;
   }
 });
+
+// -------------------------------------------------------------------
+// Drag and drop
+// -------------------------------------------------------------------
+
+let dragState = null;
+
+function startDrag(e, itemId) {
+  e.preventDefault();
+  const sourceEl = itemsEl.querySelector(`.item[data-id="${itemId}"]`);
+  if (!sourceEl) return;
+
+  const rect = sourceEl.getBoundingClientRect();
+  const itemsRect = itemsEl.getBoundingClientRect();
+
+  // Create ghost
+  const ghost = document.createElement("div");
+  ghost.className = "drag-ghost";
+  ghost.style.width = rect.width + "px";
+  ghost.textContent = sourceEl.querySelector(".item-text")?.value || "";
+  const depth = parseInt(sourceEl.dataset.depth) || 0;
+  ghost.style.paddingLeft = (depth * 1.8 + 0.3) + "rem";
+  ghost.style.left = rect.left + "px";
+  ghost.style.top = rect.top + "px";
+  document.body.appendChild(ghost);
+
+  // Mark source
+  sourceEl.classList.add("drag-source");
+
+  dragState = {
+    itemId,
+    ghost,
+    offsetY: e.clientY - rect.top,
+    itemHeight: 26,
+    itemsRect,
+    currentVisibleIdx: getVisibleIndex(itemId),
+  };
+
+  document.addEventListener("mousemove", onDragMove);
+  document.addEventListener("mouseup", onDragEnd);
+}
+
+function getVisibleIndex(itemId) {
+  // Find the index of this item among currently visible items
+  let vis = 0;
+  for (let i = 0; i < currentItems.length; i++) {
+    if (isHiddenByCollapse(i)) continue;
+    if (currentItems[i].id === itemId) return vis;
+    vis++;
+  }
+  return -1;
+}
+
+function getDataIndexOfVisibleRow(visibleRow) {
+  // Map a visible row number to an index in currentItems
+  let vis = 0;
+  for (let i = 0; i < currentItems.length; i++) {
+    if (isHiddenByCollapse(i)) continue;
+    if (vis === visibleRow) return i;
+    vis++;
+  }
+  return currentItems.length;
+}
+
+function onDragMove(e) {
+  if (!dragState) return;
+  const { ghost, itemId, offsetY, itemHeight, itemsRect } = dragState;
+
+  // Move ghost
+  ghost.style.left = itemsRect.left + "px";
+  ghost.style.top = (e.clientY - offsetY) + "px";
+
+  // Which visible row is the mouse over?
+  const relY = e.clientY - itemsRect.top;
+  const visibleCount = itemsEl.querySelectorAll(".item").length;
+  let targetRow = Math.round(relY / itemHeight);
+  targetRow = Math.max(0, Math.min(targetRow, visibleCount));
+
+  if (targetRow === dragState.currentVisibleIdx) return;
+
+  // Move item in the data model
+  const srcDataIdx = currentItems.findIndex((it) => it.id === itemId);
+  const destDataIdx = getDataIndexOfVisibleRow(targetRow);
+  if (srcDataIdx === -1 || srcDataIdx === destDataIdx) return;
+
+  const [moved] = currentItems.splice(srcDataIdx, 1);
+  const insertIdx = destDataIdx > srcDataIdx ? destDataIdx - 1 : destDataIdx;
+  currentItems.splice(insertIdx, 0, moved);
+
+  dragState.currentVisibleIdx = targetRow;
+  renderItems();
+
+  // Re-mark the source element after re-render
+  const newSourceEl = itemsEl.querySelector(`.item[data-id="${itemId}"]`);
+  if (newSourceEl) newSourceEl.classList.add("drag-source");
+}
+
+function onDragEnd() {
+  if (!dragState) return;
+  document.removeEventListener("mousemove", onDragMove);
+  document.removeEventListener("mouseup", onDragEnd);
+
+  const { itemId, ghost } = dragState;
+  ghost.remove();
+
+  // Remove drag-source styling
+  const sourceEl = itemsEl.querySelector(`.item[data-id="${itemId}"]`);
+  if (sourceEl) sourceEl.classList.remove("drag-source");
+
+  const finalIdx = currentItems.findIndex((it) => it.id === itemId);
+  dragState = null;
+
+  // Send final position to server
+  api(`/lists/${currentListId}/items/reorder`, {
+    method: "POST",
+    body: { item_id: itemId, index: finalIdx },
+  }).then(() => scheduleSyncFromServer())
+    .catch(() => refreshItems());
+}
 
 // -------------------------------------------------------------------
 // Init
