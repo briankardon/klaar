@@ -212,11 +212,11 @@ function renderItems() {
     li.dataset.depth = item.depth;
     li.dataset.index = i;
 
-    // drag handle
-    const grip = document.createElement("span");
-    grip.className = "drag-handle";
-    grip.textContent = "\u2847";
-    grip.addEventListener("mousedown", (e) => startDrag(e, item.id));
+    // drag: mousedown anywhere on the row, but only start drag after threshold
+    li.addEventListener("mousedown", (e) => {
+      if (e.target.type === "checkbox") return;
+      prepareDrag(e, item.id);
+    });
 
     // checkbox
     const cb = document.createElement("input");
@@ -229,6 +229,7 @@ function renderItems() {
     txt.type = "text";
     txt.className = "item-text";
     txt.value = item.text;
+    txt.draggable = false;
     let deleted = false;
     txt.addEventListener("blur", () => {
       if (deleted) return;
@@ -264,7 +265,8 @@ function renderItems() {
       if (e.key === "ArrowUp" || e.key === "ArrowDown") {
         e.preventDefault();
         const allTexts = Array.from(itemsEl.querySelectorAll(".item-text"));
-        const idx = allTexts.indexOf(txt);
+        const focused = document.activeElement;
+        const idx = allTexts.indexOf(focused);
         const target = allTexts[idx + (e.key === "ArrowUp" ? -1 : 1)];
         if (target) target.focus();
         return;
@@ -308,7 +310,7 @@ function renderItems() {
     btnDel.title = "Delete";
     btnDel.addEventListener("click", () => deleteItem(item.id));
 
-    li.append(grip, cb, txt, badge, btnOut, btnIn, btnDel);
+    li.append(cb, txt, badge, btnOut, btnIn, btnDel);
     itemsEl.appendChild(li);
   }
 }
@@ -494,9 +496,46 @@ document.addEventListener("keydown", (e) => {
 // -------------------------------------------------------------------
 
 let dragState = null;
+const DRAG_THRESHOLD = 5;
 
-function startDrag(e, itemId) {
-  e.preventDefault();
+function prepareDrag(e, itemId) {
+  const startX = e.clientX;
+  const startY = e.clientY;
+  let started = false;
+
+  function onMove(me) {
+    const dx = me.clientX - startX;
+    const dy = me.clientY - startY;
+    if (!started && Math.sqrt(dx * dx + dy * dy) >= DRAG_THRESHOLD) {
+      started = true;
+      // Suppress text selection during drag
+      document.body.style.userSelect = "none";
+      window.getSelection()?.removeAllRanges();
+      // Blur any focused text input so edits save
+      if (document.activeElement?.classList?.contains("item-text")) {
+        document.activeElement.blur();
+      }
+      startDrag(me, itemId, startY);
+    }
+    if (started && dragState) {
+      onDragMove(me);
+    }
+  }
+
+  function onUp() {
+    document.removeEventListener("mousemove", onMove);
+    document.removeEventListener("mouseup", onUp);
+    if (started) {
+      document.body.style.userSelect = "";
+      onDragEnd();
+    }
+  }
+
+  document.addEventListener("mousemove", onMove);
+  document.addEventListener("mouseup", onUp);
+}
+
+function startDrag(e, itemId, startY) {
   const sourceEl = itemsEl.querySelector(`.item[data-id="${itemId}"]`);
   if (!sourceEl) return;
 
@@ -520,14 +559,11 @@ function startDrag(e, itemId) {
   dragState = {
     itemId,
     ghost,
-    offsetY: e.clientY - rect.top,
+    offsetY: startY - rect.top,
     itemHeight: 26,
     itemsRect,
     currentVisibleIdx: getVisibleIndex(itemId),
   };
-
-  document.addEventListener("mousemove", onDragMove);
-  document.addEventListener("mouseup", onDragEnd);
 }
 
 function getVisibleIndex(itemId) {

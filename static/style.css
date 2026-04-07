@@ -235,24 +235,6 @@ main {
   font-size: 0.95rem;
 }
 
-.drag-handle {
-  flex-shrink: 0;
-  cursor: grab;
-  color: #ccc;
-  font-size: 0.7rem;
-  padding: 0 2px;
-  line-height: 1;
-  user-select: none;
-}
-
-.drag-handle:hover {
-  color: #888;
-}
-
-.drag-handle:active {
-  cursor: grabbing;
-}
-
 .child-count {
   font-size: 0.75rem;
   color: #999;
