@@ -459,7 +459,9 @@ function renderItems() {
         inp.addEventListener("input", () => {
           inp.size = Math.max(3, inp.value.length + 1);
         });
+        let pickerActive = false;
         function commit() {
+          if (pickerActive) return;
           editing = false;
           const newVal = inp.value.trim() === "" ? null : inp.value.trim();
           setTagValue(item, tagId, newVal);
@@ -470,6 +472,48 @@ function renderItems() {
         inp.addEventListener("keydown", (ke) => {
           if (ke.key === "Enter") { ke.preventDefault(); inp.blur(); }
           if (ke.key === "Escape") { inp.value = current ?? ""; inp.blur(); }
+          if (ke.ctrlKey && ke.key === "d") {
+            ke.preventDefault();
+            const picker = document.createElement("input");
+            picker.type = "datetime-local";
+            picker.className = "tag-date-picker";
+            const bubbleRect = bubble.getBoundingClientRect();
+            picker.style.position = "fixed";
+            picker.style.left = bubbleRect.left + "px";
+            picker.style.top = (bubbleRect.bottom + 2) + "px";
+            picker.style.zIndex = "2000";
+            // Pre-fill with current value if it's an ISO date
+            if (current) {
+              try { picker.value = new Date(current).toISOString().slice(0, 16); } catch (e) {}
+            }
+            document.body.appendChild(picker);
+            pickerActive = true;
+            picker.focus();
+            try { picker.showPicker(); } catch (e) {}
+            let closed = false;
+            function closePicker(andCommit) {
+              if (closed) return;
+              closed = true;
+              pickerActive = false;
+              if (picker.value) {
+                inp.value = new Date(picker.value).toISOString().replace(/\.\d{3}Z$/, "Z");
+                inp.size = Math.max(3, inp.value.length + 1);
+              }
+              if (document.body.contains(picker)) picker.remove();
+              if (andCommit) {
+                commit();
+              } else {
+                inp.focus();
+              }
+            }
+            picker.addEventListener("change", () => closePicker(true));
+            picker.addEventListener("keydown", (pke) => {
+              if (pke.key === "Enter") { pke.preventDefault(); closePicker(true); }
+              if (pke.key === "Escape") { closed = true; pickerActive = false; picker.remove(); inp.focus(); }
+              pke.stopPropagation();
+            });
+            picker.addEventListener("blur", () => setTimeout(() => closePicker(false), 150));
+          }
           ke.stopPropagation();
         });
       });

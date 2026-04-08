@@ -506,6 +506,13 @@ main {
   filter: brightness(0.85);
 }
 
+.tag-date-picker {
+  font-size: 0.8rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 2px 4px;
+}
+
 .tag-value-input {
   border: none;
   outline: none;
