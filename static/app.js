@@ -27,6 +27,7 @@ let lastSelectedId = null;       // anchor for shift-click range selection
 const hiddenTagIds = new Set();  // client-side tag visibility state
 const textFilters = [];          // [{pattern: string, regex: RegExp}]
 const tagFilters = new Map();    // tag ID -> condition string (null = presence only)
+let currentSort = null;          // {tagId, direction: "asc"|"desc"} or null
 
 // -------------------------------------------------------------------
 // API helpers
@@ -154,6 +155,131 @@ listTitle.addEventListener("blur", async () => {
 
 listTitle.addEventListener("keydown", (e) => {
   if (e.key === "Enter") { e.preventDefault(); listTitle.blur(); }
+});
+
+// -------------------------------------------------------------------
+// Import
+// -------------------------------------------------------------------
+
+const importModal = document.getElementById("import-modal");
+const importText = document.getElementById("import-text");
+const importNewBtn = document.getElementById("import-new-list");
+const importCurrentBtn = document.getElementById("import-to-current");
+const importCancelBtn = document.getElementById("import-cancel");
+const btnImportList = document.getElementById("btn-import-list");
+
+function parseImportText(text) {
+  const lines = text.split(/\r?\n/);
+  const items = [];
+
+  // Detect indent unit: find smallest leading whitespace among indented lines
+  let indentUnit = 0;
+  for (const line of lines) {
+    const m = line.match(/^(\s+)\S/);
+    if (m) {
+      const len = m[1].replace(/\t/g, "    ").length;
+      if (indentUnit === 0 || len < indentUnit) indentUnit = len;
+    }
+  }
+  if (indentUnit === 0) indentUnit = 4;
+
+  for (const line of lines) {
+    if (line.trim() === "") continue;
+
+    // Measure indentation
+    const leadingWs = line.match(/^(\s*)/)[1].replace(/\t/g, "    ");
+    const depth = Math.round(leadingWs.length / indentUnit);
+
+    let rest = line.trim();
+
+    // Detect and remove bullet characters
+    // Checkboxes: [x], [X], [ ], [-]
+    let done = false;
+    const cbMatch = rest.match(/^\[([xX])\]\s*/);
+    if (cbMatch) {
+      done = true;
+      rest = rest.slice(cbMatch[0].length);
+    } else {
+      const cbEmpty = rest.match(/^\[[\s\-]\]\s*/);
+      if (cbEmpty) rest = rest.slice(cbEmpty[0].length);
+    }
+
+    // Bullet prefixes: -, *, •, ◦, ▪, ▸, ▹, ►, >, numbered (1. or 1) or a.)
+    rest = rest.replace(/^[-*\u2022\u25e6\u25aa\u25b8\u25b9\u25ba>]\s+/, "");
+    rest = rest.replace(/^[a-zA-Z0-9]+[.)]\s+/, "");
+
+    if (rest === "") continue;
+
+    items.push({ text: rest, depth, done });
+  }
+  return items;
+}
+
+async function doImport(targetListId, parsedItems) {
+  for (const pi of parsedItems) {
+    const result = await api(`/lists/${targetListId}/items`, {
+      method: "POST",
+      body: { text: pi.text, depth: pi.depth },
+    });
+    if (result && result.id && pi.done) {
+      await api(`/lists/${targetListId}/items/${result.id}`, {
+        method: "PATCH",
+        body: { done: true },
+      });
+    }
+  }
+}
+
+function showImportModal() {
+  importText.value = "";
+  importCurrentBtn.disabled = !currentListId;
+  importModal.classList.remove("hidden");
+  importText.focus();
+}
+
+function hideImportModal() {
+  importModal.classList.add("hidden");
+}
+
+btnImportList.addEventListener("click", showImportModal);
+importCancelBtn.addEventListener("click", hideImportModal);
+importModal.addEventListener("click", (e) => {
+  if (e.target === importModal && !importText.disabled) hideImportModal();
+});
+
+function setImportBusy(busy, activeBtn) {
+  importNewBtn.disabled = busy;
+  importCurrentBtn.disabled = busy || !currentListId;
+  importCancelBtn.disabled = busy;
+  importText.disabled = busy;
+  if (activeBtn) activeBtn.dataset.origText = activeBtn.textContent;
+  if (busy && activeBtn) activeBtn.textContent = "Importing\u2026";
+  if (!busy && activeBtn) activeBtn.textContent = activeBtn.dataset.origText;
+}
+
+importNewBtn.addEventListener("click", async () => {
+  const parsed = parseImportText(importText.value);
+  if (parsed.length === 0) return;
+  const name = prompt("List name:", "Imported list");
+  if (!name) return;
+  setImportBusy(true, importNewBtn);
+  const list = await api("/lists", { method: "POST", body: { name } });
+  await doImport(list.id, parsed);
+  setImportBusy(false, importNewBtn);
+  hideImportModal();
+  await loadLists();
+  selectList(list.id);
+});
+
+importCurrentBtn.addEventListener("click", async () => {
+  if (!currentListId) return;
+  const parsed = parseImportText(importText.value);
+  if (parsed.length === 0) return;
+  setImportBusy(true, importCurrentBtn);
+  await doImport(currentListId, parsed);
+  setImportBusy(false, importCurrentBtn);
+  hideImportModal();
+  await refreshItems();
 });
 
 // -------------------------------------------------------------------
@@ -288,18 +414,21 @@ function applySelectionStyles() {
 function renderItems() {
   itemsEl.innerHTML = "";
   foldGutter.innerHTML = "";
-  const maxDepth = currentItems.reduce((m, it) => Math.max(m, it.depth), 0);
+  const displayItems = getSortedItems();
+  const maxDepth = displayItems.reduce((m, it) => Math.max(m, it.depth), 0);
   updateCollapseBar(maxDepth);
   const filterVis = computeFilterVisibility();
 
   let visibleRow = 0;
-  for (let i = 0; i < currentItems.length; i++) {
-    const item = currentItems[i];
-    if (isHiddenByCollapse(i)) continue;
-    if (filterVis.size > 0 && filterVis.get(i) === "hidden") continue;
-    const isFilterAncestor = filterVis.get(i) === "ancestor";
+  for (let i = 0; i < displayItems.length; i++) {
+    const item = displayItems[i];
+    // Map back to currentItems index for filter/collapse checks
+    const dataIdx = currentItems.indexOf(item);
+    if (isHiddenByCollapse(dataIdx)) continue;
+    if (filterVis.size > 0 && filterVis.get(dataIdx) === "hidden") continue;
+    const isFilterAncestor = filterVis.get(dataIdx) === "ancestor";
 
-    const isParent = hasChildren(i);
+    const isParent = hasChildren(dataIdx);
     const isCollapsed = collapsedIds.has(item.id);
     const row = visibleRow++;
 
@@ -318,7 +447,7 @@ function renderItems() {
     li.className = "item" + (item.done ? " done" : "") + (isFilterAncestor ? " filter-ancestor" : "");
     li.dataset.id = item.id;
     li.dataset.depth = item.depth;
-    li.dataset.index = i;
+    li.dataset.index = dataIdx;
 
     // drag: mousedown anywhere on the row, but only start drag after threshold
     li.addEventListener("mousedown", (e) => {
@@ -819,6 +948,51 @@ function computeFilterVisibility() {
   return vis;
 }
 
+function getSortedItems() {
+  if (!currentSort) return currentItems;
+  const { tagId, direction } = currentSort;
+
+  // Group items into blocks: each item at a given depth with all deeper items following it
+  const blocks = [];
+  let i = 0;
+  while (i < currentItems.length) {
+    const blockDepth = currentItems[i].depth;
+    const block = [currentItems[i]];
+    i++;
+    while (i < currentItems.length && currentItems[i].depth > blockDepth) {
+      block.push(currentItems[i]);
+      i++;
+    }
+    blocks.push(block);
+  }
+
+  // Sort blocks by the lead item's tag value
+  blocks.sort((a, b) => {
+    const aVal = itemTagValue(a[0], tagId);
+    const bVal = itemTagValue(b[0], tagId);
+    // Items without the tag sort to end
+    if (aVal == null && bVal == null) return 0;
+    if (aVal == null) return 1;
+    if (bVal == null) return -1;
+    const cmp = smartCompare(aVal, bVal);
+    return direction === "desc" ? -cmp : cmp;
+  });
+
+  return blocks.flat();
+}
+
+function toggleSort(tagId) {
+  if (!currentSort || currentSort.tagId !== tagId) {
+    currentSort = { tagId, direction: "asc" };
+  } else if (currentSort.direction === "asc") {
+    currentSort = { tagId, direction: "desc" };
+  } else {
+    currentSort = null;
+  }
+  renderItems();
+  renderTagPane();
+}
+
 function renderFilterBar() {
   filterBar.innerHTML = "";
   if (!hasActiveFilters()) {
@@ -996,6 +1170,15 @@ function renderTagPane() {
       renderItems();
     });
 
+    // Sort toggle
+    const sortBtn = document.createElement("button");
+    const isSorted = currentSort && currentSort.tagId === tag.id;
+    const sortDir = isSorted ? currentSort.direction : null;
+    sortBtn.className = "tag-sort-btn" + (isSorted ? " active" : "");
+    sortBtn.textContent = sortDir === "asc" ? "\u25b2" : sortDir === "desc" ? "\u25bc" : "\u2195";
+    sortBtn.title = isSorted ? `Sorted ${sortDir} (click to cycle)` : "Sort by this tag";
+    sortBtn.addEventListener("click", () => toggleSort(tag.id));
+
     // Filter toggle
     const filterBtn = document.createElement("button");
     filterBtn.className = "tag-filter-btn" + (tagFilters.has(tag.id) ? " active" : "");
@@ -1010,11 +1193,11 @@ function renderTagPane() {
     delBtn.title = "Delete tag";
     delBtn.addEventListener("click", () => deleteTag(tag.id));
 
-    li.append(dot, name, filterBtn, visBtn, delBtn);
+    li.append(dot, name, sortBtn, filterBtn, visBtn, delBtn);
 
     // Drag to reorder / click to toggle tag on items
     li.addEventListener("mousedown", (e) => {
-      if (e.target === dot || e.target === visBtn || e.target === delBtn || e.target === filterBtn) return;
+      if (e.target === dot || e.target === visBtn || e.target === delBtn || e.target === filterBtn || e.target === sortBtn) return;
       onTagMouseDown(e, tag.id);
     });
 

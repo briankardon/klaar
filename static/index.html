@@ -17,6 +17,7 @@
     <nav id="sidebar">
       <div class="sidebar-header">
         <h2>Lists</h2>
+        <button id="btn-import-list" title="Import from text">&#x21e7;</button>
         <button id="btn-new-list" title="New list">+</button>
       </div>
       <ul id="list-index"></ul>
@@ -52,6 +53,19 @@
       <p>Select or create a list to get started.</p>
     </section>
   </main>
+
+  <!-- Import modal -->
+  <div id="import-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <h3>Import text</h3>
+      <textarea id="import-text" rows="15" placeholder="Paste your list here..."></textarea>
+      <div class="modal-buttons">
+        <button id="import-new-list">Import as new list</button>
+        <button id="import-to-current" disabled>Add to current list</button>
+        <button id="import-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
 
   <script src="/static/app.js"></script>
 </body>
