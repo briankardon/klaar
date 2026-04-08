@@ -1706,6 +1706,12 @@ function startDrag(e, itemId, startY, ctrlKey) {
     itemHeight: 26,
     itemsRect,
     currentVisibleIdx: getVisibleIndex(itemId),
+    sourceListId: currentListId,
+    crossListTarget: null,
+    hoverListId: null,
+    hoverTimer: null,
+    switchedList: false,
+    draggedItems: null,
   };
 
   // Re-mark after potential re-render
@@ -1737,15 +1743,54 @@ function getDataIndexOfVisibleRow(visibleRow) {
   return currentItems.length;
 }
 
+function getListEntryUnderMouse(e) {
+  const entries = listIndex.querySelectorAll("li");
+  for (const li of entries) {
+    const r = li.getBoundingClientRect();
+    if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
+      return li;
+    }
+  }
+  return null;
+}
+
+function clearSidebarHighlight() {
+  listIndex.querySelectorAll("li.drag-target").forEach((el) => el.classList.remove("drag-target"));
+}
+
 function onDragMove(e) {
   if (!dragState) return;
   const { ghost, itemId, blockIds, blockSize, offsetY, itemHeight, itemsRect } = dragState;
 
-  // Move ghost
-  ghost.style.left = itemsRect.left + "px";
+  // Move ghost to follow mouse
+  ghost.style.left = (e.clientX + 10) + "px";
   ghost.style.top = (e.clientY - offsetY) + "px";
 
-  // Which visible row is the mouse over?
+  // Check if mouse is over sidebar list
+  const targetListEntry = getListEntryUnderMouse(e);
+  clearSidebarHighlight();
+
+  if (targetListEntry && targetListEntry.dataset.id !== dragState.sourceListId) {
+    targetListEntry.classList.add("drag-target");
+    dragState.crossListTarget = targetListEntry.dataset.id;
+
+    // Hover-to-switch: start timer to switch to hovered list
+    if (dragState.hoverListId !== targetListEntry.dataset.id) {
+      dragState.hoverListId = targetListEntry.dataset.id;
+      if (dragState.hoverTimer) clearTimeout(dragState.hoverTimer);
+      dragState.hoverTimer = setTimeout(() => {
+        switchDuringDrag(dragState.hoverListId);
+      }, 1000);
+    }
+    return;
+  }
+
+  // Not over sidebar — clear hover timer
+  if (dragState.hoverTimer) { clearTimeout(dragState.hoverTimer); dragState.hoverTimer = null; }
+  dragState.hoverListId = null;
+  dragState.crossListTarget = null;
+
+  // Normal within-list drag logic
   const relY = e.clientY - itemsRect.top;
   const visibleCount = itemsEl.querySelectorAll(".item").length;
   let targetRow = Math.round(relY / itemHeight);
@@ -1753,7 +1798,6 @@ function onDragMove(e) {
 
   if (targetRow === dragState.currentVisibleIdx) return;
 
-  // Move block in the data model
   const srcDataIdx = currentItems.findIndex((it) => it.id === itemId);
   const destDataIdx = getDataIndexOfVisibleRow(targetRow);
   if (srcDataIdx === -1 || srcDataIdx === destDataIdx) return;
@@ -1765,7 +1809,45 @@ function onDragMove(e) {
   dragState.currentVisibleIdx = targetRow;
   renderItems();
 
-  // Re-mark block elements after re-render
+  for (const id of blockIds) {
+    const el = itemsEl.querySelector(`.item[data-id="${id}"]`);
+    if (el) el.classList.add("drag-source");
+  }
+}
+
+async function switchDuringDrag(destListId) {
+  if (!dragState) return;
+  // Remember source list so we can move items on drop
+  dragState.switchedList = true;
+
+  // Remove dragged items from current display
+  const { blockIds } = dragState;
+  dragState.draggedItems = currentItems.filter((it) => blockIds.has(it.id));
+  currentItems = currentItems.filter((it) => !blockIds.has(it.id));
+
+  // Switch to destination list
+  const data = await api(`/lists/${destListId}`);
+  if (!data || data.error || !dragState) return;
+
+  currentListId = destListId;
+  currentItems = data.items;
+  currentTags = data.tags || [];
+  listTitle.textContent = data.name;
+
+  // Insert dragged items at top temporarily
+  currentItems.unshift(...dragState.draggedItems);
+  dragState.blockSize = dragState.draggedItems.length;
+  dragState.currentVisibleIdx = 0;
+  dragState.itemsRect = itemsEl.getBoundingClientRect();
+
+  renderItems();
+  renderTagPane();
+  listIndex.querySelectorAll("li").forEach((li) => {
+    li.classList.toggle("active", li.dataset.id === destListId);
+  });
+  clearSidebarHighlight();
+
+  // Re-mark dragged items
   for (const id of blockIds) {
     const el = itemsEl.querySelector(`.item[data-id="${id}"]`);
     if (el) el.classList.add("drag-source");
@@ -1777,8 +1859,10 @@ function onDragEnd() {
   document.removeEventListener("mousemove", onDragMove);
   document.removeEventListener("mouseup", onDragEnd);
 
-  const { itemId, blockIds, blockSize, useFullReorder, ghost } = dragState;
+  const { itemId, blockIds, blockSize, useFullReorder, ghost, sourceListId, crossListTarget, switchedList } = dragState;
   ghost.remove();
+  clearSidebarHighlight();
+  if (dragState.hoverTimer) clearTimeout(dragState.hoverTimer);
 
   // Remove drag-source styling
   for (const id of blockIds) {
@@ -1786,21 +1870,47 @@ function onDragEnd() {
     if (el) el.classList.remove("drag-source");
   }
 
+  const itemIds = [...blockIds];
   dragState = null;
 
-  // Send final position to server
-  let body;
-  if (useFullReorder) {
-    body = { order: currentItems.map((it) => it.id) };
-  } else {
+  if (crossListTarget && !switchedList) {
+    // Simple drop on sidebar: move to top of destination list
+    currentItems = currentItems.filter((it) => !blockIds.has(it.id));
+    renderItems();
+    api(`/lists/${crossListTarget}/items/move-from`, {
+      method: "POST",
+      body: { source_list_id: sourceListId, item_ids: itemIds, index: 0 },
+    }).then(() => {
+      scheduleSyncFromServer();
+    }).catch(() => refreshItems());
+  } else if (switchedList || currentListId !== sourceListId) {
+    // Dropped within switched list — commit the cross-list move at current position
     const finalIdx = currentItems.findIndex((it) => it.id === itemId);
-    body = { item_id: itemId, index: finalIdx, count: blockSize };
+    // Remove dragged items from display (server will add them)
+    currentItems = currentItems.filter((it) => !blockIds.has(it.id));
+    renderItems();
+    api(`/lists/${currentListId}/items/move-from`, {
+      method: "POST",
+      body: { source_list_id: sourceListId, item_ids: itemIds, index: Math.max(0, finalIdx) },
+    }).then(() => {
+      refreshItems();
+      loadLists();
+    }).catch(() => refreshItems());
+  } else {
+    // Normal within-list reorder
+    let body;
+    if (useFullReorder) {
+      body = { order: currentItems.map((it) => it.id) };
+    } else {
+      const finalIdx = currentItems.findIndex((it) => it.id === itemId);
+      body = { item_id: itemId, index: finalIdx, count: blockSize };
+    }
+    api(`/lists/${currentListId}/items/reorder`, {
+      method: "POST",
+      body,
+    }).then(() => scheduleSyncFromServer())
+      .catch(() => refreshItems());
   }
-  api(`/lists/${currentListId}/items/reorder`, {
-    method: "POST",
-    body,
-  }).then(() => scheduleSyncFromServer())
-    .catch(() => refreshItems());
 }
 
 // -------------------------------------------------------------------

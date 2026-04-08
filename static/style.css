@@ -98,6 +98,12 @@ main {
   font-weight: 600;
 }
 
+#list-index li.drag-target {
+  background: #aed6f1;
+  outline: 2px solid #3498db;
+  outline-offset: -2px;
+}
+
 .list-name {
   flex: 1;
   overflow: hidden;

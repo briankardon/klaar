@@ -289,6 +289,43 @@ def delete_item(list_id: str, item_id: str):
     return "", 204
 
 
+@app.post("/api/lists/<list_id>/items/move-from")
+def move_items(list_id: str):
+    """Move items from another list into this one.
+    Body: {source_list_id, item_ids: [...], index?}
+    Merges tag definitions that don't exist in the destination.
+    """
+    dest, dest_snap = _load_and_snapshot(list_id)
+    if dest is None:
+        return jsonify({"error": "destination list not found"}), 404
+    body = request.get_json(force=True)
+    source_id = body.get("source_list_id")
+    item_ids = set(body.get("item_ids", []))
+    index = body.get("index", 0)
+    src, src_snap = _load_and_snapshot(source_id)
+    if src is None:
+        return jsonify({"error": "source list not found"}), 404
+
+    # Extract items from source
+    moved = [it for it in src["items"] if it["id"] in item_ids]
+    src["items"] = [it for it in src["items"] if it["id"] not in item_ids]
+
+    # Merge tag definitions
+    dest_tag_ids = {t["id"] for t in dest["tags"]}
+    for tag in src["tags"]:
+        if tag["id"] not in dest_tag_ids:
+            dest["tags"].append(tag)
+
+    # Insert into destination
+    index = max(0, min(index, len(dest["items"])))
+    for i, it in enumerate(moved):
+        dest["items"].insert(index + i, it)
+
+    _save_with_undo(src, src_snap)
+    _save_with_undo(dest, dest_snap)
+    return jsonify(dest)
+
+
 @app.post("/api/lists/<list_id>/items/reorder")
 def reorder_items(list_id: str):
     """Reorder items. Accepts either:
