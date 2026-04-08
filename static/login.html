@@ -16,8 +16,53 @@
       <button type="submit">Log in</button>
       <p id="error" class="error hidden"></p>
     </form>
+    <p id="register-link" class="hidden" style="margin-top:1rem;font-size:0.9rem;">
+      Don't have an account? <a href="#" id="show-register">Create one</a>
+    </p>
+    <form id="register-form" class="hidden">
+      <h3 style="margin-bottom:0.5rem;">Create Account</h3>
+      <input type="text" id="reg-username" placeholder="Username" autocomplete="username" required>
+      <input type="text" id="reg-display" placeholder="Display name (optional)" autocomplete="name">
+      <input type="password" id="reg-password" placeholder="Password (6+ characters)" autocomplete="new-password" required minlength="6">
+      <button type="submit">Create account</button>
+      <p id="reg-error" class="error hidden"></p>
+    </form>
   </div>
   <script>
+    // Check if registration is open
+    fetch("/api/registration-status").then(r => r.json()).then(data => {
+      if (data.open) document.getElementById("register-link").classList.remove("hidden");
+    });
+
+    document.getElementById("show-register").addEventListener("click", (e) => {
+      e.preventDefault();
+      document.getElementById("login-form").classList.add("hidden");
+      document.getElementById("register-link").classList.add("hidden");
+      document.getElementById("register-form").classList.remove("hidden");
+    });
+
+    document.getElementById("register-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const errEl = document.getElementById("reg-error");
+      errEl.classList.add("hidden");
+      const res = await fetch("/api/register", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+          username: document.getElementById("reg-username").value,
+          display_name: document.getElementById("reg-display").value,
+          password: document.getElementById("reg-password").value,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        window.location.href = "/";
+      } else {
+        errEl.textContent = data.error || "Registration failed";
+        errEl.classList.remove("hidden");
+      }
+    });
+
     document.getElementById("login-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       const errEl = document.getElementById("error");

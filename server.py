@@ -314,6 +314,42 @@ def setup():
     return jsonify({"ok": True}), 201
 
 
+@app.get("/api/registration-status")
+def registration_status():
+    open_file = DATA_DIR / ".registration_open"
+    return jsonify({"open": open_file.exists()})
+
+
+@app.post("/api/register")
+def register():
+    open_file = DATA_DIR / ".registration_open"
+    if not open_file.exists():
+        return jsonify({"error": "registration is closed"}), 403
+    body = request.get_json(force=True)
+    username = body.get("username", "").strip()
+    password = body.get("password", "")
+    display = body.get("display_name", "").strip() or username
+    if not username or not password:
+        return jsonify({"error": "username and password required"}), 400
+    if len(password) < 6:
+        return jsonify({"error": "password must be at least 6 characters"}), 400
+    if _find_user(username):
+        return jsonify({"error": "username already exists"}), 400
+    users = _load_users()
+    new_user = {
+        "id": uuid.uuid4().hex[:12],
+        "username": username,
+        "password_hash": generate_password_hash(password),
+        "display_name": display,
+        "admin": False,
+        "created": _now(),
+    }
+    users.append(new_user)
+    _save_users(users)
+    session["user_id"] = new_user["id"]
+    return jsonify({"ok": True}), 201
+
+
 @app.post("/api/login")
 def login():
     body = request.get_json(force=True)
