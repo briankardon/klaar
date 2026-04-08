@@ -113,9 +113,15 @@ TAG_COLORS = [
 
 
 def _ensure_tags(data: dict) -> None:
-    """Ensure list has a tags array (migration for old data files)."""
+    """Ensure list has a tags array and migrate old tag formats."""
     if "tags" not in data:
         data["tags"] = []
+    # Migrate item tags from string IDs to {id, value} objects
+    for item in data.get("items", []):
+        item["tags"] = [
+            t if isinstance(t, dict) else {"id": t, "value": None}
+            for t in item.get("tags", [])
+        ]
 
 
 def _next_tag_color(data: dict) -> str:
@@ -381,7 +387,7 @@ def delete_tag(list_id: str, tag_id: str):
         return jsonify({"error": "list not found"}), 404
     data["tags"] = [t for t in data["tags"] if t["id"] != tag_id]
     for item in data["items"]:
-        item["tags"] = [t for t in item["tags"] if t != tag_id]
+        item["tags"] = [t for t in item["tags"] if t.get("id") != tag_id]
     _save_with_undo(data, snap)
     return "", 204
 

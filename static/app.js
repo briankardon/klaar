@@ -32,6 +32,34 @@ const tagFilters = new Set();    // tag IDs to filter by
 // API helpers
 // -------------------------------------------------------------------
 
+// -------------------------------------------------------------------
+// Item tag helpers (tags are [{id, value}, ...])
+// -------------------------------------------------------------------
+
+function itemHasTag(item, tagId) {
+  return item.tags.some((t) => t.id === tagId);
+}
+
+function itemTagValue(item, tagId) {
+  const t = item.tags.find((t) => t.id === tagId);
+  return t ? t.value : undefined;
+}
+
+function addTagToItem(item, tagId, value = null) {
+  if (!itemHasTag(item, tagId)) {
+    item.tags.push({ id: tagId, value });
+  }
+}
+
+function removeTagFromItemData(item, tagId) {
+  item.tags = item.tags.filter((t) => t.id !== tagId);
+}
+
+function setTagValue(item, tagId, value) {
+  const t = item.tags.find((t) => t.id === tagId);
+  if (t) t.value = value;
+}
+
 async function api(path, opts = {}) {
   const res = await fetch(API + path, {
     headers: { "Content-Type": "application/json" },
@@ -388,23 +416,62 @@ function renderItems() {
     // tag bubbles (ordered by global tag order, not item assignment order)
     const tagsContainer = document.createElement("span");
     tagsContainer.className = "item-tags";
-    const itemTagSet = new Set(item.tags);
     for (const tagDef of currentTags) {
-      if (!itemTagSet.has(tagDef.id)) continue;
+      if (!itemHasTag(item, tagDef.id)) continue;
       if (hiddenTagIds.has(tagDef.id)) continue;
       const tagId = tagDef.id;
+      const tagVal = itemTagValue(item, tagId);
       const bubble = document.createElement("span");
       bubble.className = "tag-bubble";
-      bubble.textContent = tagDef.name;
+      bubble.textContent = tagVal != null ? `${tagDef.name}: ${tagVal}` : tagDef.name;
       bubble.style.background = tagDef.color;
-      bubble.title = `Click to remove (Ctrl: remove from hierarchy)`;
+      bubble.title = "Click: remove / Ctrl: hierarchy / Dbl-click: set value";
+      let clickTimer = null;
+      let editing = false;
       bubble.addEventListener("click", (e) => {
         e.stopPropagation();
+        if (editing) return;
         if (e.ctrlKey) {
           removeTagFromHierarchy(i, tagId);
-        } else {
-          removeTagFromItem(item.id, tagId);
+          return;
         }
+        if (clickTimer) clearTimeout(clickTimer);
+        clickTimer = setTimeout(() => {
+          clickTimer = null;
+          if (!editing) removeTagFromItemById(item.id, tagId);
+        }, 250);
+      });
+      bubble.addEventListener("dblclick", (e) => {
+        e.stopPropagation();
+        if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
+        editing = true;
+        const current = itemTagValue(item, tagId);
+        // Replace bubble content with inline input
+        bubble.textContent = tagDef.name + ": ";
+        const inp = document.createElement("input");
+        inp.type = "text";
+        inp.className = "tag-value-input";
+        inp.value = current ?? "";
+        inp.size = Math.max(3, (current ?? "").length + 1);
+        bubble.appendChild(inp);
+        inp.focus();
+        inp.select();
+        inp.addEventListener("input", () => {
+          inp.size = Math.max(3, inp.value.length + 1);
+        });
+        function commit() {
+          editing = false;
+          const newVal = inp.value.trim() === "" ? null : inp.value.trim();
+          setTagValue(item, tagId, newVal);
+          renderItems();
+          updateItem(item.id, { tags: [...item.tags] });
+        }
+        inp.addEventListener("blur", commit);
+        inp.addEventListener("keydown", (ke) => {
+          if (ke.key === "Enter") { ke.preventDefault(); inp.blur(); }
+          if (ke.key === "Escape") { inp.value = current ?? ""; inp.blur(); }
+          ke.stopPropagation();
+        });
       });
       tagsContainer.appendChild(bubble);
     }
@@ -653,7 +720,7 @@ function itemMatchesFilters(item) {
     if (!f.regex.test(item.text)) return false;
   }
   for (const tagId of tagFilters) {
-    if (!item.tags.includes(tagId)) return false;
+    if (!itemHasTag(item, tagId)) return false;
   }
   return true;
 }
@@ -944,26 +1011,24 @@ function onTagDragEnd() {
     .catch(() => refreshItems());
 }
 
+function getTargetItems() {
+  if (selectedIds.size > 0) return [...selectedIds];
+  const focused = document.activeElement?.closest?.(".item");
+  return focused ? [focused.dataset.id] : [];
+}
+
 function toggleTagOnItems(tagId) {
-  // Determine target items: selection if multi-selected, otherwise focused item
-  let targetIds = [];
-  if (selectedIds.size > 0) {
-    targetIds = [...selectedIds];
-  } else {
-    const focused = document.activeElement?.closest?.(".item");
-    if (focused) targetIds = [focused.dataset.id];
-  }
+  const targetIds = getTargetItems();
   if (targetIds.length === 0) return;
 
   const targets = currentItems.filter((it) => targetIds.includes(it.id));
-  // If all targets have the tag, remove it; otherwise add it
-  const allHave = targets.every((it) => it.tags.includes(tagId));
+  const allHave = targets.every((it) => itemHasTag(it, tagId));
   const updates = [];
   for (const it of targets) {
     if (allHave) {
-      it.tags = it.tags.filter((t) => t !== tagId);
-    } else if (!it.tags.includes(tagId)) {
-      it.tags.push(tagId);
+      removeTagFromItemData(it, tagId);
+    } else {
+      addTagToItem(it, tagId);
     }
     updates.push({ id: it.id, tags: [...it.tags] });
   }
@@ -975,10 +1040,10 @@ function toggleTagOnItems(tagId) {
     .catch(() => refreshItems());
 }
 
-function removeTagFromItem(itemId, tagId) {
+function removeTagFromItemById(itemId, tagId) {
   const item = currentItems.find((it) => it.id === itemId);
   if (!item) return;
-  item.tags = item.tags.filter((t) => t !== tagId);
+  removeTagFromItemData(item, tagId);
   renderItems();
   api(`/lists/${currentListId}/items/${itemId}`, {
     method: "PATCH",
@@ -992,7 +1057,7 @@ function removeTagFromHierarchy(index, tagId) {
   const block = [currentItems[index], ...currentItems.slice(start, end)];
   const updates = [];
   for (const it of block) {
-    it.tags = it.tags.filter((t) => t !== tagId);
+    removeTagFromItemData(it, tagId);
     updates.push({ id: it.id, tags: [...it.tags] });
   }
   renderItems();
@@ -1004,7 +1069,6 @@ function removeTagFromHierarchy(index, tagId) {
 }
 
 function getHierarchyItems(targetIds) {
-  // Expand each target to include its children
   const allIds = new Set();
   for (const id of targetIds) {
     const idx = currentItems.findIndex((it) => it.id === id);
@@ -1017,23 +1081,17 @@ function getHierarchyItems(targetIds) {
 }
 
 function toggleTagOnItemsWithHierarchy(tagId) {
-  let targetIds = [];
-  if (selectedIds.size > 0) {
-    targetIds = [...selectedIds];
-  } else {
-    const focused = document.activeElement?.closest?.(".item");
-    if (focused) targetIds = [focused.dataset.id];
-  }
+  const targetIds = getTargetItems();
   if (targetIds.length === 0) return;
 
   const targets = getHierarchyItems(targetIds);
-  const allHave = targets.every((it) => it.tags.includes(tagId));
+  const allHave = targets.every((it) => itemHasTag(it, tagId));
   const updates = [];
   for (const it of targets) {
     if (allHave) {
-      it.tags = it.tags.filter((t) => t !== tagId);
-    } else if (!it.tags.includes(tagId)) {
-      it.tags.push(tagId);
+      removeTagFromItemData(it, tagId);
+    } else {
+      addTagToItem(it, tagId);
     }
     updates.push({ id: it.id, tags: [...it.tags] });
   }
@@ -1063,7 +1121,7 @@ function updateTag(tagId, fields) {
 function deleteTag(tagId) {
   currentTags = currentTags.filter((t) => t.id !== tagId);
   for (const item of currentItems) {
-    item.tags = item.tags.filter((t) => t !== tagId);
+    removeTagFromItemData(item, tagId);
   }
   hiddenTagIds.delete(tagId);
   renderTagPane();

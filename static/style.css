@@ -506,6 +506,18 @@ main {
   filter: brightness(0.85);
 }
 
+.tag-value-input {
+  border: none;
+  outline: none;
+  background: rgba(255,255,255,0.3);
+  color: inherit;
+  font: inherit;
+  font-size: 0.7rem;
+  padding: 0 2px;
+  border-radius: 2px;
+  width: auto;
+}
+
 /* ---- Empty state ---- */
 
 #empty-state {
