@@ -1,9 +1,11 @@
 """Klaar - a collaborative todo list server."""
 
+import copy
 import json
 import os
 import tempfile
 import uuid
+from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -13,6 +15,11 @@ app = Flask(__name__, static_folder="static")
 
 DATA_DIR = Path("data")
 DATA_DIR.mkdir(exist_ok=True)
+
+UNDO_LIMIT = 50
+# Per-list undo/redo stacks (in memory, lost on server restart)
+_undo_stacks: dict[str, list] = defaultdict(list)
+_redo_stacks: dict[str, list] = defaultdict(list)
 
 
 # ---------------------------------------------------------------------------
@@ -37,7 +44,37 @@ def _load_list(list_id: str) -> dict | None:
     return data
 
 
-def _save_list(data: dict) -> None:
+def _snapshot(data: dict) -> dict:
+    """Capture the undoable state (items + tags) of a list."""
+    return {
+        "items": copy.deepcopy(data["items"]),
+        "tags": copy.deepcopy(data["tags"]),
+    }
+
+
+def _push_undo(list_id: str, snapshot: dict) -> None:
+    stack = _undo_stacks[list_id]
+    stack.append(snapshot)
+    if len(stack) > UNDO_LIMIT:
+        stack.pop(0)
+    _redo_stacks[list_id].clear()
+
+
+def _load_and_snapshot(list_id: str) -> tuple[dict, dict] | tuple[None, None]:
+    """Load a list and take a snapshot for undo. Returns (data, snapshot)."""
+    data = _load_list(list_id)
+    if data is None:
+        return None, None
+    return data, _snapshot(data)
+
+
+def _save_with_undo(data: dict, snapshot: dict) -> None:
+    """Push an undo snapshot and save the list."""
+    _push_undo(data["id"], snapshot)
+    _save_list(data)
+
+
+def _save_list(data: dict, *, undoable: bool = True) -> None:
     path = _list_path(data["id"])
     # Atomic write: write to temp file, then rename to avoid corruption
     fd, tmp = tempfile.mkstemp(dir=DATA_DIR, suffix=".tmp")
@@ -182,7 +219,7 @@ def delete_list(list_id: str):
 @app.post("/api/lists/<list_id>/items")
 def add_item(list_id: str):
     """Add a new item. Optional: after_id, depth."""
-    data = _load_list(list_id)
+    data, snap = _load_and_snapshot(list_id)
     if data is None:
         return jsonify({"error": "list not found"}), 404
     body = request.get_json(force=True)
@@ -198,14 +235,14 @@ def add_item(list_id: str):
             data["items"].append(item)
     else:
         data["items"].append(item)
-    _save_list(data)
+    _save_with_undo(data, snap)
     return jsonify(item), 201
 
 
 @app.patch("/api/lists/<list_id>/items/<item_id>")
 def update_item(list_id: str, item_id: str):
     """Update text, done, depth, or tags of an item."""
-    data = _load_list(list_id)
+    data, snap = _load_and_snapshot(list_id)
     if data is None:
         return jsonify({"error": "list not found"}), 404
     item = _find_item(data["items"], item_id)
@@ -213,14 +250,14 @@ def update_item(list_id: str, item_id: str):
         return jsonify({"error": "item not found"}), 404
     body = request.get_json(force=True)
     _apply_item_fields(item, body)
-    _save_list(data)
+    _save_with_undo(data, snap)
     return jsonify(item)
 
 
 @app.patch("/api/lists/<list_id>/items")
 def bulk_update_items(list_id: str):
     """Update multiple items at once. Body: {updates: [{id, ...fields}]}."""
-    data = _load_list(list_id)
+    data, snap = _load_and_snapshot(list_id)
     if data is None:
         return jsonify({"error": "list not found"}), 404
     body = request.get_json(force=True)
@@ -229,20 +266,20 @@ def bulk_update_items(list_id: str):
         item = _find_item(data["items"], upd["id"])
         if item:
             _apply_item_fields(item, upd)
-    _save_list(data)
+    _save_with_undo(data, snap)
     return jsonify(data)
 
 
 @app.delete("/api/lists/<list_id>/items/<item_id>")
 def delete_item(list_id: str, item_id: str):
-    data = _load_list(list_id)
+    data, snap = _load_and_snapshot(list_id)
     if data is None:
         return jsonify({"error": "list not found"}), 404
     before = len(data["items"])
     data["items"] = [it for it in data["items"] if it["id"] != item_id]
     if len(data["items"]) == before:
         return jsonify({"error": "item not found"}), 404
-    _save_list(data)
+    _save_with_undo(data, snap)
     return "", 204
 
 
@@ -252,18 +289,16 @@ def reorder_items(list_id: str):
     - {order: [id, ...]} to set the full ordering
     - {item_id, index, count?} to move a contiguous block
     """
-    data = _load_list(list_id)
+    data, snap = _load_and_snapshot(list_id)
     if data is None:
         return jsonify({"error": "list not found"}), 404
     body = request.get_json(force=True)
     items = data["items"]
 
     if "order" in body:
-        # Full reorder: rearrange items to match the given ID order
         by_id = {it["id"]: it for it in items}
         data["items"] = [by_id[oid] for oid in body["order"] if oid in by_id]
     else:
-        # Single block move
         item_id = body.get("item_id")
         target_index = body.get("index")
         count = max(1, int(body.get("count", 1)))
@@ -278,7 +313,7 @@ def reorder_items(list_id: str):
         for i, it in enumerate(block):
             items.insert(target_index + i, it)
 
-    _save_list(data)
+    _save_with_undo(data, snap)
     return jsonify(data)
 
 
@@ -289,7 +324,7 @@ def reorder_items(list_id: str):
 @app.post("/api/lists/<list_id>/tags")
 def create_tag(list_id: str):
     """Create a new tag. Body: {name, color?}."""
-    data = _load_list(list_id)
+    data, snap = _load_and_snapshot(list_id)
     if data is None:
         return jsonify({"error": "list not found"}), 404
     body = request.get_json(force=True)
@@ -302,14 +337,14 @@ def create_tag(list_id: str):
         "color": body.get("color") or _next_tag_color(data),
     }
     data["tags"].append(tag)
-    _save_list(data)
+    _save_with_undo(data, snap)
     return jsonify(tag), 201
 
 
 @app.patch("/api/lists/<list_id>/tags/<tag_id>")
 def update_tag(list_id: str, tag_id: str):
     """Update a tag's name or color."""
-    data = _load_list(list_id)
+    data, snap = _load_and_snapshot(list_id)
     if data is None:
         return jsonify({"error": "list not found"}), 404
     tag = next((t for t in data["tags"] if t["id"] == tag_id), None)
@@ -320,35 +355,75 @@ def update_tag(list_id: str, tag_id: str):
         tag["name"] = body["name"].strip() or tag["name"]
     if "color" in body:
         tag["color"] = body["color"]
-    _save_list(data)
+    _save_with_undo(data, snap)
     return jsonify(tag)
 
 
 @app.post("/api/lists/<list_id>/tags/reorder")
 def reorder_tags(list_id: str):
     """Reorder tags. Body: {order: [id, ...]}."""
-    data = _load_list(list_id)
+    data, snap = _load_and_snapshot(list_id)
     if data is None:
         return jsonify({"error": "list not found"}), 404
     body = request.get_json(force=True)
     order = body.get("order", [])
     by_id = {t["id"]: t for t in data["tags"]}
     data["tags"] = [by_id[tid] for tid in order if tid in by_id]
-    _save_list(data)
+    _save_with_undo(data, snap)
     return jsonify(data)
 
 
 @app.delete("/api/lists/<list_id>/tags/<tag_id>")
 def delete_tag(list_id: str, tag_id: str):
     """Delete a tag and remove it from all items."""
-    data = _load_list(list_id)
+    data, snap = _load_and_snapshot(list_id)
     if data is None:
         return jsonify({"error": "list not found"}), 404
     data["tags"] = [t for t in data["tags"] if t["id"] != tag_id]
     for item in data["items"]:
         item["tags"] = [t for t in item["tags"] if t != tag_id]
-    _save_list(data)
+    _save_with_undo(data, snap)
     return "", 204
+
+
+# ---------------------------------------------------------------------------
+# Undo / Redo
+# ---------------------------------------------------------------------------
+
+@app.post("/api/lists/<list_id>/undo")
+def undo(list_id: str):
+    stack = _undo_stacks[list_id]
+    if not stack:
+        return jsonify({"error": "nothing to undo"}), 400
+    data = _load_list(list_id)
+    if data is None:
+        return jsonify({"error": "list not found"}), 404
+    # Push current state onto redo before restoring
+    _redo_stacks[list_id].append(_snapshot(data))
+    # Restore previous state
+    prev = stack.pop()
+    data["items"] = prev["items"]
+    data["tags"] = prev["tags"]
+    _save_list(data)
+    return jsonify(data)
+
+
+@app.post("/api/lists/<list_id>/redo")
+def redo(list_id: str):
+    stack = _redo_stacks[list_id]
+    if not stack:
+        return jsonify({"error": "nothing to redo"}), 400
+    data = _load_list(list_id)
+    if data is None:
+        return jsonify({"error": "list not found"}), 404
+    # Push current state onto undo before restoring
+    _undo_stacks[list_id].append(_snapshot(data))
+    # Restore redo state
+    nxt = stack.pop()
+    data["items"] = nxt["items"]
+    data["tags"] = nxt["tags"]
+    _save_list(data)
+    return jsonify(data)
 
 
 # ---------------------------------------------------------------------------

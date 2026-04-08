@@ -976,13 +976,52 @@ document.addEventListener("keydown", (e) => {
 
   // Ctrl+E — expand all
   if (e.ctrlKey && e.key === "e" && !e.shiftKey && !e.altKey) {
-    // Only intercept if not in a text input
     if (document.activeElement?.classList?.contains("item-text")) return;
     e.preventDefault();
     expandAll();
     return;
   }
+
+  // Ctrl+Z — undo
+  if (e.ctrlKey && e.key === "z" && !e.shiftKey && !e.altKey) {
+    e.preventDefault();
+    performUndo();
+    return;
+  }
+
+  // Ctrl+Shift+Z or Ctrl+Y — redo
+  if (e.ctrlKey && ((e.key === "z" && e.shiftKey) || (e.key === "y" && !e.shiftKey)) && !e.altKey) {
+    e.preventDefault();
+    performRedo();
+    return;
+  }
 });
+
+// -------------------------------------------------------------------
+// Undo / Redo
+// -------------------------------------------------------------------
+
+async function performUndo() {
+  if (!currentListId) return;
+  const data = await api(`/lists/${currentListId}/undo`, { method: "POST" });
+  if (data && !data.error) {
+    currentItems = data.items;
+    currentTags = data.tags || [];
+    renderItems();
+    renderTagPane();
+  }
+}
+
+async function performRedo() {
+  if (!currentListId) return;
+  const data = await api(`/lists/${currentListId}/redo`, { method: "POST" });
+  if (data && !data.error) {
+    currentItems = data.items;
+    currentTags = data.tags || [];
+    renderItems();
+    renderTagPane();
+  }
+}
 
 // -------------------------------------------------------------------
 // Drag and drop
