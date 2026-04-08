@@ -261,8 +261,11 @@ function parseImportText(text) {
 
     let rest = line.trim();
 
-    // Detect and remove bullet characters
-    // Checkboxes: [x], [X], [ ], [-]
+    // Strip bullet prefixes first (-, *, •, numbered, etc.)
+    rest = rest.replace(/^[-*\u2022\u25e6\u25aa\u25b8\u25b9\u25ba>]\s+/, "");
+    rest = rest.replace(/^[a-zA-Z0-9]+[.)]\s+/, "");
+
+    // Then detect checkboxes: [x], [X], [ ], [-]
     let done = false;
     const cbMatch = rest.match(/^\[([xX])\]\s*/);
     if (cbMatch) {
@@ -273,9 +276,11 @@ function parseImportText(text) {
       if (cbEmpty) rest = rest.slice(cbEmpty[0].length);
     }
 
-    // Bullet prefixes: -, *, •, ◦, ▪, ▸, ▹, ►, >, numbered (1. or 1) or a.)
-    rest = rest.replace(/^[-*\u2022\u25e6\u25aa\u25b8\u25b9\u25ba>]\s+/, "");
-    rest = rest.replace(/^[a-zA-Z0-9]+[.)]\s+/, "");
+    // Strip markdown strikethrough ~~text~~
+    rest = rest.replace(/~~(.*?)~~/g, "$1");
+
+    // Strip trailing markdown artifacts (e.g. double-space line breaks)
+    rest = rest.trimEnd();
 
     if (rest === "") continue;
 
@@ -301,7 +306,12 @@ async function doImport(targetListId, parsedItems) {
 
 function showImportModal() {
   importText.value = "";
+  importText.disabled = false;
+  importNewBtn.disabled = false;
+  importNewBtn.textContent = "Import as new list";
   importCurrentBtn.disabled = !currentListId;
+  importCurrentBtn.textContent = "Add to current list";
+  importCancelBtn.disabled = false;
   importModal.classList.remove("hidden");
   importText.focus();
 }
