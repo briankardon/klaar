@@ -213,6 +213,14 @@ main {
   background: #f0f4f8;
 }
 
+.item.selected {
+  background: #d6e8f7;
+}
+
+.item.selected:hover {
+  background: #c4dcf0;
+}
+
 .item.drag-source {
   opacity: 0.15;
   background: #e8eef4;

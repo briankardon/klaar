@@ -16,6 +16,8 @@ const foldGutter = document.getElementById("fold-gutter");
 let currentListId = null;
 let currentItems = [];          // latest items from server
 const collapsedIds = new Set();  // client-side collapse state
+const selectedIds = new Set();   // client-side selection state
+let lastSelectedId = null;       // anchor for shift-click range selection
 
 // -------------------------------------------------------------------
 // API helpers
@@ -182,6 +184,60 @@ function expandAll() {
 }
 
 // -------------------------------------------------------------------
+// Selection
+// -------------------------------------------------------------------
+
+function handleSelectionClick(itemId, shiftKey, ctrlKey) {
+  if (shiftKey && lastSelectedId) {
+    // Range select: from lastSelectedId to itemId among visible items
+    const visibleIds = getVisibleItemIds();
+    const anchorIdx = visibleIds.indexOf(lastSelectedId);
+    const targetIdx = visibleIds.indexOf(itemId);
+    if (anchorIdx !== -1 && targetIdx !== -1) {
+      const from = Math.min(anchorIdx, targetIdx);
+      const to = Math.max(anchorIdx, targetIdx);
+      selectedIds.clear();
+      for (let i = from; i <= to; i++) {
+        selectedIds.add(visibleIds[i]);
+      }
+    }
+  } else if (ctrlKey) {
+    // Toggle individual item in/out of selection
+    if (selectedIds.has(itemId)) {
+      selectedIds.delete(itemId);
+    } else {
+      selectedIds.add(itemId);
+    }
+    lastSelectedId = itemId;
+  } else {
+    selectedIds.clear();
+    selectedIds.add(itemId);
+    lastSelectedId = itemId;
+  }
+  applySelectionStyles();
+}
+
+function getVisibleItemIds() {
+  const ids = [];
+  for (let i = 0; i < currentItems.length; i++) {
+    if (!isHiddenByCollapse(i)) ids.push(currentItems[i].id);
+  }
+  return ids;
+}
+
+function clearSelection() {
+  selectedIds.clear();
+  lastSelectedId = null;
+  applySelectionStyles();
+}
+
+function applySelectionStyles() {
+  itemsEl.querySelectorAll(".item").forEach((el) => {
+    el.classList.toggle("selected", selectedIds.has(el.dataset.id));
+  });
+}
+
+// -------------------------------------------------------------------
 // Items
 // -------------------------------------------------------------------
 
@@ -220,14 +276,21 @@ function renderItems() {
     // drag: mousedown anywhere on the row, but only start drag after threshold
     li.addEventListener("mousedown", (e) => {
       if (e.target.type === "checkbox") return;
-      prepareDrag(e, item.id);
+      onItemMouseDown(e, item.id);
     });
 
     // checkbox
     const cb = document.createElement("input");
     cb.type = "checkbox";
     cb.checked = item.done;
-    cb.addEventListener("change", () => toggleDone(item));
+    cb.addEventListener("click", (e) => {
+      if (e.ctrlKey) {
+        e.preventDefault();
+        toggleDoneHierarchy(i);
+      } else {
+        toggleDone(item);
+      }
+    });
 
     // text input
     const txt = document.createElement("input");
@@ -330,6 +393,7 @@ function renderItems() {
     li.append(cb, txt, badge, btnOut, btnIn, btnDel);
     itemsEl.appendChild(li);
   }
+  applySelectionStyles();
 }
 
 function updateCollapseBar(maxDepth) {
@@ -381,6 +445,10 @@ function updateCollapseBar(maxDepth) {
   collapseBar.appendChild(btnAll);
 }
 
+// -------------------------------------------------------------------
+// Data mutations (optimistic update + background server sync)
+// -------------------------------------------------------------------
+
 async function addItemAfter(afterId, depth) {
   const body = { text: "", depth };
   if (afterId) body.after_id = afterId;
@@ -398,8 +466,26 @@ async function addItemAfter(afterId, depth) {
   }
 }
 
-async function toggleDone(item) {
-  await updateItem(item.id, { done: !item.done });
+function toggleDone(item) {
+  updateItem(item.id, { done: !item.done });
+}
+
+function toggleDoneHierarchy(index) {
+  const [start, end] = getChildRange(index);
+  const block = [currentItems[index], ...currentItems.slice(start, end)];
+  const newDone = !currentItems[index].done;
+  // Update all locally, re-render once
+  for (const it of block) {
+    it.done = newDone;
+    it.completed = newDone ? new Date().toISOString() : null;
+  }
+  renderItems();
+  // Single bulk request to server
+  api(`/lists/${currentListId}/items`, {
+    method: "PATCH",
+    body: { updates: block.map((it) => ({ id: it.id, done: newDone })) },
+  }).then(() => scheduleSyncFromServer())
+    .catch(() => refreshItems());
 }
 
 // Schedule a full server refresh after edits go idle
@@ -516,10 +602,10 @@ document.addEventListener("keydown", (e) => {
 let dragState = null;
 const DRAG_THRESHOLD = 5;
 
-function prepareDrag(e, itemId) {
+function onItemMouseDown(e, itemId) {
   const startX = e.clientX;
   const startY = e.clientY;
-  const shiftKey = e.shiftKey;
+  const ctrlKey = e.ctrlKey;
   let started = false;
 
   function onMove(me) {
@@ -534,19 +620,21 @@ function prepareDrag(e, itemId) {
       if (document.activeElement?.classList?.contains("item-text")) {
         document.activeElement.blur();
       }
-      startDrag(me, itemId, startY, shiftKey);
+      startDrag(me, itemId, startY, ctrlKey);
     }
     if (started && dragState) {
       onDragMove(me);
     }
   }
 
-  function onUp() {
+  function onUp(ue) {
     document.removeEventListener("mousemove", onMove);
     document.removeEventListener("mouseup", onUp);
     if (started) {
       document.body.style.userSelect = "";
       onDragEnd();
+    } else {
+      handleSelectionClick(itemId, ue.shiftKey, ue.ctrlKey);
     }
   }
 
@@ -554,17 +642,17 @@ function prepareDrag(e, itemId) {
   document.addEventListener("mouseup", onUp);
 }
 
-function startDrag(e, itemId, startY, shiftKey) {
+function startDrag(e, itemId, startY, ctrlKey) {
   const sourceEl = itemsEl.querySelector(`.item[data-id="${itemId}"]`);
   if (!sourceEl) return;
 
   const rect = sourceEl.getBoundingClientRect();
   const itemsRect = itemsEl.getBoundingClientRect();
 
-  // Determine block: if shift, include children
+  // Determine block: if Ctrl held, include children
   const dataIdx = currentItems.findIndex((it) => it.id === itemId);
   let blockSize = 1;
-  if (shiftKey && dataIdx !== -1) {
+  if (ctrlKey && dataIdx !== -1) {
     const [start, end] = getChildRange(dataIdx);
     blockSize = end - dataIdx;
   }

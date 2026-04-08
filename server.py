@@ -67,6 +67,22 @@ def _find_item(items: list[dict], item_id: str) -> dict | None:
     return None
 
 
+def _apply_item_fields(item: dict, fields: dict) -> None:
+    if "text" in fields:
+        item["text"] = fields["text"]
+    if "done" in fields:
+        was_done = item["done"]
+        item["done"] = bool(fields["done"])
+        if item["done"] and not was_done:
+            item["completed"] = _now()
+        elif not item["done"] and was_done:
+            item["completed"] = None
+    if "depth" in fields:
+        item["depth"] = max(0, int(fields["depth"]))
+    if "tags" in fields:
+        item["tags"] = fields["tags"]
+
+
 # ---------------------------------------------------------------------------
 # Static files
 # ---------------------------------------------------------------------------
@@ -147,7 +163,7 @@ def add_item(list_id: str):
     if data is None:
         return jsonify({"error": "list not found"}), 404
     body = request.get_json(force=True)
-    text = body.get("text", "").strip() or ""
+    text = body.get("text", "").strip()
     depth = max(0, int(body.get("depth", 0)))
     item = _new_item(text, depth)
     after_id = body.get("after_id")
@@ -173,21 +189,25 @@ def update_item(list_id: str, item_id: str):
     if item is None:
         return jsonify({"error": "item not found"}), 404
     body = request.get_json(force=True)
-    if "text" in body:
-        item["text"] = body["text"]
-    if "done" in body:
-        was_done = item["done"]
-        item["done"] = bool(body["done"])
-        if item["done"] and not was_done:
-            item["completed"] = _now()
-        elif not item["done"] and was_done:
-            item["completed"] = None
-    if "depth" in body:
-        item["depth"] = max(0, int(body["depth"]))
-    if "tags" in body:
-        item["tags"] = body["tags"]
+    _apply_item_fields(item, body)
     _save_list(data)
     return jsonify(item)
+
+
+@app.patch("/api/lists/<list_id>/items")
+def bulk_update_items(list_id: str):
+    """Update multiple items at once. Body: {updates: [{id, ...fields}]}."""
+    data = _load_list(list_id)
+    if data is None:
+        return jsonify({"error": "list not found"}), 404
+    body = request.get_json(force=True)
+    updates = body.get("updates", [])
+    for upd in updates:
+        item = _find_item(data["items"], upd["id"])
+        if item:
+            _apply_item_fields(item, upd)
+    _save_list(data)
+    return jsonify(data)
 
 
 @app.delete("/api/lists/<list_id>/items/<item_id>")
