@@ -209,6 +209,15 @@ main {
   cursor: default;
 }
 
+.item-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 0;
+  max-width: 400px;
+}
+
 .item:hover {
   background: #f0f4f8;
 }
@@ -299,6 +308,113 @@ main {
 }
 
 
+/* ---- Tag pane (right sidebar) ---- */
+
+#tag-pane {
+  width: 200px;
+  min-width: 200px;
+  background: #fff;
+  border-left: 1px solid #ddd;
+  display: flex;
+  flex-direction: column;
+}
+
+#tag-list {
+  list-style: none;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.tag-entry {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.7rem;
+  font-size: 0.85rem;
+  border-bottom: 1px solid #f0f0f0;
+  cursor: default;
+}
+
+.tag-entry:hover {
+  background: #f8f8f8;
+}
+
+.tag-entry.tag-drag-source {
+  opacity: 0.15;
+}
+
+.tag-color-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  cursor: pointer;
+  border: 1px solid rgba(0,0,0,0.15);
+}
+
+.tag-name {
+  flex: 1;
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag-visibility-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: #999;
+  padding: 0 2px;
+}
+
+.tag-visibility-btn:hover {
+  color: #333;
+}
+
+.tag-entry.tag-hidden {
+  opacity: 0.4;
+}
+
+.tag-delete-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: #ccc;
+  padding: 0 2px;
+}
+
+.tag-delete-btn:hover {
+  color: #e74c3c;
+}
+
+/* ---- Tag bubbles on items ---- */
+
+.item-tags {
+  display: flex;
+  gap: 3px;
+  flex-shrink: 0;
+  align-items: center;
+}
+
+.tag-bubble {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 9px;
+  font-size: 0.7rem;
+  line-height: 16px;
+  color: #fff;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+
+.tag-bubble:hover {
+  filter: brightness(0.85);
+}
+
 /* ---- Empty state ---- */
 
 #empty-state {
@@ -316,8 +432,8 @@ main {
 
 /* ---- Depth indentation ---- */
 
-.item[data-depth="1"] { padding-left: 1.8rem; }
-.item[data-depth="2"] { padding-left: 3.6rem; }
-.item[data-depth="3"] { padding-left: 5.4rem; }
-.item[data-depth="4"] { padding-left: 7.2rem; }
-.item[data-depth="5"] { padding-left: 9.0rem; }
+.item[data-depth="1"] .item-left { padding-left: 1.5rem; }
+.item[data-depth="2"] .item-left { padding-left: 3.0rem; }
+.item[data-depth="3"] .item-left { padding-left: 4.5rem; }
+.item[data-depth="4"] .item-left { padding-left: 6.0rem; }
+.item[data-depth="5"] .item-left { padding-left: 7.5rem; }

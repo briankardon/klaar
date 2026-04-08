@@ -12,12 +12,17 @@ const btnNewList = document.getElementById("btn-new-list");
 const btnDeleteList = document.getElementById("btn-delete-list");
 const collapseBar = document.getElementById("collapse-bar");
 const foldGutter = document.getElementById("fold-gutter");
+const tagPane = document.getElementById("tag-pane");
+const tagListEl = document.getElementById("tag-list");
+const btnNewTag = document.getElementById("btn-new-tag");
 
 let currentListId = null;
 let currentItems = [];          // latest items from server
+let currentTags = [];           // tag definitions for current list
 const collapsedIds = new Set();  // client-side collapse state
 const selectedIds = new Set();   // client-side selection state
 let lastSelectedId = null;       // anchor for shift-click range selection
+const hiddenTagIds = new Set();  // client-side tag visibility state
 
 // -------------------------------------------------------------------
 // API helpers
@@ -57,15 +62,19 @@ async function selectList(id) {
   if (!data || data.error) {
     currentListId = null;
     listView.classList.add("hidden");
+    tagPane.classList.add("hidden");
     emptyState.classList.remove("hidden");
     await loadLists();
     return;
   }
   currentItems = data.items;
+  currentTags = data.tags || [];
   listTitle.textContent = data.name;
   emptyState.classList.add("hidden");
   listView.classList.remove("hidden");
+  tagPane.classList.remove("hidden");
   renderItems();
+  renderTagPane();
   listIndex.querySelectorAll("li").forEach((li) => {
     li.classList.toggle("active", li.dataset.id === id);
   });
@@ -78,7 +87,9 @@ async function refreshItems() {
   const data = await api(`/lists/${currentListId}`);
   if (!data || data.error) return;
   currentItems = data.items;
+  currentTags = data.tags || [];
   renderItems();
+  renderTagPane();
 }
 
 btnNewList.addEventListener("click", async () => {
@@ -95,6 +106,7 @@ btnDeleteList.addEventListener("click", async () => {
   await api(`/lists/${currentListId}`, { method: "DELETE" });
   currentListId = null;
   listView.classList.add("hidden");
+  tagPane.classList.add("hidden");
   emptyState.classList.remove("hidden");
   await loadLists();
 });
@@ -366,6 +378,30 @@ function renderItems() {
       }
     });
 
+    // tag bubbles (ordered by global tag order, not item assignment order)
+    const tagsContainer = document.createElement("span");
+    tagsContainer.className = "item-tags";
+    const itemTagSet = new Set(item.tags);
+    for (const tagDef of currentTags) {
+      if (!itemTagSet.has(tagDef.id)) continue;
+      if (hiddenTagIds.has(tagDef.id)) continue;
+      const tagId = tagDef.id;
+      const bubble = document.createElement("span");
+      bubble.className = "tag-bubble";
+      bubble.textContent = tagDef.name;
+      bubble.style.background = tagDef.color;
+      bubble.title = `Click to remove (Ctrl: remove from hierarchy)`;
+      bubble.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (e.ctrlKey) {
+          removeTagFromHierarchy(i, tagId);
+        } else {
+          removeTagFromItem(item.id, tagId);
+        }
+      });
+      tagsContainer.appendChild(bubble);
+    }
+
     // child count badge when collapsed
     const badge = document.createElement("span");
     badge.className = "child-count";
@@ -398,7 +434,10 @@ function renderItems() {
     btnDel.title = "Delete";
     btnDel.addEventListener("click", () => deleteItem(item.id));
 
-    li.append(cb, txt, badge, btnOut, btnIn, btnDel);
+    const leftGroup = document.createElement("div");
+    leftGroup.className = "item-left";
+    leftGroup.append(cb, txt);
+    li.append(leftGroup, tagsContainer, badge, btnOut, btnIn, btnDel);
     itemsEl.appendChild(li);
   }
   applySelectionStyles();
@@ -543,10 +582,11 @@ function scheduleSyncFromServer() {
     const data = await api(`/lists/${currentListId}`);
     if (data && !data.error) {
       currentItems = data.items;
-      // Don't re-render if user is mid-edit — just update the data
+      currentTags = data.tags || [];
       const focused = document.activeElement;
       const focusedId = focused?.closest?.(".item")?.dataset?.id;
       renderItems();
+      renderTagPane();
       if (focusedId) {
         const el = itemsEl.querySelector(`.item[data-id="${focusedId}"] .item-text`);
         if (el) el.focus();
@@ -592,6 +632,308 @@ function deleteItem(itemId) {
     .catch(() => refreshItems());
 }
 
+
+// -------------------------------------------------------------------
+// Tags
+// -------------------------------------------------------------------
+
+function renderTagPane() {
+  tagListEl.innerHTML = "";
+  for (const tag of currentTags) {
+    const li = document.createElement("li");
+    li.className = "tag-entry" + (hiddenTagIds.has(tag.id) ? " tag-hidden" : "");
+
+    // Color dot (click to change color)
+    const dot = document.createElement("span");
+    dot.className = "tag-color-dot";
+    dot.style.background = tag.color;
+    dot.title = "Change color";
+    dot.addEventListener("click", () => {
+      const input = document.createElement("input");
+      input.type = "color";
+      input.value = tag.color;
+      input.style.position = "absolute";
+      input.style.opacity = "0";
+      document.body.appendChild(input);
+      input.addEventListener("input", () => {
+        updateTag(tag.id, { color: input.value });
+      });
+      input.addEventListener("change", () => input.remove());
+      input.click();
+    });
+
+    // Tag name
+    const name = document.createElement("span");
+    name.className = "tag-name";
+    name.textContent = tag.name;
+
+    // Visibility toggle
+    const visBtn = document.createElement("button");
+    visBtn.className = "tag-visibility-btn";
+    visBtn.textContent = hiddenTagIds.has(tag.id) ? "\u25cb" : "\u25cf";
+    visBtn.title = hiddenTagIds.has(tag.id) ? "Show" : "Hide";
+    visBtn.addEventListener("click", () => {
+      if (hiddenTagIds.has(tag.id)) hiddenTagIds.delete(tag.id);
+      else hiddenTagIds.add(tag.id);
+      renderTagPane();
+      renderItems();
+    });
+
+    // Delete button
+    const delBtn = document.createElement("button");
+    delBtn.className = "tag-delete-btn";
+    delBtn.textContent = "\u00d7";
+    delBtn.title = "Delete tag";
+    delBtn.addEventListener("click", () => deleteTag(tag.id));
+
+    li.append(dot, name, visBtn, delBtn);
+
+    // Drag to reorder / click to toggle tag on items
+    li.addEventListener("mousedown", (e) => {
+      if (e.target === dot || e.target === visBtn || e.target === delBtn) return;
+      onTagMouseDown(e, tag.id);
+    });
+
+    tagListEl.appendChild(li);
+  }
+}
+
+let tagDragState = null;
+
+function onTagMouseDown(e, tagId) {
+  const startY = e.clientY;
+  let started = false;
+
+  function onMove(me) {
+    const dy = Math.abs(me.clientY - startY);
+    if (!started && dy >= DRAG_THRESHOLD) {
+      started = true;
+      document.body.style.userSelect = "none";
+      const srcIdx = currentTags.findIndex(t => t.id === tagId);
+      const sourceEl = tagListEl.children[srcIdx];
+      const rect = sourceEl.getBoundingClientRect();
+
+      // Create ghost
+      const ghost = document.createElement("div");
+      ghost.className = "drag-ghost";
+      ghost.style.width = rect.width + "px";
+      const ghostDot = document.createElement("span");
+      ghostDot.className = "tag-color-dot";
+      ghostDot.style.background = currentTags[srcIdx].color;
+      ghost.append(ghostDot, currentTags[srcIdx].name);
+      ghost.style.left = rect.left + "px";
+      ghost.style.top = rect.top + "px";
+      document.body.appendChild(ghost);
+
+      sourceEl.classList.add("tag-drag-source");
+      tagDragState = { tagId, ghost, offsetY: startY - rect.top };
+    }
+    if (started) onTagDragMove(me);
+  }
+
+  function onUp(ue) {
+    document.removeEventListener("mousemove", onMove);
+    document.removeEventListener("mouseup", onUp);
+    document.body.style.userSelect = "";
+    if (started) {
+      onTagDragEnd();
+    } else if (ue.ctrlKey) {
+      toggleTagOnItemsWithHierarchy(tagId);
+    } else {
+      toggleTagOnItems(tagId);
+    }
+  }
+
+  document.addEventListener("mousemove", onMove);
+  document.addEventListener("mouseup", onUp);
+}
+
+function onTagDragMove(e) {
+  if (!tagDragState) return;
+  const { ghost, offsetY } = tagDragState;
+  const listRect = tagListEl.getBoundingClientRect();
+  ghost.style.left = listRect.left + "px";
+  ghost.style.top = (e.clientY - offsetY) + "px";
+
+  const tagEntries = Array.from(tagListEl.querySelectorAll(".tag-entry"));
+  const relY = e.clientY - listRect.top;
+  const entryHeight = tagEntries.length > 0 ? tagEntries[0].offsetHeight : 26;
+  let targetRow = Math.round(relY / entryHeight);
+  targetRow = Math.max(0, Math.min(targetRow, currentTags.length));
+
+  const srcIdx = currentTags.findIndex((t) => t.id === tagDragState.tagId);
+  if (srcIdx === -1 || targetRow === srcIdx) return;
+
+  const [moved] = currentTags.splice(srcIdx, 1);
+  const insertIdx = targetRow > srcIdx ? targetRow - 1 : targetRow;
+  currentTags.splice(insertIdx, 0, moved);
+
+  renderTagPane();
+  renderItems();
+
+  // Re-mark source
+  const newSrc = tagListEl.querySelector(`.tag-entry:nth-child(${currentTags.findIndex(t => t.id === tagDragState.tagId) + 1})`);
+  if (newSrc) newSrc.classList.add("tag-drag-source");
+}
+
+function onTagDragEnd() {
+  if (!tagDragState) return;
+  tagDragState.ghost.remove();
+  const tagId = tagDragState.tagId;
+  tagDragState = null;
+
+  renderTagPane();
+  renderItems();
+
+  // Send new order to server
+  api(`/lists/${currentListId}/tags/reorder`, {
+    method: "POST",
+    body: { order: currentTags.map((t) => t.id) },
+  }).then(() => scheduleSyncFromServer())
+    .catch(() => refreshItems());
+}
+
+function toggleTagOnItems(tagId) {
+  // Determine target items: selection if multi-selected, otherwise focused item
+  let targetIds = [];
+  if (selectedIds.size > 0) {
+    targetIds = [...selectedIds];
+  } else {
+    const focused = document.activeElement?.closest?.(".item");
+    if (focused) targetIds = [focused.dataset.id];
+  }
+  if (targetIds.length === 0) return;
+
+  const targets = currentItems.filter((it) => targetIds.includes(it.id));
+  // If all targets have the tag, remove it; otherwise add it
+  const allHave = targets.every((it) => it.tags.includes(tagId));
+  const updates = [];
+  for (const it of targets) {
+    if (allHave) {
+      it.tags = it.tags.filter((t) => t !== tagId);
+    } else if (!it.tags.includes(tagId)) {
+      it.tags.push(tagId);
+    }
+    updates.push({ id: it.id, tags: [...it.tags] });
+  }
+  renderItems();
+  api(`/lists/${currentListId}/items`, {
+    method: "PATCH",
+    body: { updates },
+  }).then(() => scheduleSyncFromServer())
+    .catch(() => refreshItems());
+}
+
+function removeTagFromItem(itemId, tagId) {
+  const item = currentItems.find((it) => it.id === itemId);
+  if (!item) return;
+  item.tags = item.tags.filter((t) => t !== tagId);
+  renderItems();
+  api(`/lists/${currentListId}/items/${itemId}`, {
+    method: "PATCH",
+    body: { tags: item.tags },
+  }).then(() => scheduleSyncFromServer())
+    .catch(() => refreshItems());
+}
+
+function removeTagFromHierarchy(index, tagId) {
+  const [start, end] = getChildRange(index);
+  const block = [currentItems[index], ...currentItems.slice(start, end)];
+  const updates = [];
+  for (const it of block) {
+    it.tags = it.tags.filter((t) => t !== tagId);
+    updates.push({ id: it.id, tags: [...it.tags] });
+  }
+  renderItems();
+  api(`/lists/${currentListId}/items`, {
+    method: "PATCH",
+    body: { updates },
+  }).then(() => scheduleSyncFromServer())
+    .catch(() => refreshItems());
+}
+
+function getHierarchyItems(targetIds) {
+  // Expand each target to include its children
+  const allIds = new Set();
+  for (const id of targetIds) {
+    const idx = currentItems.findIndex((it) => it.id === id);
+    if (idx === -1) continue;
+    allIds.add(id);
+    const [start, end] = getChildRange(idx);
+    for (let j = start; j < end; j++) allIds.add(currentItems[j].id);
+  }
+  return currentItems.filter((it) => allIds.has(it.id));
+}
+
+function toggleTagOnItemsWithHierarchy(tagId) {
+  let targetIds = [];
+  if (selectedIds.size > 0) {
+    targetIds = [...selectedIds];
+  } else {
+    const focused = document.activeElement?.closest?.(".item");
+    if (focused) targetIds = [focused.dataset.id];
+  }
+  if (targetIds.length === 0) return;
+
+  const targets = getHierarchyItems(targetIds);
+  const allHave = targets.every((it) => it.tags.includes(tagId));
+  const updates = [];
+  for (const it of targets) {
+    if (allHave) {
+      it.tags = it.tags.filter((t) => t !== tagId);
+    } else if (!it.tags.includes(tagId)) {
+      it.tags.push(tagId);
+    }
+    updates.push({ id: it.id, tags: [...it.tags] });
+  }
+  renderItems();
+  api(`/lists/${currentListId}/items`, {
+    method: "PATCH",
+    body: { updates },
+  }).then(() => scheduleSyncFromServer())
+    .catch(() => refreshItems());
+}
+
+function updateTag(tagId, fields) {
+  const tag = currentTags.find((t) => t.id === tagId);
+  if (tag) {
+    if ("name" in fields) tag.name = fields.name;
+    if ("color" in fields) tag.color = fields.color;
+    renderTagPane();
+    renderItems();
+  }
+  api(`/lists/${currentListId}/tags/${tagId}`, {
+    method: "PATCH",
+    body: fields,
+  }).then(() => scheduleSyncFromServer())
+    .catch(() => refreshItems());
+}
+
+function deleteTag(tagId) {
+  currentTags = currentTags.filter((t) => t.id !== tagId);
+  for (const item of currentItems) {
+    item.tags = item.tags.filter((t) => t !== tagId);
+  }
+  hiddenTagIds.delete(tagId);
+  renderTagPane();
+  renderItems();
+  api(`/lists/${currentListId}/tags/${tagId}`, { method: "DELETE" })
+    .then(() => scheduleSyncFromServer())
+    .catch(() => refreshItems());
+}
+
+btnNewTag.addEventListener("click", async () => {
+  const name = prompt("Tag name:");
+  if (!name) return;
+  const tag = await api(`/lists/${currentListId}/tags`, {
+    method: "POST",
+    body: { name },
+  });
+  if (tag && !tag.error) {
+    currentTags.push(tag);
+    renderTagPane();
+  }
+});
 
 // -------------------------------------------------------------------
 // Keyboard shortcuts

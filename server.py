@@ -32,7 +32,9 @@ def _load_list(list_id: str) -> dict | None:
     if not path.exists():
         return None
     with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+        data = json.load(f)
+    _ensure_tags(data)
+    return data
 
 
 def _save_list(data: dict) -> None:
@@ -65,6 +67,26 @@ def _find_item(items: list[dict], item_id: str) -> dict | None:
         if item["id"] == item_id:
             return item
     return None
+
+
+TAG_COLORS = [
+    "#e74c3c", "#e67e22", "#f1c40f", "#2ecc71", "#1abc9c",
+    "#3498db", "#9b59b6", "#e84393", "#6c5ce7", "#00b894",
+]
+
+
+def _ensure_tags(data: dict) -> None:
+    """Ensure list has a tags array (migration for old data files)."""
+    if "tags" not in data:
+        data["tags"] = []
+
+
+def _next_tag_color(data: dict) -> str:
+    used = {t["color"] for t in data["tags"]}
+    for c in TAG_COLORS:
+        if c not in used:
+            return c
+    return TAG_COLORS[len(data["tags"]) % len(TAG_COLORS)]
 
 
 def _apply_item_fields(item: dict, fields: dict) -> None:
@@ -116,6 +138,7 @@ def create_list():
         "id": uuid.uuid4().hex[:12],
         "name": name,
         "created": _now(),
+        "tags": [],
         "items": [],
     }
     _save_list(data)
@@ -257,6 +280,75 @@ def reorder_items(list_id: str):
 
     _save_list(data)
     return jsonify(data)
+
+
+# ---------------------------------------------------------------------------
+# Tag endpoints
+# ---------------------------------------------------------------------------
+
+@app.post("/api/lists/<list_id>/tags")
+def create_tag(list_id: str):
+    """Create a new tag. Body: {name, color?}."""
+    data = _load_list(list_id)
+    if data is None:
+        return jsonify({"error": "list not found"}), 404
+    body = request.get_json(force=True)
+    name = body.get("name", "").strip()
+    if not name:
+        return jsonify({"error": "name is required"}), 400
+    tag = {
+        "id": uuid.uuid4().hex[:12],
+        "name": name,
+        "color": body.get("color") or _next_tag_color(data),
+    }
+    data["tags"].append(tag)
+    _save_list(data)
+    return jsonify(tag), 201
+
+
+@app.patch("/api/lists/<list_id>/tags/<tag_id>")
+def update_tag(list_id: str, tag_id: str):
+    """Update a tag's name or color."""
+    data = _load_list(list_id)
+    if data is None:
+        return jsonify({"error": "list not found"}), 404
+    tag = next((t for t in data["tags"] if t["id"] == tag_id), None)
+    if tag is None:
+        return jsonify({"error": "tag not found"}), 404
+    body = request.get_json(force=True)
+    if "name" in body:
+        tag["name"] = body["name"].strip() or tag["name"]
+    if "color" in body:
+        tag["color"] = body["color"]
+    _save_list(data)
+    return jsonify(tag)
+
+
+@app.post("/api/lists/<list_id>/tags/reorder")
+def reorder_tags(list_id: str):
+    """Reorder tags. Body: {order: [id, ...]}."""
+    data = _load_list(list_id)
+    if data is None:
+        return jsonify({"error": "list not found"}), 404
+    body = request.get_json(force=True)
+    order = body.get("order", [])
+    by_id = {t["id"]: t for t in data["tags"]}
+    data["tags"] = [by_id[tid] for tid in order if tid in by_id]
+    _save_list(data)
+    return jsonify(data)
+
+
+@app.delete("/api/lists/<list_id>/tags/<tag_id>")
+def delete_tag(list_id: str, tag_id: str):
+    """Delete a tag and remove it from all items."""
+    data = _load_list(list_id)
+    if data is None:
+        return jsonify({"error": "list not found"}), 404
+    data["tags"] = [t for t in data["tags"] if t["id"] != tag_id]
+    for item in data["items"]:
+        item["tags"] = [t for t in item["tags"] if t != tag_id]
+    _save_list(data)
+    return "", 204
 
 
 # ---------------------------------------------------------------------------

@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Klaar</title>
+  <link rel="icon" type="image/png" href="/static/favicon.png">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -33,6 +34,15 @@
         <ul id="items"></ul>
       </div>
     </section>
+
+    <!-- Right sidebar: tags -->
+    <nav id="tag-pane" class="hidden">
+      <div class="sidebar-header">
+        <h2>Tags</h2>
+        <button id="btn-new-tag" title="New tag">+</button>
+      </div>
+      <ul id="tag-list"></ul>
+    </nav>
 
     <section id="empty-state">
       <p>Select or create a list to get started.</p>
