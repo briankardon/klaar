@@ -66,6 +66,10 @@ async function api(path, opts = {}) {
     ...opts,
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
+  if (res.status === 401) {
+    window.location.href = "/";
+    return null;
+  }
   if (res.status === 204) return null;
   return res.json();
 }
@@ -1129,7 +1133,12 @@ function renderFilterBar() {
     const f = textFilters[i];
     const bubble = document.createElement("span");
     bubble.className = "filter-bubble filter-bubble-text";
-    bubble.innerHTML = `<span>${f.pattern}</span><span class="filter-x">\u00d7</span>`;
+    const labelSpan = document.createElement("span");
+    labelSpan.textContent = f.pattern;
+    const xSpan = document.createElement("span");
+    xSpan.className = "filter-x";
+    xSpan.textContent = "\u00d7";
+    bubble.append(labelSpan, xSpan);
     bubble.title = "Click to remove filter";
     bubble.addEventListener("click", () => {
       textFilters.splice(i, 1);
@@ -1146,7 +1155,12 @@ function renderFilterBar() {
     bubble.className = "filter-bubble filter-bubble-tag";
     bubble.style.background = tagDef.color;
     const label = condition ? `${tagDef.name} ${condition}` : tagDef.name;
-    bubble.innerHTML = `<span>${label}</span><span class="filter-x">\u00d7</span>`;
+    const labelSpan = document.createElement("span");
+    labelSpan.textContent = label;
+    const xSpan = document.createElement("span");
+    xSpan.className = "filter-x";
+    xSpan.textContent = "\u00d7";
+    bubble.append(labelSpan, xSpan);
     bubble.title = "Click: remove / Double-click: set condition";
     let clickTimer = null;
     bubble.addEventListener("click", () => {
@@ -1965,7 +1979,24 @@ function onDragEnd() {
 }
 
 // -------------------------------------------------------------------
+// Auth
+// -------------------------------------------------------------------
+
+document.getElementById("btn-logout").addEventListener("click", async () => {
+  await api("/logout", { method: "POST" });
+  window.location.href = "/";
+});
+
+async function loadCurrentUser() {
+  const data = await api("/me");
+  if (data && !data.error) {
+    document.getElementById("user-display").textContent = data.display_name || data.username;
+  }
+}
+
+// -------------------------------------------------------------------
 // Init
 // -------------------------------------------------------------------
 
+loadCurrentUser();
 loadLists();

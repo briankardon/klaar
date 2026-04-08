@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Klaar - Login</title>
+  <link rel="icon" type="image/png" href="/static/favicon.png">
+  <link rel="stylesheet" href="/static/auth.css">
+</head>
+<body>
+  <div class="auth-container">
+    <h1>Klaar</h1>
+    <form id="login-form">
+      <input type="text" id="username" placeholder="Username" autocomplete="username" required>
+      <input type="password" id="password" placeholder="Password" autocomplete="current-password" required>
+      <button type="submit">Log in</button>
+      <p id="error" class="error hidden"></p>
+    </form>
+  </div>
+  <script>
+    document.getElementById("login-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const errEl = document.getElementById("error");
+      errEl.classList.add("hidden");
+      const res = await fetch("/api/login", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+          username: document.getElementById("username").value,
+          password: document.getElementById("password").value,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        window.location.href = "/";
+      } else {
+        errEl.textContent = data.error || "Login failed";
+        errEl.classList.remove("hidden");
+      }
+    });
+  </script>
+</body>
+</html>
