@@ -127,6 +127,97 @@ main {
   opacity: 1;
 }
 
+/* ---- Search / Filter ---- */
+
+#search-area {
+  margin-bottom: 0.5rem;
+}
+
+#search-input {
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  outline: none;
+}
+
+#search-input:focus {
+  border-color: #3498db;
+  box-shadow: 0 0 0 2px rgba(52,152,219,0.2);
+}
+
+#filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 0.4rem;
+}
+
+.filter-bubble {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  line-height: 18px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.filter-bubble-text {
+  background: #e0e0e0;
+  color: #333;
+}
+
+.filter-bubble-tag {
+  color: #fff;
+}
+
+.filter-bubble:hover {
+  filter: brightness(0.85);
+}
+
+.filter-bubble .filter-x {
+  font-size: 0.7rem;
+  opacity: 0.6;
+}
+
+.filter-bubble:hover .filter-x {
+  opacity: 1;
+}
+
+/* ---- Dimmed ancestor in filtered view ---- */
+
+.item.filter-ancestor {
+  opacity: 0.4;
+}
+
+.item.filter-ancestor .item-text {
+  font-style: italic;
+}
+
+/* ---- Tag pane filter button ---- */
+
+.tag-filter-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.7rem;
+  color: #ccc;
+  padding: 0 2px;
+}
+
+.tag-filter-btn:hover {
+  color: #3498db;
+}
+
+.tag-filter-btn.active {
+  color: #3498db;
+}
+
 /* ---- Collapse bar ---- */
 
 #collapse-bar {

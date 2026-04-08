@@ -15,6 +15,8 @@ const foldGutter = document.getElementById("fold-gutter");
 const tagPane = document.getElementById("tag-pane");
 const tagListEl = document.getElementById("tag-list");
 const btnNewTag = document.getElementById("btn-new-tag");
+const searchInput = document.getElementById("search-input");
+const filterBar = document.getElementById("filter-bar");
 
 let currentListId = null;
 let currentItems = [];          // latest items from server
@@ -23,6 +25,8 @@ const collapsedIds = new Set();  // client-side collapse state
 const selectedIds = new Set();   // client-side selection state
 let lastSelectedId = null;       // anchor for shift-click range selection
 const hiddenTagIds = new Set();  // client-side tag visibility state
+const textFilters = [];          // [{pattern: string, regex: RegExp}]
+const tagFilters = new Set();    // tag IDs to filter by
 
 // -------------------------------------------------------------------
 // API helpers
@@ -258,11 +262,14 @@ function renderItems() {
   foldGutter.innerHTML = "";
   const maxDepth = currentItems.reduce((m, it) => Math.max(m, it.depth), 0);
   updateCollapseBar(maxDepth);
+  const filterVis = computeFilterVisibility();
 
   let visibleRow = 0;
   for (let i = 0; i < currentItems.length; i++) {
     const item = currentItems[i];
     if (isHiddenByCollapse(i)) continue;
+    if (filterVis.size > 0 && filterVis.get(i) === "hidden") continue;
+    const isFilterAncestor = filterVis.get(i) === "ancestor";
 
     const isParent = hasChildren(i);
     const isCollapsed = collapsedIds.has(item.id);
@@ -280,7 +287,7 @@ function renderItems() {
     }
 
     const li = document.createElement("li");
-    li.className = "item" + (item.done ? " done" : "");
+    li.className = "item" + (item.done ? " done" : "") + (isFilterAncestor ? " filter-ancestor" : "");
     li.dataset.id = item.id;
     li.dataset.depth = item.depth;
     li.dataset.index = i;
@@ -634,6 +641,143 @@ function deleteItem(itemId) {
 
 
 // -------------------------------------------------------------------
+// Search / Filtering
+// -------------------------------------------------------------------
+
+function hasActiveFilters() {
+  return textFilters.length > 0 || tagFilters.size > 0;
+}
+
+function itemMatchesFilters(item) {
+  for (const f of textFilters) {
+    if (!f.regex.test(item.text)) return false;
+  }
+  for (const tagId of tagFilters) {
+    if (!item.tags.includes(tagId)) return false;
+  }
+  return true;
+}
+
+function computeFilterVisibility() {
+  // Returns a Map of index -> "match" | "ancestor" | "hidden"
+  const vis = new Map();
+  if (!hasActiveFilters()) return vis;
+
+  // First pass: mark matches
+  for (let i = 0; i < currentItems.length; i++) {
+    vis.set(i, itemMatchesFilters(currentItems[i]) ? "match" : "hidden");
+  }
+  // Second pass: mark ancestors of matches as visible
+  for (let i = 0; i < currentItems.length; i++) {
+    if (vis.get(i) !== "match") continue;
+    // Walk backwards to find ancestors
+    let targetDepth = currentItems[i].depth;
+    for (let j = i - 1; j >= 0 && targetDepth > 0; j--) {
+      if (currentItems[j].depth < targetDepth) {
+        if (vis.get(j) === "hidden") vis.set(j, "ancestor");
+        targetDepth = currentItems[j].depth;
+      }
+    }
+  }
+  return vis;
+}
+
+function renderFilterBar() {
+  filterBar.innerHTML = "";
+  if (!hasActiveFilters()) {
+    filterBar.classList.add("hidden");
+    return;
+  }
+  filterBar.classList.remove("hidden");
+
+  for (let i = 0; i < textFilters.length; i++) {
+    const f = textFilters[i];
+    const bubble = document.createElement("span");
+    bubble.className = "filter-bubble filter-bubble-text";
+    bubble.innerHTML = `<span>${f.pattern}</span><span class="filter-x">\u00d7</span>`;
+    bubble.title = "Click to remove filter";
+    bubble.addEventListener("click", () => {
+      textFilters.splice(i, 1);
+      renderFilterBar();
+      renderItems();
+    });
+    filterBar.appendChild(bubble);
+  }
+
+  for (const tagId of tagFilters) {
+    const tagDef = currentTags.find((t) => t.id === tagId);
+    if (!tagDef) continue;
+    const bubble = document.createElement("span");
+    bubble.className = "filter-bubble filter-bubble-tag";
+    bubble.style.background = tagDef.color;
+    bubble.innerHTML = `<span>${tagDef.name}</span><span class="filter-x">\u00d7</span>`;
+    bubble.title = "Click to remove tag filter";
+    bubble.addEventListener("click", () => {
+      tagFilters.delete(tagId);
+      renderFilterBar();
+      renderItems();
+      renderTagPane();
+    });
+    filterBar.appendChild(bubble);
+  }
+}
+
+searchInput.addEventListener("input", () => {
+  const val = searchInput.value.trim();
+  if (!val) {
+    selectedIds.clear();
+    applySelectionStyles();
+    return;
+  }
+  try {
+    const re = new RegExp(val, "i");
+    selectedIds.clear();
+    for (const item of currentItems) {
+      if (re.test(item.text)) selectedIds.add(item.id);
+    }
+    applySelectionStyles();
+  } catch (e) {
+    // Invalid regex in progress, ignore
+  }
+});
+
+searchInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    const val = searchInput.value.trim();
+    if (!val) return;
+    try {
+      const re = new RegExp(val, "i");
+      textFilters.push({ pattern: val, regex: re });
+      searchInput.value = "";
+      selectedIds.clear();
+      renderFilterBar();
+      renderItems();
+    } catch (err) {
+      // Invalid regex, don't create filter
+    }
+    return;
+  }
+  if (e.key === "Escape") {
+    searchInput.value = "";
+    selectedIds.clear();
+    applySelectionStyles();
+    searchInput.blur();
+  }
+});
+
+function toggleTagFilter(tagId) {
+  if (tagFilters.has(tagId)) {
+    tagFilters.delete(tagId);
+  } else {
+    tagFilters.add(tagId);
+  }
+  renderFilterBar();
+  renderItems();
+  renderTagPane();
+}
+
+// -------------------------------------------------------------------
 // Tags
 // -------------------------------------------------------------------
 
@@ -679,6 +823,13 @@ function renderTagPane() {
       renderItems();
     });
 
+    // Filter toggle
+    const filterBtn = document.createElement("button");
+    filterBtn.className = "tag-filter-btn" + (tagFilters.has(tag.id) ? " active" : "");
+    filterBtn.textContent = "\u25e2";
+    filterBtn.title = tagFilters.has(tag.id) ? "Remove filter" : "Filter by this tag";
+    filterBtn.addEventListener("click", () => toggleTagFilter(tag.id));
+
     // Delete button
     const delBtn = document.createElement("button");
     delBtn.className = "tag-delete-btn";
@@ -686,11 +837,11 @@ function renderTagPane() {
     delBtn.title = "Delete tag";
     delBtn.addEventListener("click", () => deleteTag(tag.id));
 
-    li.append(dot, name, visBtn, delBtn);
+    li.append(dot, name, filterBtn, visBtn, delBtn);
 
     // Drag to reorder / click to toggle tag on items
     li.addEventListener("mousedown", (e) => {
-      if (e.target === dot || e.target === visBtn || e.target === delBtn) return;
+      if (e.target === dot || e.target === visBtn || e.target === delBtn || e.target === filterBtn) return;
       onTagMouseDown(e, tag.id);
     });
 
