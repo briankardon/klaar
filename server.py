@@ -74,7 +74,7 @@ def _save_with_undo(data: dict, snapshot: dict) -> None:
     _save_list(data)
 
 
-def _save_list(data: dict, *, undoable: bool = True) -> None:
+def _save_list(data: dict) -> None:
     path = _list_path(data["id"])
     # Atomic write: write to temp file, then rename to avoid corruption
     fd, tmp = tempfile.mkstemp(dir=DATA_DIR, suffix=".tmp")

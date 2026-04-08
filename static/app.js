@@ -1103,11 +1103,11 @@ function renderFilterBar() {
     const label = condition ? `${tagDef.name} ${condition}` : tagDef.name;
     bubble.innerHTML = `<span>${label}</span><span class="filter-x">\u00d7</span>`;
     bubble.title = "Click: remove / Double-click: set condition";
-    let filterClickTimer = null;
+    let clickTimer = null;
     bubble.addEventListener("click", () => {
-      if (filterClickTimer) clearTimeout(filterClickTimer);
-      filterClickTimer = setTimeout(() => {
-        filterClickTimer = null;
+      if (clickTimer) clearTimeout(clickTimer);
+      clickTimer = setTimeout(() => {
+        clickTimer = null;
         tagFilters.delete(tagId);
         renderFilterBar();
         renderItems();
@@ -1116,7 +1116,7 @@ function renderFilterBar() {
     });
     bubble.addEventListener("dblclick", (e) => {
       e.stopPropagation();
-      if (filterClickTimer) { clearTimeout(filterClickTimer); filterClickTimer = null; }
+      if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
       // Replace bubble content with inline input
       bubble.textContent = tagDef.name + " ";
       const inp = document.createElement("input");
@@ -1754,14 +1754,10 @@ function getDataIndexOfVisibleRow(visibleRow) {
 }
 
 function getListEntryUnderMouse(e) {
-  const entries = listIndex.querySelectorAll("li");
-  for (const li of entries) {
-    const r = li.getBoundingClientRect();
-    if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
-      return li;
-    }
-  }
-  return null;
+  const el = document.elementFromPoint(e.clientX, e.clientY);
+  if (!el) return null;
+  const li = el.closest("#list-index li");
+  return li;
 }
 
 function clearSidebarHighlight() {
