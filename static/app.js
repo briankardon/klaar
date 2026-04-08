@@ -304,6 +304,51 @@ async function doImport(targetListId, parsedItems) {
   }
 }
 
+// -------------------------------------------------------------------
+// Export
+// -------------------------------------------------------------------
+
+const btnExportList = document.getElementById("btn-export-list");
+
+function exportListAsMarkdown() {
+  if (!currentListId || currentItems.length === 0) return;
+  const lines = [];
+  for (const item of currentItems) {
+    const indent = "  ".repeat(item.depth);
+    const checkbox = item.done ? "[x]" : "[ ]";
+    let line = `${indent}- ${checkbox} ${item.text}`;
+    // Append tag values
+    const tagParts = [];
+    for (const t of item.tags) {
+      const def = currentTags.find((d) => d.id === t.id);
+      if (!def) continue;
+      tagParts.push(t.value != null ? `${def.name}: ${t.value}` : def.name);
+    }
+    if (tagParts.length > 0) line += `  [${tagParts.join(", ")}]`;
+    lines.push(line);
+  }
+  const text = lines.join("\n");
+  const blob = new Blob([text], { type: "text/markdown" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${listTitle.textContent.trim() || "list"}.md`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+btnExportList.addEventListener("click", () => {
+  if (!currentListId) {
+    alert("Select a list first.");
+    return;
+  }
+  exportListAsMarkdown();
+});
+
+// -------------------------------------------------------------------
+// Import
+// -------------------------------------------------------------------
+
 function showImportModal() {
   importText.value = "";
   importText.disabled = false;

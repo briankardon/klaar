@@ -50,6 +50,23 @@ main {
   font-weight: 600;
 }
 
+.sidebar-btns {
+  display: flex;
+  gap: 4px;
+}
+
+#btn-export-list {
+  background: #7f8c8d;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  width: 28px;
+  height: 28px;
+  font-size: 1.1rem;
+  cursor: pointer;
+  line-height: 1;
+}
+
 #btn-import-list {
   background: #7f8c8d;
   color: #fff;
