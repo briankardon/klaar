@@ -261,6 +261,12 @@ def _can_write(data: dict, user: dict) -> bool:
 # Auth pages & endpoints
 # ---------------------------------------------------------------------------
 
+@app.route("/.well-known/acme-challenge/<path:filename>")
+def acme_challenge(filename):
+    """Let's Encrypt challenge passthrough for NFSN."""
+    return send_from_directory("/home/public/.well-known/acme-challenge", filename)
+
+
 @app.route("/")
 def index():
     if not _has_setup_completed():
