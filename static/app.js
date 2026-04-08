@@ -9,7 +9,6 @@ const emptyState = document.getElementById("empty-state");
 const listTitle = document.getElementById("list-title");
 const itemsEl = document.getElementById("items");
 const btnNewList = document.getElementById("btn-new-list");
-const btnDeleteList = document.getElementById("btn-delete-list");
 const collapseBar = document.getElementById("collapse-bar");
 const foldGutter = document.getElementById("fold-gutter");
 const tagPane = document.getElementById("tag-pane");
@@ -80,12 +79,69 @@ async function loadLists() {
   listIndex.innerHTML = "";
   for (const l of lists) {
     const li = document.createElement("li");
-    li.textContent = l.name;
     li.dataset.id = l.id;
     if (l.id === currentListId) li.classList.add("active");
+
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "list-name";
+    nameSpan.textContent = l.name;
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "list-delete-btn";
+    delBtn.textContent = "\u00d7";
+    delBtn.title = "Delete list";
+    delBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      deleteListById(l.id, l.name);
+    });
+
+    li.append(nameSpan, delBtn);
     li.addEventListener("click", () => selectList(l.id));
+    li.addEventListener("dblclick", (e) => {
+      e.stopPropagation();
+      startListRename(li, l.id, l.name);
+    });
     listIndex.appendChild(li);
   }
+}
+
+function startListRename(li, listId, currentName) {
+  li.innerHTML = "";
+  const inp = document.createElement("input");
+  inp.type = "text";
+  inp.className = "list-rename-input";
+  inp.value = currentName;
+  li.appendChild(inp);
+  inp.focus();
+  inp.select();
+  function commit() {
+    const name = inp.value.trim();
+    if (name && name !== currentName) {
+      api(`/lists/${listId}`, { method: "PATCH", body: { name } }).then(() => loadLists());
+      if (listId === currentListId) listTitle.textContent = name;
+    } else {
+      loadLists();
+    }
+  }
+  inp.addEventListener("blur", commit);
+  inp.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); inp.blur(); }
+    if (e.key === "Escape") { inp.value = currentName; inp.blur(); }
+    e.stopPropagation();
+  });
+  inp.addEventListener("click", (e) => e.stopPropagation());
+}
+
+async function deleteListById(listId, name) {
+  if (!confirm(`Delete "${name}"?`)) return;
+  await api(`/lists/${listId}`, { method: "DELETE" });
+  if (listId === currentListId) {
+    currentListId = null;
+    listView.classList.add("hidden");
+    tagPane.classList.add("hidden");
+    emptyState.classList.remove("hidden");
+  }
+  await loadLists();
 }
 
 async function selectList(id) {
@@ -125,23 +181,36 @@ async function refreshItems() {
   renderTagPane();
 }
 
-btnNewList.addEventListener("click", async () => {
-  const name = prompt("List name:");
-  if (!name) return;
-  const data = await api("/lists", { method: "POST", body: { name } });
-  await loadLists();
-  selectList(data.id);
-});
-
-btnDeleteList.addEventListener("click", async () => {
-  if (!currentListId) return;
-  if (!confirm("Delete this list?")) return;
-  await api(`/lists/${currentListId}`, { method: "DELETE" });
-  currentListId = null;
-  listView.classList.add("hidden");
-  tagPane.classList.add("hidden");
-  emptyState.classList.remove("hidden");
-  await loadLists();
+btnNewList.addEventListener("click", () => {
+  const li = document.createElement("li");
+  li.className = "new-list-entry";
+  const inp = document.createElement("input");
+  inp.type = "text";
+  inp.className = "list-rename-input";
+  inp.placeholder = "New list name\u2026";
+  li.appendChild(inp);
+  listIndex.insertBefore(li, listIndex.firstChild);
+  inp.focus();
+  let committed = false;
+  function commit() {
+    if (committed) return;
+    committed = true;
+    const name = inp.value.trim();
+    if (name) {
+      api("/lists", { method: "POST", body: { name } }).then((data) => {
+        loadLists();
+        selectList(data.id);
+      });
+    } else {
+      li.remove();
+    }
+  }
+  inp.addEventListener("blur", commit);
+  inp.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); inp.blur(); }
+    if (e.key === "Escape") { inp.value = ""; inp.blur(); }
+    e.stopPropagation();
+  });
 });
 
 listTitle.addEventListener("blur", async () => {
