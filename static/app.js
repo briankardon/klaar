@@ -26,7 +26,7 @@ const selectedIds = new Set();   // client-side selection state
 let lastSelectedId = null;       // anchor for shift-click range selection
 const hiddenTagIds = new Set();  // client-side tag visibility state
 const textFilters = [];          // [{pattern: string, regex: RegExp}]
-const tagFilters = new Set();    // tag IDs to filter by
+const tagFilters = new Map();    // tag ID -> condition string (null = presence only)
 
 // -------------------------------------------------------------------
 // API helpers
@@ -759,12 +759,38 @@ function hasActiveFilters() {
   return textFilters.length > 0 || tagFilters.size > 0;
 }
 
+function smartCompare(a, b) {
+  const na = Number(a), nb = Number(b);
+  if (!isNaN(na) && !isNaN(nb)) return na - nb;
+  return String(a).localeCompare(String(b));
+}
+
+function matchesCondition(itemValue, condition) {
+  if (!condition) return true; // no condition = presence only
+  const m = condition.match(/^(>=|<=|!=|>|<|=)(.*)$/);
+  if (m) {
+    const [, op, val] = m;
+    if (itemValue == null) return false;
+    const cmp = smartCompare(itemValue, val);
+    if (op === "=") return cmp === 0;
+    if (op === "!=") return cmp !== 0;
+    if (op === ">") return cmp > 0;
+    if (op === "<") return cmp < 0;
+    if (op === ">=") return cmp >= 0;
+    if (op === "<=") return cmp <= 0;
+  }
+  // No operator prefix: substring/contains match
+  if (itemValue == null) return false;
+  return String(itemValue).toLowerCase().includes(condition.toLowerCase());
+}
+
 function itemMatchesFilters(item) {
   for (const f of textFilters) {
     if (!f.regex.test(item.text)) return false;
   }
-  for (const tagId of tagFilters) {
+  for (const [tagId, condition] of tagFilters) {
     if (!itemHasTag(item, tagId)) return false;
+    if (condition && !matchesCondition(itemTagValue(item, tagId), condition)) return false;
   }
   return true;
 }
@@ -815,19 +841,55 @@ function renderFilterBar() {
     filterBar.appendChild(bubble);
   }
 
-  for (const tagId of tagFilters) {
+  for (const [tagId, condition] of tagFilters) {
     const tagDef = currentTags.find((t) => t.id === tagId);
     if (!tagDef) continue;
     const bubble = document.createElement("span");
     bubble.className = "filter-bubble filter-bubble-tag";
     bubble.style.background = tagDef.color;
-    bubble.innerHTML = `<span>${tagDef.name}</span><span class="filter-x">\u00d7</span>`;
-    bubble.title = "Click to remove tag filter";
+    const label = condition ? `${tagDef.name} ${condition}` : tagDef.name;
+    bubble.innerHTML = `<span>${label}</span><span class="filter-x">\u00d7</span>`;
+    bubble.title = "Click: remove / Double-click: set condition";
+    let filterClickTimer = null;
     bubble.addEventListener("click", () => {
-      tagFilters.delete(tagId);
-      renderFilterBar();
-      renderItems();
-      renderTagPane();
+      if (filterClickTimer) clearTimeout(filterClickTimer);
+      filterClickTimer = setTimeout(() => {
+        filterClickTimer = null;
+        tagFilters.delete(tagId);
+        renderFilterBar();
+        renderItems();
+        renderTagPane();
+      }, 250);
+    });
+    bubble.addEventListener("dblclick", (e) => {
+      e.stopPropagation();
+      if (filterClickTimer) { clearTimeout(filterClickTimer); filterClickTimer = null; }
+      // Replace bubble content with inline input
+      bubble.textContent = tagDef.name + " ";
+      const inp = document.createElement("input");
+      inp.type = "text";
+      inp.className = "tag-value-input";
+      inp.value = condition || "";
+      inp.size = Math.max(3, inp.value.length + 1);
+      inp.placeholder = "e.g. >5, =Alice";
+      bubble.appendChild(inp);
+      inp.focus();
+      inp.select();
+      inp.addEventListener("input", () => {
+        inp.size = Math.max(3, inp.value.length + 1);
+      });
+      function commitFilter() {
+        const val = inp.value.trim() || null;
+        tagFilters.set(tagId, val);
+        renderFilterBar();
+        renderItems();
+      }
+      inp.addEventListener("blur", commitFilter);
+      inp.addEventListener("keydown", (ke) => {
+        if (ke.key === "Enter") { ke.preventDefault(); inp.blur(); }
+        if (ke.key === "Escape") { inp.value = condition || ""; inp.blur(); }
+        ke.stopPropagation();
+      });
     });
     filterBar.appendChild(bubble);
   }
@@ -881,7 +943,7 @@ function toggleTagFilter(tagId) {
   if (tagFilters.has(tagId)) {
     tagFilters.delete(tagId);
   } else {
-    tagFilters.add(tagId);
+    tagFilters.set(tagId, null);
   }
   renderFilterBar();
   renderItems();
