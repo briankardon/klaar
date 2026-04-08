@@ -224,26 +224,37 @@ def delete_item(list_id: str, item_id: str):
 
 
 @app.post("/api/lists/<list_id>/items/reorder")
-def reorder_item(list_id: str):
-    """Move an item to a new position."""
+def reorder_items(list_id: str):
+    """Reorder items. Accepts either:
+    - {order: [id, ...]} to set the full ordering
+    - {item_id, index, count?} to move a contiguous block
+    """
     data = _load_list(list_id)
     if data is None:
         return jsonify({"error": "list not found"}), 404
     body = request.get_json(force=True)
-    item_id = body.get("item_id")
-    target_index = body.get("index")
-    count = max(1, int(body.get("count", 1)))
-    if item_id is None or target_index is None:
-        return jsonify({"error": "item_id and index required"}), 400
     items = data["items"]
-    src = next((i for i, it in enumerate(items) if it["id"] == item_id), None)
-    if src is None:
-        return jsonify({"error": "item not found"}), 404
-    block = items[src:src + count]
-    del items[src:src + count]
-    target_index = max(0, min(target_index, len(items)))
-    for i, it in enumerate(block):
-        items.insert(target_index + i, it)
+
+    if "order" in body:
+        # Full reorder: rearrange items to match the given ID order
+        by_id = {it["id"]: it for it in items}
+        data["items"] = [by_id[oid] for oid in body["order"] if oid in by_id]
+    else:
+        # Single block move
+        item_id = body.get("item_id")
+        target_index = body.get("index")
+        count = max(1, int(body.get("count", 1)))
+        if item_id is None or target_index is None:
+            return jsonify({"error": "item_id and index required"}), 400
+        src = next((i for i, it in enumerate(items) if it["id"] == item_id), None)
+        if src is None:
+            return jsonify({"error": "item not found"}), 404
+        block = items[src:src + count]
+        del items[src:src + count]
+        target_index = max(0, min(target_index, len(items)))
+        for i, it in enumerate(block):
+            items.insert(target_index + i, it)
+
     _save_list(data)
     return jsonify(data)
 

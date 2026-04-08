@@ -276,6 +276,7 @@ function renderItems() {
     // drag: mousedown anywhere on the row, but only start drag after threshold
     li.addEventListener("mousedown", (e) => {
       if (e.target.type === "checkbox") return;
+      if (e.shiftKey) e.preventDefault();
       onItemMouseDown(e, item.id);
     });
 
@@ -287,6 +288,9 @@ function renderItems() {
       if (e.ctrlKey) {
         e.preventDefault();
         toggleDoneHierarchy(i);
+      } else if (selectedIds.size > 1 && selectedIds.has(item.id)) {
+        e.preventDefault();
+        toggleDoneSelected();
       } else {
         toggleDone(item);
       }
@@ -353,8 +357,12 @@ function renderItems() {
       }
       if (e.key === "Tab") {
         e.preventDefault();
-        const newDepth = item.depth + (e.shiftKey ? -1 : 1);
-        updateItem(item.id, { depth: Math.max(0, newDepth) }, { refocusId: item.id });
+        if (selectedIds.size > 1 && selectedIds.has(item.id)) {
+          changeDepthSelected(e.shiftKey ? -1 : 1, item.id);
+        } else {
+          const newDepth = item.depth + (e.shiftKey ? -1 : 1);
+          updateItem(item.id, { depth: Math.max(0, newDepth) }, { refocusId: item.id });
+        }
       }
     });
 
@@ -464,6 +472,45 @@ async function addItemAfter(afterId, depth) {
       newEl.focus();
     }
   }
+}
+
+function toggleDoneSelected() {
+  const block = currentItems.filter((it) => selectedIds.has(it.id));
+  const allDone = block.every((it) => it.done);
+  const newDone = !allDone;
+  for (const it of block) {
+    it.done = newDone;
+    it.completed = newDone ? new Date().toISOString() : null;
+  }
+  renderItems();
+  api(`/lists/${currentListId}/items`, {
+    method: "PATCH",
+    body: { updates: block.map((it) => ({ id: it.id, done: newDone })) },
+  }).then(() => scheduleSyncFromServer())
+    .catch(() => refreshItems());
+}
+
+function changeDepthSelected(delta, refocusId) {
+  const updates = [];
+  for (const it of currentItems) {
+    if (!selectedIds.has(it.id)) continue;
+    const newDepth = Math.max(0, it.depth + delta);
+    if (newDepth !== it.depth) {
+      it.depth = newDepth;
+      updates.push({ id: it.id, depth: newDepth });
+    }
+  }
+  if (updates.length === 0) return;
+  renderItems();
+  if (refocusId) {
+    const el = itemsEl.querySelector(`.item[data-id="${refocusId}"] .item-text`);
+    if (el) el.focus();
+  }
+  api(`/lists/${currentListId}/items`, {
+    method: "PATCH",
+    body: { updates },
+  }).then(() => scheduleSyncFromServer())
+    .catch(() => refreshItems());
 }
 
 function toggleDone(item) {
@@ -649,15 +696,36 @@ function startDrag(e, itemId, startY, ctrlKey) {
   const rect = sourceEl.getBoundingClientRect();
   const itemsRect = itemsEl.getBoundingClientRect();
 
-  // Determine block: if Ctrl held, include children
-  const dataIdx = currentItems.findIndex((it) => it.id === itemId);
-  let blockSize = 1;
-  if (ctrlKey && dataIdx !== -1) {
-    const [start, end] = getChildRange(dataIdx);
-    blockSize = end - dataIdx;
+  let blockIds;
+  let useFullReorder = false;
+
+  if (ctrlKey) {
+    // Ctrl+drag: include children
+    const dataIdx = currentItems.findIndex((it) => it.id === itemId);
+    const [, end] = getChildRange(dataIdx);
+    blockIds = new Set(currentItems.slice(dataIdx, end).map((it) => it.id));
+  } else if (selectedIds.size > 1 && selectedIds.has(itemId)) {
+    // Drag selection: consolidate selected items at the dragged item's position
+    blockIds = new Set(selectedIds);
+    useFullReorder = true;
+    // Pull selected items out, preserving their relative order
+    const selected = currentItems.filter((it) => blockIds.has(it.id));
+    const rest = currentItems.filter((it) => !blockIds.has(it.id));
+    // Find where the dragged item would be among the remaining items
+    const dragIdx = currentItems.findIndex((it) => it.id === itemId);
+    // Count how many non-selected items come before the drag point
+    let insertAt = 0;
+    for (let i = 0; i < dragIdx; i++) {
+      if (!blockIds.has(currentItems[i].id)) insertAt++;
+    }
+    rest.splice(insertAt, 0, ...selected);
+    currentItems = rest;
+  } else {
+    // Single item drag
+    blockIds = new Set([itemId]);
   }
-  // Collect IDs in the block
-  const blockIds = new Set(currentItems.slice(dataIdx, dataIdx + blockSize).map((it) => it.id));
+
+  const blockSize = blockIds.size;
 
   // Create ghost
   const ghost = document.createElement("div");
@@ -677,16 +745,26 @@ function startDrag(e, itemId, startY, ctrlKey) {
     if (el) el.classList.add("drag-source");
   }
 
+  // Re-render to show consolidated positions
+  if (useFullReorder) renderItems();
+
   dragState = {
     itemId,
     ghost,
     blockIds,
     blockSize,
+    useFullReorder,
     offsetY: startY - rect.top,
     itemHeight: 26,
     itemsRect,
     currentVisibleIdx: getVisibleIndex(itemId),
   };
+
+  // Re-mark after potential re-render
+  for (const id of blockIds) {
+    const el = itemsEl.querySelector(`.item[data-id="${id}"]`);
+    if (el) el.classList.add("drag-source");
+  }
 }
 
 function getVisibleIndex(itemId) {
@@ -751,7 +829,7 @@ function onDragEnd() {
   document.removeEventListener("mousemove", onDragMove);
   document.removeEventListener("mouseup", onDragEnd);
 
-  const { itemId, blockIds, blockSize, ghost } = dragState;
+  const { itemId, blockIds, blockSize, useFullReorder, ghost } = dragState;
   ghost.remove();
 
   // Remove drag-source styling
@@ -760,13 +838,19 @@ function onDragEnd() {
     if (el) el.classList.remove("drag-source");
   }
 
-  const finalIdx = currentItems.findIndex((it) => it.id === itemId);
   dragState = null;
 
   // Send final position to server
+  let body;
+  if (useFullReorder) {
+    body = { order: currentItems.map((it) => it.id) };
+  } else {
+    const finalIdx = currentItems.findIndex((it) => it.id === itemId);
+    body = { item_id: itemId, index: finalIdx, count: blockSize };
+  }
   api(`/lists/${currentListId}/items/reorder`, {
     method: "POST",
-    body: { item_id: itemId, index: finalIdx, count: blockSize },
+    body,
   }).then(() => scheduleSyncFromServer())
     .catch(() => refreshItems());
 }
