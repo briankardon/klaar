@@ -198,11 +198,13 @@ def _ensure_tags(data: dict) -> None:
 
 
 def _ensure_owner(data: dict) -> None:
-    """Ensure list has owner and shared_with fields (migration)."""
+    """Ensure list has owner, shared_with, and views fields (migration)."""
     if "owner" not in data:
         data["owner"] = None
     if "shared_with" not in data:
         data["shared_with"] = []
+    if "views" not in data:
+        data["views"] = []
 
 
 def _next_tag_color(data: dict) -> str:
@@ -502,6 +504,8 @@ def update_list(list_id: str):
         data["name"] = str(body["name"]).strip()[:200] or data["name"]
     if "shared_with" in body and (data["owner"] == user["id"] or user.get("admin")):
         data["shared_with"] = body["shared_with"]
+    if "views" in body:
+        data["views"] = body["views"]
     _save_list(data)
     return jsonify(data)
 

@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.4.4";
+const KLAAR_VERSION = "0.5.0";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 const API = "/api";
@@ -30,6 +30,8 @@ const textFilters = [];          // [{pattern: string, regex: RegExp}]
 const tagFilters = [];           // [{tagId, condition}] — multiple per tag allowed
 let currentSort = null;          // {tagId, direction: "asc"|"desc"} or null
 let completionFilter = "all";    // "all" | "active" | "done"
+let currentViews = [];           // [{id, name, ...state}]
+let activeViewId = null;         // currently applied view
 
 // -------------------------------------------------------------------
 // API helpers
@@ -165,12 +167,15 @@ async function selectList(id) {
   }
   currentItems = data.items;
   currentTags = data.tags || [];
+  currentViews = data.views || [];
+  activeViewId = null;
   listTitle.textContent = data.name;
   emptyState.classList.add("hidden");
   listView.classList.remove("hidden");
   tagPane.classList.remove("hidden");
   renderItems();
   renderTagPane();
+  renderViewPane();
   listIndex.querySelectorAll("li").forEach((li) => {
     li.classList.toggle("active", li.dataset.id === id);
   });
@@ -184,8 +189,10 @@ async function refreshItems() {
   if (!data || data.error) return;
   currentItems = data.items;
   currentTags = data.tags || [];
+  currentViews = data.views || [];
   renderItems();
   renderTagPane();
+  renderViewPane();
 }
 
 btnNewList.addEventListener("click", () => {
@@ -1701,6 +1708,181 @@ btnNewTag.addEventListener("click", () => {
     } else {
       li.remove();
     }
+  }
+  inp.addEventListener("blur", commit);
+  inp.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); inp.blur(); }
+    if (e.key === "Escape") { inp.value = ""; inp.blur(); }
+    e.stopPropagation();
+  });
+});
+
+// -------------------------------------------------------------------
+// Views
+// -------------------------------------------------------------------
+
+const viewListEl = document.getElementById("view-list");
+const btnSaveView = document.getElementById("btn-save-view");
+
+function captureViewState() {
+  return {
+    textFilters: textFilters.map((f) => f.pattern),
+    tagFilters: tagFilters.map((f) => ({ tagId: f.tagId, condition: f.condition })),
+    completionFilter,
+    sort: currentSort ? { tagId: currentSort.tagId, direction: currentSort.direction } : null,
+    hiddenTagIds: [...hiddenTagIds],
+  };
+}
+
+function applyViewState(view) {
+  // Validate tag references still exist
+  const validTagIds = new Set(currentTags.map((t) => t.id));
+
+  textFilters.length = 0;
+  for (const pattern of (view.textFilters || [])) {
+    try {
+      textFilters.push({ pattern, regex: new RegExp(pattern, "i") });
+    } catch (e) {}
+  }
+
+  tagFilters.length = 0;
+  for (const f of (view.tagFilters || [])) {
+    if (validTagIds.has(f.tagId)) {
+      tagFilters.push({ tagId: f.tagId, condition: f.condition });
+    }
+  }
+
+  completionFilter = view.completionFilter || "all";
+  document.querySelectorAll(".comp-btn").forEach((b) =>
+    b.classList.toggle("active", b.dataset.mode === completionFilter)
+  );
+
+  if (view.sort && validTagIds.has(view.sort.tagId)) {
+    currentSort = { tagId: view.sort.tagId, direction: view.sort.direction };
+  } else {
+    currentSort = null;
+  }
+
+  hiddenTagIds.clear();
+  for (const id of (view.hiddenTagIds || [])) {
+    if (validTagIds.has(id)) hiddenTagIds.add(id);
+  }
+
+  renderFilterBar();
+  renderItems();
+  renderTagPane();
+  scrollToItem(lastSelectedId);
+}
+
+function saveViewsToServer() {
+  api(`/lists/${currentListId}`, {
+    method: "PATCH",
+    body: { views: currentViews },
+  });
+}
+
+function renderViewPane() {
+  viewListEl.innerHTML = "";
+  for (const view of currentViews) {
+    const li = document.createElement("li");
+    li.className = "view-entry" + (activeViewId === view.id ? " active-view" : "");
+
+    const name = document.createElement("span");
+    name.className = "view-name";
+    name.textContent = view.name;
+
+    // Overwrite view with current state
+    const saveBtn = document.createElement("button");
+    saveBtn.className = "view-save-btn";
+    saveBtn.textContent = "\u21bb";
+    saveBtn.title = "Overwrite with current state";
+    saveBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      Object.assign(view, captureViewState());
+      saveViewsToServer();
+      renderViewPane();
+    });
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "view-delete-btn";
+    delBtn.textContent = "\u00d7";
+    delBtn.title = "Delete view";
+    delBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      currentViews = currentViews.filter((v) => v.id !== view.id);
+      if (activeViewId === view.id) activeViewId = null;
+      saveViewsToServer();
+      renderViewPane();
+    });
+
+    li.append(name, saveBtn, delBtn);
+
+    // Click to apply
+    li.addEventListener("click", () => {
+      activeViewId = view.id;
+      applyViewState(view);
+      renderViewPane();
+    });
+
+    // Double-click to rename
+    name.addEventListener("dblclick", (e) => {
+      e.stopPropagation();
+      const inp = document.createElement("input");
+      inp.type = "text";
+      inp.className = "list-rename-input";
+      inp.value = view.name;
+      name.replaceWith(inp);
+      inp.focus();
+      inp.select();
+      function commit() {
+        const val = inp.value.trim();
+        if (val && val !== view.name) {
+          view.name = val;
+          saveViewsToServer();
+        }
+        renderViewPane();
+      }
+      inp.addEventListener("blur", commit);
+      inp.addEventListener("keydown", (ke) => {
+        if (ke.key === "Enter") { ke.preventDefault(); inp.blur(); }
+        if (ke.key === "Escape") { inp.value = view.name; inp.blur(); }
+        ke.stopPropagation();
+      });
+      inp.addEventListener("click", (ce) => ce.stopPropagation());
+      inp.addEventListener("mousedown", (me) => me.stopPropagation());
+    });
+
+    viewListEl.appendChild(li);
+  }
+}
+
+btnSaveView.addEventListener("click", () => {
+  // Create new view with inline naming
+  const li = document.createElement("li");
+  li.className = "view-entry";
+  const inp = document.createElement("input");
+  inp.type = "text";
+  inp.className = "list-rename-input";
+  inp.placeholder = "View name\u2026";
+  li.appendChild(inp);
+  viewListEl.insertBefore(li, viewListEl.firstChild);
+  inp.focus();
+  let committed = false;
+  function commit() {
+    if (committed) return;
+    committed = true;
+    const name = inp.value.trim();
+    if (name) {
+      const view = {
+        id: Math.random().toString(36).slice(2, 14),
+        name,
+        ...captureViewState(),
+      };
+      currentViews.push(view);
+      activeViewId = view.id;
+      saveViewsToServer();
+    }
+    renderViewPane();
   }
   inp.addEventListener("blur", commit);
   inp.addEventListener("keydown", (e) => {
