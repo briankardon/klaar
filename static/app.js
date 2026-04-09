@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.5.0";
+const KLAAR_VERSION = "0.5.1";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 const API = "/api";
@@ -1817,15 +1817,21 @@ function renderViewPane() {
 
     li.append(name, saveBtn, delBtn);
 
-    // Click to apply
+    // Click to apply (delayed to allow double-click)
+    let viewClickTimer = null;
     li.addEventListener("click", () => {
-      activeViewId = view.id;
-      applyViewState(view);
-      renderViewPane();
+      if (viewClickTimer) clearTimeout(viewClickTimer);
+      viewClickTimer = setTimeout(() => {
+        viewClickTimer = null;
+        activeViewId = view.id;
+        applyViewState(view);
+        renderViewPane();
+      }, 250);
     });
 
     // Double-click to rename
     name.addEventListener("dblclick", (e) => {
+      if (viewClickTimer) { clearTimeout(viewClickTimer); viewClickTimer = null; }
       e.stopPropagation();
       const inp = document.createElement("input");
       inp.type = "text";
