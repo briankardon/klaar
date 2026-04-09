@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.5.1";
+const KLAAR_VERSION = "0.5.2";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 const API = "/api";
@@ -32,6 +32,7 @@ let currentSort = null;          // {tagId, direction: "asc"|"desc"} or null
 let completionFilter = "all";    // "all" | "active" | "done"
 let currentViews = [];           // [{id, name, ...state}]
 let activeViewId = null;         // currently applied view
+let filterExemptId = null;       // newly created item exempt from filtering
 
 // -------------------------------------------------------------------
 // API helpers
@@ -693,6 +694,9 @@ function renderViewport() {
     let skipBlur = false;
     txt.addEventListener("blur", () => {
       if (deleted || skipBlur) return;
+      if (filterExemptId === item.id) {
+        filterExemptId = null;
+      }
       const val = txt.value.trim();
       if (val !== item.text) {
         updateItem(item.id, { text: val });
@@ -956,6 +960,9 @@ async function addItemAfter(afterId, depth) {
     method: "POST",
     body,
   });
+  if (result && result.id) {
+    filterExemptId = result.id;
+  }
   await refreshItems();
   if (result && result.id) {
     const newEl = itemsEl.querySelector(`.item[data-id="${result.id}"] .item-text`);
@@ -1120,6 +1127,7 @@ function matchesCondition(itemValue, condition) {
 }
 
 function itemMatchesFilters(item) {
+  if (item.id === filterExemptId) return true;
   if (completionFilter === "active" && item.done) return false;
   if (completionFilter === "done" && !item.done) return false;
   for (const f of textFilters) {
