@@ -107,7 +107,8 @@ main {
   line-height: 1;
 }
 
-#btn-new-list {
+#btn-new-list,
+#btn-new-tag {
   background: #3498db;
   color: #fff;
   border: none;
