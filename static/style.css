@@ -998,6 +998,25 @@ main {
     opacity: 0.4 !important;
   }
 
+  /* Suppress iOS native callout/selection on long-press */
+  .item {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  .item .item-text {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
+  /* Lifted item visual feedback (long-press before drag) */
+  .item.touch-lifted {
+    background: #d6e8f7;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    z-index: 1;
+  }
+
   /* Larger touch targets */
   .item {
     height: 36px;

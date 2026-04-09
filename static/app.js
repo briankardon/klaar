@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.6.1";
+const KLAAR_VERSION = "0.6.2";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 const API = "/api";
@@ -2583,22 +2583,55 @@ function onDragEnd() {
 // Touch support (long-press context menu + touch drag)
 // -------------------------------------------------------------------
 
+const itemsContainer = document.getElementById("items-container");
+let autoScrollRAF = null;
+let lastTouchY = 0;
+
 function onTouchDragMove(e) {
   if (!dragState) return;
   e.preventDefault();
   const t = e.touches[0];
+  lastTouchY = t.clientY;
   onDragMove({ clientX: t.clientX, clientY: t.clientY });
 }
 
 function onTouchDragEnd() {
+  stopAutoScroll();
+  itemsContainer.style.overflowY = "";
   onDragEnd();
+}
+
+function startAutoScroll() {
+  const EDGE_ZONE = 50;   // px from edge to trigger scroll
+  const MAX_SPEED = 8;    // px per frame at the very edge
+
+  function tick() {
+    if (!dragState) { stopAutoScroll(); return; }
+    const rect = itemsContainer.getBoundingClientRect();
+    const distFromTop = lastTouchY - rect.top;
+    const distFromBottom = rect.bottom - lastTouchY;
+
+    if (distFromTop < EDGE_ZONE && distFromTop > 0) {
+      const speed = MAX_SPEED * (1 - distFromTop / EDGE_ZONE);
+      itemsContainer.scrollTop -= speed;
+    } else if (distFromBottom < EDGE_ZONE && distFromBottom > 0) {
+      const speed = MAX_SPEED * (1 - distFromBottom / EDGE_ZONE);
+      itemsContainer.scrollTop += speed;
+    }
+    autoScrollRAF = requestAnimationFrame(tick);
+  }
+  autoScrollRAF = requestAnimationFrame(tick);
+}
+
+function stopAutoScroll() {
+  if (autoScrollRAF) { cancelAnimationFrame(autoScrollRAF); autoScrollRAF = null; }
 }
 
 function setupItemTouch(li, itemId) {
   let longPressTimer = null;
   let startX, startY;
   let dragStarted = false;
-  let longPressFired = false;
+  let liftFired = false;  // item "lifted" after long-press hold
 
   li.addEventListener("touchstart", (e) => {
     if (e.target.type === "checkbox") return;
@@ -2606,16 +2639,18 @@ function setupItemTouch(li, itemId) {
     startX = touch.clientX;
     startY = touch.clientY;
     dragStarted = false;
-    longPressFired = false;
+    liftFired = false;
 
     longPressTimer = setTimeout(() => {
       longPressTimer = null;
-      longPressFired = true;
+      liftFired = true;
       navigator.vibrate?.(30);
-      showContextMenu(
-        { preventDefault() {}, clientX: touch.clientX, clientY: touch.clientY },
-        itemId, false
-      );
+      window.getSelection()?.removeAllRanges();
+      document.body.style.userSelect = "none";
+      // Freeze native scrolling so drag works reliably on iOS
+      itemsContainer.style.overflowY = "hidden";
+      // Visual feedback: highlight the lifted item
+      li.classList.add("touch-lifted");
     }, 500);
   }, { passive: true });
 
@@ -2624,28 +2659,45 @@ function setupItemTouch(li, itemId) {
     const dx = touch.clientX - startX;
     const dy = touch.clientY - startY;
 
-    if (longPressFired) { e.preventDefault(); return; }
+    if (!liftFired) {
+      // Finger moved before long-press — cancel, let browser scroll
+      if (Math.sqrt(dx * dx + dy * dy) >= 10) {
+        if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+      }
+      return;  // don't preventDefault — allow native scroll
+    }
 
-    const TOUCH_DRAG_THRESHOLD = 15;
-    if (!dragStarted && Math.sqrt(dx * dx + dy * dy) >= TOUCH_DRAG_THRESHOLD) {
-      // Cancel long-press, start drag
-      if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+    // Item is lifted — start drag on first movement
+    e.preventDefault();
+    if (!dragStarted) {
       dragStarted = true;
-      document.body.style.userSelect = "none";
+      li.classList.remove("touch-lifted");
       if (document.activeElement?.classList?.contains("item-text")) {
         document.activeElement.blur();
       }
       startDrag({ clientX: touch.clientX, clientY: touch.clientY }, itemId, startY, false);
+      lastTouchY = touch.clientY;
+      startAutoScroll();
       document.addEventListener("touchmove", onTouchDragMove, { passive: false });
       document.addEventListener("touchend", onTouchDragEnd);
       document.addEventListener("touchcancel", onTouchDragEnd);
     }
-
-    if (dragStarted) e.preventDefault();
   }, { passive: false });
 
-  li.addEventListener("touchend", () => {
+  li.addEventListener("touchend", (e) => {
     if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+    li.classList.remove("touch-lifted");
+
+    if (liftFired && !dragStarted) {
+      // Long-pressed but didn't drag — show context menu
+      e.preventDefault();
+      const touch = e.changedTouches[0];
+      showContextMenu(
+        { preventDefault() {}, clientX: touch.clientX, clientY: touch.clientY },
+        itemId, false
+      );
+      itemsContainer.style.overflowY = "";
+    }
     document.body.style.userSelect = "";
   });
 }
