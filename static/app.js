@@ -1571,17 +1571,42 @@ function deleteTag(tagId) {
     .catch(() => refreshItems());
 }
 
-btnNewTag.addEventListener("click", async () => {
-  const name = prompt("Tag name:");
-  if (!name) return;
-  const tag = await api(`/lists/${currentListId}/tags`, {
-    method: "POST",
-    body: { name },
-  });
-  if (tag && !tag.error) {
-    currentTags.push(tag);
-    renderTagPane();
+btnNewTag.addEventListener("click", () => {
+  const li = document.createElement("li");
+  li.className = "tag-entry";
+  const inp = document.createElement("input");
+  inp.type = "text";
+  inp.className = "list-rename-input";
+  inp.placeholder = "Tag name\u2026";
+  li.appendChild(inp);
+  tagListEl.insertBefore(li, tagListEl.firstChild);
+  inp.focus();
+  let committed = false;
+  function commit() {
+    if (committed) return;
+    committed = true;
+    const name = inp.value.trim();
+    if (name) {
+      api(`/lists/${currentListId}/tags`, {
+        method: "POST",
+        body: { name },
+      }).then((tag) => {
+        if (tag && !tag.error) {
+          currentTags.push(tag);
+          renderTagPane();
+          renderItems();
+        }
+      });
+    } else {
+      li.remove();
+    }
   }
+  inp.addEventListener("blur", commit);
+  inp.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); inp.blur(); }
+    if (e.key === "Escape") { inp.value = ""; inp.blur(); }
+    e.stopPropagation();
+  });
 });
 
 // -------------------------------------------------------------------
