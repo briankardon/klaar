@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.4.0";
+const KLAAR_VERSION = "0.4.1";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 const API = "/api";
@@ -1795,16 +1795,24 @@ function showContextMenuForCurrentItem() {
 
 ctxDelete.addEventListener("click", () => {
   if (!ctxItemId) return;
+  const item = currentItems.find((it) => it.id === ctxItemId);
+  if (!item) return;
+  let ids;
   if (ctxHierarchy) {
-    const item = currentItems.find((it) => it.id === ctxItemId);
-    if (!item) return;
     const dataIdx = currentItems.indexOf(item);
     const [start, end] = getChildRange(dataIdx);
-    const ids = [item.id, ...currentItems.slice(start, end).map((it) => it.id)];
-    for (const id of ids) deleteItem(id);
+    ids = new Set([item.id, ...currentItems.slice(start, end).map((it) => it.id)]);
   } else {
-    deleteItem(ctxItemId);
+    ids = new Set([ctxItemId]);
   }
+  // Optimistic local delete, single bulk server request
+  currentItems = currentItems.filter((it) => !ids.has(it.id));
+  renderItems();
+  api(`/lists/${currentListId}/items/bulk-delete`, {
+    method: "POST",
+    body: { item_ids: [...ids] },
+  }).then(() => scheduleSyncFromServer())
+    .catch(() => refreshItems());
   hideContextMenu();
 });
 

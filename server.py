@@ -604,6 +604,23 @@ def delete_item(list_id: str, item_id: str):
     return "", 204
 
 
+@app.post("/api/lists/<list_id>/items/bulk-delete")
+@_require_auth
+def bulk_delete_items(list_id: str):
+    """Delete multiple items at once. Body: {item_ids: [...]}."""
+    data, snap = _load_and_snapshot(list_id)
+    if data is None:
+        return jsonify({"error": "list not found"}), 404
+    user = _current_user()
+    if not _can_write(data, user):
+        return jsonify({"error": "forbidden"}), 403
+    body = request.get_json(force=True)
+    ids = set(body.get("item_ids", []))
+    data["items"] = [it for it in data["items"] if it["id"] not in ids]
+    _save_with_undo(data, snap)
+    return jsonify(data)
+
+
 @app.post("/api/lists/<list_id>/items/move-from")
 @_require_auth
 def move_items(list_id: str):
