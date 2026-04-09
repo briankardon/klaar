@@ -800,6 +800,33 @@ def redo(list_id: str):
 
 
 # ---------------------------------------------------------------------------
+# Debug / testing
+# ---------------------------------------------------------------------------
+
+@app.post("/api/lists/generate-test")
+@_require_auth
+def generate_test_list():
+    """Generate a test list with N items. Body: {count, name?}."""
+    user = _current_user()
+    body = request.get_json(force=True)
+    count = min(int(body.get("count", 100)), 50000)
+    name = body.get("name", f"Test ({count} items)")
+    data = {
+        "id": uuid.uuid4().hex[:12],
+        "name": name,
+        "created": _now(),
+        "owner": user["id"],
+        "shared_with": [],
+        "tags": [],
+        "items": [],
+    }
+    for i in range(count):
+        data["items"].append(_new_item(f"Item {i+1}", depth=i % 3))
+    _save_list(data)
+    return jsonify({"id": data["id"], "name": name, "count": count}), 201
+
+
+# ---------------------------------------------------------------------------
 # Run
 # ---------------------------------------------------------------------------
 

@@ -1,4 +1,6 @@
 /* Klaar – front-end logic */
+const KLAAR_VERSION = "0.3.0";
+console.log(`Klaar v${KLAAR_VERSION}`);
 
 const API = "/api";
 
@@ -430,19 +432,25 @@ function getChildRange(index) {
   return [index + 1, end];
 }
 
-function isHiddenByCollapse(index) {
-  // Walk backwards to see if any ancestor is collapsed and hides this item.
-  const item = currentItems[index];
-  for (let i = index - 1; i >= 0; i--) {
-    if (currentItems[i].depth < item.depth) {
-      // This is the nearest ancestor at a shallower depth
-      if (collapsedIds.has(currentItems[i].id)) return true;
-      // Check if *that* ancestor is itself hidden
-      if (isHiddenByCollapse(i)) return true;
-      // Continue searching for higher ancestors
+// Precompute collapse visibility in a single forward pass — O(n)
+function computeCollapseHidden() {
+  const hidden = new Set();
+  let hideBelow = Infinity; // depth threshold: items deeper than this are hidden
+  for (let i = 0; i < currentItems.length; i++) {
+    const d = currentItems[i].depth;
+    if (d <= hideBelow) {
+      // This item is at or above the hide threshold, so it's visible
+      hideBelow = Infinity;
+    }
+    if (d > hideBelow) {
+      hidden.add(i);
+      continue;
+    }
+    if (collapsedIds.has(currentItems[i].id)) {
+      hideBelow = d; // hide everything deeper than this
     }
   }
-  return false;
+  return hidden;
 }
 
 function toggleCollapse(itemId) {
@@ -517,9 +525,10 @@ function handleSelectionClick(itemId, shiftKey, ctrlKey) {
 }
 
 function getVisibleItemIds() {
+  const hidden = computeCollapseHidden();
   const ids = [];
   for (let i = 0; i < currentItems.length; i++) {
-    if (!isHiddenByCollapse(i)) ids.push(currentItems[i].id);
+    if (!hidden.has(i)) ids.push(currentItems[i].id);
   }
   return ids;
 }
@@ -536,36 +545,77 @@ function applySelectionStyles() {
   });
 }
 
+function rerenderVisible() {
+  if (visibleList.length > 0) renderViewport();
+}
+
 // -------------------------------------------------------------------
 // Items
 // -------------------------------------------------------------------
 
-function renderItems() {
-  itemsEl.innerHTML = "";
-  foldGutter.innerHTML = "";
-  const displayItems = getSortedItems();
-  const maxDepth = displayItems.reduce((m, it) => Math.max(m, it.depth), 0);
-  updateCollapseBar(maxDepth);
-  const filterVis = computeFilterVisibility();
+const ITEM_HEIGHT = 26;
+const RENDER_OVERSCAN = 10; // extra items above/below viewport
+let visibleList = [];        // computed list of visible items [{item, dataIdx, isParent, isCollapsed, isFilterAncestor}]
 
-  let visibleRow = 0;
+function computeVisibleList() {
+  const displayItems = getSortedItems();
+  const filterVis = computeFilterVisibility();
+  const collapseHidden = computeCollapseHidden();
+  // Build O(1) lookup from item id to currentItems index
+  const idToIdx = new Map();
+  for (let i = 0; i < currentItems.length; i++) {
+    idToIdx.set(currentItems[i].id, i);
+  }
+  const result = [];
   for (let i = 0; i < displayItems.length; i++) {
     const item = displayItems[i];
-    // Map back to currentItems index for filter/collapse checks
-    const dataIdx = currentItems.indexOf(item);
-    if (isHiddenByCollapse(dataIdx)) continue;
+    const dataIdx = idToIdx.get(item.id);
+    if (collapseHidden.has(dataIdx)) continue;
     if (filterVis.size > 0 && filterVis.get(dataIdx) === "hidden") continue;
-    const isFilterAncestor = filterVis.get(dataIdx) === "ancestor";
+    result.push({
+      item,
+      dataIdx,
+      displayIdx: i,
+      isParent: hasChildren(dataIdx),
+      isCollapsed: collapsedIds.has(item.id),
+      isFilterAncestor: filterVis.get(dataIdx) === "ancestor",
+    });
+  }
+  return result;
+}
 
-    const isParent = hasChildren(dataIdx);
-    const isCollapsed = collapsedIds.has(item.id);
-    const row = visibleRow++;
+function renderItems() {
+  visibleList = computeVisibleList();
+  const maxDepth = currentItems.reduce((m, it) => Math.max(m, it.depth), 0);
+  updateCollapseBar(maxDepth);
 
-    // Gutter toggle — positioned absolutely to align with the item row
+  const totalHeight = visibleList.length * ITEM_HEIGHT;
+  itemsEl.style.height = totalHeight + "px";
+  itemsEl.style.position = "relative";
+
+  renderViewport();
+}
+
+function renderViewport() {
+  const container = document.getElementById("items-container");
+  const scrollTop = container.scrollTop;
+  const viewHeight = container.clientHeight;
+
+  const startRow = Math.max(0, Math.floor(scrollTop / ITEM_HEIGHT) - RENDER_OVERSCAN);
+  const endRow = Math.min(visibleList.length, Math.ceil((scrollTop + viewHeight) / ITEM_HEIGHT) + RENDER_OVERSCAN);
+
+  // Clear and re-render only the visible window
+  itemsEl.innerHTML = "";
+  foldGutter.innerHTML = "";
+
+  for (let row = startRow; row < endRow; row++) {
+    const { item, dataIdx, displayIdx, isParent, isCollapsed, isFilterAncestor } = visibleList[row];
+
+    // Gutter toggle
     if (isParent) {
       const btn = document.createElement("button");
       btn.className = "gutter-toggle";
-      btn.style.top = (row * 26) + "px";
+      btn.style.top = (row * ITEM_HEIGHT) + "px";
       btn.textContent = isCollapsed ? "\u25b6" : "\u25bc";
       btn.title = isCollapsed ? "Expand (Ctrl+.)" : "Collapse (Ctrl+.)";
       btn.addEventListener("click", () => toggleCollapse(item.id));
@@ -573,12 +623,16 @@ function renderItems() {
     }
 
     const li = document.createElement("li");
-    li.className = "item" + (item.done ? " done" : "") + (isFilterAncestor ? " filter-ancestor" : "");
+    li.className = "item" + (item.done ? " done" : "") + (isFilterAncestor ? " filter-ancestor" : "")
+      + (selectedIds.has(item.id) ? " selected" : "");
     li.dataset.id = item.id;
     li.dataset.depth = item.depth;
     li.dataset.index = dataIdx;
+    li.style.position = "absolute";
+    li.style.top = (row * ITEM_HEIGHT) + "px";
+    li.style.left = "0";
+    li.style.right = "0";
 
-    // drag: mousedown anywhere on the row, but only start drag after threshold
     li.addEventListener("mousedown", (e) => {
       if (e.target.type === "checkbox") return;
       if (e.shiftKey) e.preventDefault();
@@ -592,7 +646,7 @@ function renderItems() {
     cb.addEventListener("click", (e) => {
       if (e.ctrlKey) {
         e.preventDefault();
-        toggleDoneHierarchy(i);
+        toggleDoneHierarchy(displayIdx);
       } else if (selectedIds.size > 1 && selectedIds.has(item.id)) {
         e.preventDefault();
         toggleDoneSelected();
@@ -619,7 +673,6 @@ function renderItems() {
     txt.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
-        // Save any pending edit, then create a new sibling after this item
         if (txt.value.trim() !== item.text) {
           updateItem(item.id, { text: txt.value.trim() });
         }
@@ -629,7 +682,6 @@ function renderItems() {
       if (e.key === "Backspace" && txt.value === "") {
         e.preventDefault();
         deleted = true;
-        // Find previous item's ID before delete re-renders the DOM
         const allItems = Array.from(itemsEl.querySelectorAll(".item"));
         const idx = allItems.findIndex((el) => el.dataset.id === item.id);
         const prevId = idx > 0 ? allItems[idx - 1].dataset.id : null;
@@ -642,7 +694,6 @@ function renderItems() {
       }
       if (e.key === "ArrowUp" || e.key === "ArrowDown") {
         e.preventDefault();
-        // Save pending edit without re-render, then navigate
         const val = txt.value.trim();
         if (val !== item.text) {
           skipBlur = true;
@@ -653,11 +704,23 @@ function renderItems() {
           }).then(() => scheduleSyncFromServer())
             .catch(() => refreshItems());
         }
-        const allTexts = Array.from(itemsEl.querySelectorAll(".item-text"));
-        const focused = document.activeElement;
-        const idx = allTexts.indexOf(focused);
-        const target = allTexts[idx + (e.key === "ArrowUp" ? -1 : 1)];
-        if (target) target.focus();
+        // Navigate using visibleList instead of DOM
+        const visRow = visibleList.findIndex((v) => v.item.id === item.id);
+        const targetRow = visRow + (e.key === "ArrowUp" ? -1 : 1);
+        if (targetRow >= 0 && targetRow < visibleList.length) {
+          // Scroll into view if needed
+          const targetTop = targetRow * ITEM_HEIGHT;
+          const container = document.getElementById("items-container");
+          if (targetTop < container.scrollTop) container.scrollTop = targetTop;
+          if (targetTop + ITEM_HEIGHT > container.scrollTop + container.clientHeight) {
+            container.scrollTop = targetTop + ITEM_HEIGHT - container.clientHeight;
+          }
+          // Re-render viewport then focus
+          renderViewport();
+          const targetId = visibleList[targetRow].item.id;
+          const el = itemsEl.querySelector(`.item[data-id="${targetId}"] .item-text`);
+          if (el) el.focus();
+        }
         return;
       }
       if (e.key === "Tab") {
@@ -671,7 +734,7 @@ function renderItems() {
       }
     });
 
-    // tag bubbles (ordered by global tag order, not item assignment order)
+    // tag bubbles
     const tagsContainer = document.createElement("span");
     tagsContainer.className = "item-tags";
     for (const tagDef of currentTags) {
@@ -690,7 +753,7 @@ function renderItems() {
         e.stopPropagation();
         if (editing) return;
         if (e.ctrlKey) {
-          removeTagFromHierarchy(i, tagId);
+          removeTagFromHierarchy(displayIdx, tagId);
           return;
         }
         if (clickTimer) clearTimeout(clickTimer);
@@ -704,7 +767,6 @@ function renderItems() {
         if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
         editing = true;
         const current = itemTagValue(item, tagId);
-        // Replace bubble content with inline input
         bubble.textContent = tagDef.name + ": ";
         const inp = document.createElement("input");
         inp.type = "text";
@@ -740,7 +802,6 @@ function renderItems() {
             picker.style.left = bubbleRect.left + "px";
             picker.style.top = (bubbleRect.bottom + 2) + "px";
             picker.style.zIndex = "2000";
-            // Pre-fill with current value if it's an ISO date
             if (current) {
               try { picker.value = new Date(current).toISOString().slice(0, 16); } catch (e) {}
             }
@@ -778,11 +839,11 @@ function renderItems() {
       tagsContainer.appendChild(bubble);
     }
 
-    // child count badge when collapsed
+    // child count badge
     const badge = document.createElement("span");
     badge.className = "child-count";
     if (isParent && isCollapsed) {
-      const [start, end] = getChildRange(i);
+      const [start, end] = getChildRange(dataIdx);
       badge.textContent = `(${end - start})`;
     }
 
@@ -799,8 +860,12 @@ function renderItems() {
     li.append(leftGroup, btnDel, tagsContainer, badge);
     itemsEl.appendChild(li);
   }
-  applySelectionStyles();
 }
+
+// Wire up scroll-based viewport rendering
+document.getElementById("items-container").addEventListener("scroll", () => {
+  if (visibleList.length > 0) renderViewport();
+});
 
 function updateCollapseBar(maxDepth) {
   collapseBar.innerHTML = "";
@@ -1810,10 +1875,10 @@ function startDrag(e, itemId, startY, ctrlKey) {
 }
 
 function getVisibleIndex(itemId) {
-  // Find the index of this item among currently visible items
+  const hidden = computeCollapseHidden();
   let vis = 0;
   for (let i = 0; i < currentItems.length; i++) {
-    if (isHiddenByCollapse(i)) continue;
+    if (hidden.has(i)) continue;
     if (currentItems[i].id === itemId) return vis;
     vis++;
   }
@@ -1821,10 +1886,10 @@ function getVisibleIndex(itemId) {
 }
 
 function getDataIndexOfVisibleRow(visibleRow) {
-  // Map a visible row number to an index in currentItems
+  const hidden = computeCollapseHidden();
   let vis = 0;
   for (let i = 0; i < currentItems.length; i++) {
-    if (isHiddenByCollapse(i)) continue;
+    if (hidden.has(i)) continue;
     if (vis === visibleRow) return i;
     vis++;
   }
