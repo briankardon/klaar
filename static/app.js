@@ -27,6 +27,7 @@ const hiddenTagIds = new Set();  // client-side tag visibility state
 const textFilters = [];          // [{pattern: string, regex: RegExp}]
 const tagFilters = new Map();    // tag ID -> condition string (null = presence only)
 let currentSort = null;          // {tagId, direction: "asc"|"desc"} or null
+let completionFilter = "all";    // "all" | "active" | "done"
 
 // -------------------------------------------------------------------
 // API helpers
@@ -1013,7 +1014,7 @@ function deleteItem(itemId) {
 // -------------------------------------------------------------------
 
 function hasActiveFilters() {
-  return textFilters.length > 0 || tagFilters.size > 0;
+  return textFilters.length > 0 || tagFilters.size > 0 || completionFilter !== "all";
 }
 
 function smartCompare(a, b) {
@@ -1042,6 +1043,8 @@ function matchesCondition(itemValue, condition) {
 }
 
 function itemMatchesFilters(item) {
+  if (completionFilter === "active" && item.done) return false;
+  if (completionFilter === "done" && !item.done) return false;
   for (const f of textFilters) {
     if (!f.regex.test(item.text)) return false;
   }
@@ -1249,6 +1252,16 @@ searchInput.addEventListener("keydown", (e) => {
     applySelectionStyles();
     searchInput.blur();
   }
+});
+
+document.querySelectorAll(".comp-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    completionFilter = btn.dataset.mode;
+    document.querySelectorAll(".comp-btn").forEach((b) =>
+      b.classList.toggle("active", b.dataset.mode === completionFilter)
+    );
+    renderItems();
+  });
 });
 
 function toggleTagFilter(tagId) {

@@ -225,6 +225,44 @@ main {
   margin-bottom: 0.5rem;
 }
 
+#search-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+#completion-filter {
+  display: flex;
+  flex-shrink: 0;
+}
+
+.comp-btn {
+  background: #e8eef4;
+  border: 1px solid #ccd6e0;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  color: #555;
+}
+
+.comp-btn:first-child {
+  border-radius: 4px 0 0 4px;
+}
+
+.comp-btn:last-child {
+  border-radius: 0 4px 4px 0;
+}
+
+.comp-btn:not(:first-child) {
+  border-left: none;
+}
+
+.comp-btn.active {
+  background: #3498db;
+  color: #fff;
+  border-color: #3498db;
+}
+
 #search-input {
   width: 100%;
   padding: 0.4rem 0.6rem;
