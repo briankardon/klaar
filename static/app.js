@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.5.3";
+const KLAAR_VERSION = "0.5.4";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 const API = "/api";
@@ -32,7 +32,6 @@ let currentSort = null;          // {tagId, direction: "asc"|"desc"} or null
 let completionFilter = "all";    // "all" | "active" | "done"
 let currentViews = [];           // [{id, name, ...state}]
 let activeViewId = null;         // currently applied view
-let filterExemptId = null;       // newly created item exempt from filtering
 
 // -------------------------------------------------------------------
 // API helpers
@@ -957,11 +956,12 @@ async function addItemAfter(afterId, depth) {
     method: "POST",
     body,
   });
-  if (result && result.id) {
-    filterExemptId = result.id;
-  }
   await refreshItems();
   if (result && result.id) {
+    selectedIds.clear();
+    selectedIds.add(result.id);
+    lastSelectedId = result.id;
+    renderViewport();
     const newEl = itemsEl.querySelector(`.item[data-id="${result.id}"] .item-text`);
     if (newEl) {
       newEl.value = "";
@@ -1124,7 +1124,6 @@ function matchesCondition(itemValue, condition) {
 }
 
 function itemMatchesFilters(item) {
-  if (item.id === filterExemptId) return true;
   if (selectedIds.has(item.id)) return true;
   if (completionFilter === "active" && item.done) return false;
   if (completionFilter === "done" && !item.done) return false;
@@ -2356,11 +2355,7 @@ function startDrag(e, itemId, startY, ctrlKey) {
   ghost.style.top = rect.top + "px";
   document.body.appendChild(ghost);
 
-  // Mark all block items as drag-source
-  for (const id of blockIds) {
-    const el = itemsEl.querySelector(`.item[data-id="${id}"]`);
-    if (el) el.classList.add("drag-source");
-  }
+  markDragSource(blockIds);
 
   // Re-render to show consolidated positions
   if (useFullReorder) renderItems();
@@ -2383,11 +2378,7 @@ function startDrag(e, itemId, startY, ctrlKey) {
     draggedItems: null,
   };
 
-  // Re-mark after potential re-render
-  for (const id of blockIds) {
-    const el = itemsEl.querySelector(`.item[data-id="${id}"]`);
-    if (el) el.classList.add("drag-source");
-  }
+  markDragSource(blockIds);
 }
 
 function getVisibleIndex(itemId) {
@@ -2410,6 +2401,20 @@ function getDataIndexOfVisibleRow(visibleRow) {
     vis++;
   }
   return currentItems.length;
+}
+
+function markDragSource(blockIds) {
+  for (const id of blockIds) {
+    const el = itemsEl.querySelector(`.item[data-id="${id}"]`);
+    if (el) el.classList.add("drag-source");
+  }
+}
+
+function clearDragSource(blockIds) {
+  for (const id of blockIds) {
+    const el = itemsEl.querySelector(`.item[data-id="${id}"]`);
+    if (el) el.classList.remove("drag-source");
+  }
 }
 
 function getListEntryUnderMouse(e) {
@@ -2473,11 +2478,7 @@ function onDragMove(e) {
 
   dragState.currentVisibleIdx = targetRow;
   renderItems();
-
-  for (const id of blockIds) {
-    const el = itemsEl.querySelector(`.item[data-id="${id}"]`);
-    if (el) el.classList.add("drag-source");
-  }
+  markDragSource(blockIds);
 }
 
 async function switchDuringDrag(destListId) {
@@ -2512,11 +2513,7 @@ async function switchDuringDrag(destListId) {
   });
   clearSidebarHighlight();
 
-  // Re-mark dragged items
-  for (const id of blockIds) {
-    const el = itemsEl.querySelector(`.item[data-id="${id}"]`);
-    if (el) el.classList.add("drag-source");
-  }
+  markDragSource(blockIds);
 }
 
 function onDragEnd() {
@@ -2529,11 +2526,7 @@ function onDragEnd() {
   clearSidebarHighlight();
   if (dragState.hoverTimer) clearTimeout(dragState.hoverTimer);
 
-  // Remove drag-source styling
-  for (const id of blockIds) {
-    const el = itemsEl.querySelector(`.item[data-id="${id}"]`);
-    if (el) el.classList.remove("drag-source");
-  }
+  clearDragSource(blockIds);
 
   const itemIds = [...blockIds];
   dragState = null;
