@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.3.1";
+const KLAAR_VERSION = "0.3.2";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 const API = "/api";
@@ -248,23 +248,36 @@ function parseImportText(text) {
   const lines = text.split(/\r?\n/);
   const items = [];
 
-  // Detect indent unit: find smallest leading whitespace among indented lines
-  let indentUnit = 0;
-  for (const line of lines) {
-    const m = line.match(/^(\s+)\S/);
-    if (m) {
-      const len = m[1].replace(/\t/g, "    ").length;
-      if (indentUnit === 0 || len < indentUnit) indentUnit = len;
-    }
-  }
-  if (indentUnit === 0) indentUnit = 4;
+  // Track indent levels by their whitespace amounts
+  // Instead of a fixed indent unit, map observed whitespace to depth levels
+  const indentStack = [0]; // stack of whitespace amounts, index = depth
 
   for (const line of lines) {
     if (line.trim() === "") continue;
 
-    // Measure indentation
     const leadingWs = line.match(/^(\s*)/)[1].replace(/\t/g, "    ");
-    const depth = Math.round(leadingWs.length / indentUnit);
+    const wsLen = leadingWs.length;
+
+    // Determine depth from whitespace
+    let depth;
+    if (wsLen === 0) {
+      depth = 0;
+      indentStack.length = 1;
+    } else if (wsLen > indentStack[indentStack.length - 1]) {
+      // More indented than previous — new depth level
+      depth = indentStack.length;
+      indentStack.push(wsLen);
+    } else {
+      // Find the matching or nearest depth level
+      depth = indentStack.length - 1;
+      for (let d = indentStack.length - 1; d >= 0; d--) {
+        if (indentStack[d] <= wsLen) {
+          depth = d;
+          break;
+        }
+      }
+      indentStack.length = depth + 1;
+    }
 
     let rest = line.trim();
 
@@ -848,6 +861,7 @@ function renderViewport() {
 
     const leftGroup = document.createElement("div");
     leftGroup.className = "item-left";
+    if (item.depth > 0) leftGroup.style.paddingLeft = (item.depth * 1.5) + "rem";
     leftGroup.append(cb, txt);
     li.append(leftGroup, btnDel, tagsContainer, badge);
     itemsEl.appendChild(li);

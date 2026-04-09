@@ -766,10 +766,4 @@ main {
   cursor: not-allowed;
 }
 
-/* ---- Depth indentation ---- */
-
-.item[data-depth="1"] .item-left { padding-left: 1.5rem; }
-.item[data-depth="2"] .item-left { padding-left: 3.0rem; }
-.item[data-depth="3"] .item-left { padding-left: 4.5rem; }
-.item[data-depth="4"] .item-left { padding-left: 6.0rem; }
-.item[data-depth="5"] .item-left { padding-left: 7.5rem; }
+/* ---- Depth indentation (applied dynamically via JS) ---- */
