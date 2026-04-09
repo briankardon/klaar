@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.5.2";
+const KLAAR_VERSION = "0.5.3";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 const API = "/api";
@@ -694,9 +694,6 @@ function renderViewport() {
     let skipBlur = false;
     txt.addEventListener("blur", () => {
       if (deleted || skipBlur) return;
-      if (filterExemptId === item.id) {
-        filterExemptId = null;
-      }
       const val = txt.value.trim();
       if (val !== item.text) {
         updateItem(item.id, { text: val });
@@ -1128,6 +1125,7 @@ function matchesCondition(itemValue, condition) {
 
 function itemMatchesFilters(item) {
   if (item.id === filterExemptId) return true;
+  if (selectedIds.has(item.id)) return true;
   if (completionFilter === "active" && item.done) return false;
   if (completionFilter === "done" && !item.done) return false;
   for (const f of textFilters) {
