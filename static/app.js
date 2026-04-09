@@ -796,7 +796,7 @@ function renderItems() {
     const leftGroup = document.createElement("div");
     leftGroup.className = "item-left";
     leftGroup.append(cb, txt);
-    li.append(leftGroup, tagsContainer, badge, btnDel);
+    li.append(leftGroup, btnDel, tagsContainer, badge);
     itemsEl.appendChild(li);
   }
   applySelectionStyles();
