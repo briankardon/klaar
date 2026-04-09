@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.4.3";
+const KLAAR_VERSION = "0.4.4";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 const API = "/api";
@@ -601,6 +601,19 @@ function renderItems() {
   renderViewport();
 }
 
+function scrollToItem(itemId) {
+  if (!itemId) return;
+  const row = visibleList.findIndex((v) => v.item.id === itemId);
+  if (row === -1) return;
+  const container = document.getElementById("items-container");
+  const targetTop = row * ITEM_HEIGHT;
+  const targetBottom = targetTop + ITEM_HEIGHT;
+  if (targetTop < container.scrollTop || targetBottom > container.scrollTop + container.clientHeight) {
+    // Center the item in the viewport
+    container.scrollTop = targetTop - container.clientHeight / 2 + ITEM_HEIGHT / 2;
+  }
+}
+
 function renderViewport() {
   const container = document.getElementById("items-container");
   const scrollTop = container.scrollTop;
@@ -1179,6 +1192,7 @@ function toggleSort(tagId) {
   }
   renderItems();
   renderTagPane();
+  scrollToItem(lastSelectedId);
 }
 
 function renderFilterBar() {
@@ -1204,6 +1218,7 @@ function renderFilterBar() {
       textFilters.splice(i, 1);
       renderFilterBar();
       renderItems();
+      scrollToItem(lastSelectedId);
     });
     filterBar.appendChild(bubble);
   }
@@ -1233,6 +1248,7 @@ function renderFilterBar() {
         renderFilterBar();
         renderItems();
         renderTagPane();
+        scrollToItem(lastSelectedId);
       }, 250);
     });
     bubble.addEventListener("dblclick", (e) => {
@@ -1256,6 +1272,7 @@ function renderFilterBar() {
         tagFilters[filterIdx] = { tagId, condition: val };
         renderFilterBar();
         renderItems();
+        scrollToItem(lastSelectedId);
       }
       inp.addEventListener("blur", commitFilter);
       inp.addEventListener("keydown", (ke) => {
@@ -1299,6 +1316,7 @@ searchInput.addEventListener("keydown", (e) => {
       selectedIds.clear();
       renderFilterBar();
       renderItems();
+      scrollToItem(lastSelectedId);
     } catch (err) {
       // Invalid regex, don't create filter
     }
@@ -1319,6 +1337,7 @@ document.querySelectorAll(".comp-btn").forEach((btn) => {
       b.classList.toggle("active", b.dataset.mode === completionFilter)
     );
     renderItems();
+    scrollToItem(lastSelectedId);
   });
 });
 
@@ -1327,6 +1346,7 @@ function toggleTagFilter(tagId) {
   renderFilterBar();
   renderItems();
   renderTagPane();
+  scrollToItem(lastSelectedId);
 }
 
 // -------------------------------------------------------------------
