@@ -9,13 +9,18 @@
 </head>
 <body>
   <header>
-    <h1>Klaar</h1>
+    <div class="header-left">
+      <button id="btn-toggle-sidebar" class="header-toggle" title="Lists" aria-label="Toggle lists panel">&#9776;</button>
+      <h1>Klaar</h1>
+    </div>
     <div class="header-right">
       <span id="user-display"></span>
       <button id="btn-logout" title="Log out">Logout</button>
+      <button id="btn-toggle-tagpane" class="header-toggle" title="Tags &amp; Views" aria-label="Toggle tags panel">&#x2022;&#x2022;&#x2022;</button>
     </div>
   </header>
 
+  <div id="panel-backdrop" class="hidden"></div>
   <main>
     <!-- Sidebar: list of todo lists -->
     <nav id="sidebar">

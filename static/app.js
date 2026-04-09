@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.5.4";
+const KLAAR_VERSION = "0.6.0";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 const API = "/api";
@@ -154,6 +154,7 @@ async function deleteListById(listId, name) {
 }
 
 async function selectList(id) {
+  if (mobileQuery.matches) closePanels();
   currentListId = id;
   collapsedIds.clear();
   const data = await api(`/lists/${id}`);
@@ -2586,6 +2587,47 @@ async function loadCurrentUser() {
     document.getElementById("user-display").textContent = data.display_name || data.username;
   }
 }
+
+// -------------------------------------------------------------------
+// Mobile panel toggles
+// -------------------------------------------------------------------
+
+const mobileQuery = window.matchMedia("(max-width: 768px)");
+const panelBackdrop = document.getElementById("panel-backdrop");
+const sidebar = document.getElementById("sidebar");
+
+function closePanels() {
+  sidebar.classList.remove("panel-open");
+  tagPane.classList.remove("panel-open");
+  panelBackdrop.classList.add("hidden");
+}
+
+document.getElementById("btn-toggle-sidebar").addEventListener("click", () => {
+  const opening = !sidebar.classList.contains("panel-open");
+  closePanels();
+  if (opening) {
+    sidebar.classList.add("panel-open");
+    panelBackdrop.classList.remove("hidden");
+  }
+});
+
+document.getElementById("btn-toggle-tagpane").addEventListener("click", () => {
+  if (!currentListId) return;  // no list selected
+  const opening = !tagPane.classList.contains("panel-open");
+  closePanels();
+  if (opening) {
+    tagPane.classList.add("panel-open");
+    panelBackdrop.classList.remove("hidden");
+  }
+});
+
+panelBackdrop.addEventListener("click", closePanels);
+
+
+// Close panels when leaving mobile breakpoint
+mobileQuery.addEventListener("change", (e) => {
+  if (!e.matches) closePanels();
+});
 
 // -------------------------------------------------------------------
 // Init

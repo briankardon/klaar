@@ -19,9 +19,32 @@ header {
   justify-content: space-between;
 }
 
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 header h1 {
   font-size: 1.3rem;
   font-weight: 600;
+}
+
+.header-toggle {
+  display: none;
+  background: rgba(255,255,255,0.15);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  width: 32px;
+  height: 32px;
+  font-size: 1.1rem;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.header-toggle:hover {
+  background: rgba(255,255,255,0.3);
 }
 
 .header-right {
@@ -901,5 +924,64 @@ main {
   height: 10px;
   border-radius: 50%;
   flex-shrink: 0;
+}
+
+/* ---- Panel backdrop (mobile) ---- */
+
+#panel-backdrop {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.3);
+  z-index: 900;
+}
+
+/* ---- Mobile responsive layout ---- */
+
+@media (max-width: 768px) {
+  .header-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  #sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 280px;
+    z-index: 1000;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    box-shadow: 2px 0 12px rgba(0,0,0,0.2);
+  }
+
+  #sidebar.panel-open {
+    transform: translateX(0);
+  }
+
+  #tag-pane {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 260px;
+    z-index: 1000;
+    transform: translateX(100%);
+    transition: transform 0.25s ease;
+    box-shadow: -2px 0 12px rgba(0,0,0,0.2);
+  }
+
+  #tag-pane.panel-open {
+    transform: translateX(0);
+  }
+
+  #list-view {
+    padding: 0.8rem;
+  }
+
+  .item-left {
+    max-width: none;
+  }
 }
 
