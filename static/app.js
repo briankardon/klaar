@@ -2764,5 +2764,6 @@ mobileQuery.addEventListener("change", (e) => {
 // Init
 // -------------------------------------------------------------------
 
+document.querySelector("header h1").textContent = `Klaar v${KLAAR_VERSION}`;
 loadCurrentUser();
 loadLists();
