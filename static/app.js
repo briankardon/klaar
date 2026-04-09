@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.4.1";
+const KLAAR_VERSION = "0.4.2";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 const API = "/api";
@@ -1358,10 +1358,36 @@ function renderTagPane() {
       input.click();
     });
 
-    // Tag name
+    // Tag name (double-click to rename)
     const name = document.createElement("span");
     name.className = "tag-name";
     name.textContent = tag.name;
+    name.addEventListener("dblclick", (e) => {
+      e.stopPropagation();
+      const inp = document.createElement("input");
+      inp.type = "text";
+      inp.className = "list-rename-input";
+      inp.value = tag.name;
+      name.replaceWith(inp);
+      inp.focus();
+      inp.select();
+      function commit() {
+        const val = inp.value.trim();
+        if (val && val !== tag.name) {
+          updateTag(tag.id, { name: val });
+        } else {
+          renderTagPane();
+        }
+      }
+      inp.addEventListener("blur", commit);
+      inp.addEventListener("keydown", (ke) => {
+        if (ke.key === "Enter") { ke.preventDefault(); inp.blur(); }
+        if (ke.key === "Escape") { inp.value = tag.name; inp.blur(); }
+        ke.stopPropagation();
+      });
+      inp.addEventListener("click", (ce) => ce.stopPropagation());
+      inp.addEventListener("mousedown", (me) => me.stopPropagation());
+    });
 
     // Visibility toggle
     const visBtn = document.createElement("button");
