@@ -766,4 +766,65 @@ main {
   cursor: not-allowed;
 }
 
+/* ---- Context menu ---- */
+
+#context-menu {
+  position: fixed;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  box-shadow: 0 3px 12px rgba(0,0,0,0.2);
+  z-index: 4000;
+  min-width: 180px;
+  padding: 4px 0;
+  font-size: 0.85rem;
+}
+
+.context-menu-header {
+  padding: 4px 12px;
+  font-size: 0.75rem;
+  color: #888;
+  font-style: italic;
+}
+
+.context-menu-item {
+  padding: 5px 12px;
+  cursor: pointer;
+}
+
+.context-menu-item:hover {
+  background: #eef4fb;
+}
+
+.context-menu-divider {
+  height: 1px;
+  background: #eee;
+  margin: 4px 0;
+}
+
+.context-menu-tag {
+  padding: 5px 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.context-menu-tag:hover {
+  background: #eef4fb;
+}
+
+.ctx-tag-check {
+  width: 14px;
+  text-align: center;
+  font-size: 0.8rem;
+}
+
+.ctx-tag-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
 /* ---- Depth indentation (applied dynamically via JS) ---- */

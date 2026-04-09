@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.3.2";
+const KLAAR_VERSION = "0.4.0";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 const API = "/api";
@@ -642,6 +642,9 @@ function renderViewport() {
       if (e.target.type === "checkbox") return;
       if (e.shiftKey) e.preventDefault();
       onItemMouseDown(e, item.id);
+    });
+    li.addEventListener("contextmenu", (e) => {
+      showContextMenu(e, item.id, e.ctrlKey);
     });
 
     // checkbox
@@ -1659,6 +1662,180 @@ btnNewTag.addEventListener("click", () => {
     if (e.key === "Escape") { inp.value = ""; inp.blur(); }
     e.stopPropagation();
   });
+});
+
+// -------------------------------------------------------------------
+// Context menu
+// -------------------------------------------------------------------
+
+const ctxMenu = document.getElementById("context-menu");
+const ctxHeader = document.getElementById("context-menu-header");
+const ctxDelete = document.getElementById("ctx-delete");
+const ctxCopy = document.getElementById("ctx-copy");
+const ctxTags = document.getElementById("ctx-tags");
+let ctxItemId = null;
+let ctxHierarchy = false;
+
+function showContextMenu(e, itemId, hierarchy) {
+  e.preventDefault();
+  ctxItemId = itemId;
+  ctxHierarchy = hierarchy;
+
+  const item = currentItems.find((it) => it.id === itemId);
+  if (!item) return;
+
+  ctxHeader.textContent = hierarchy ? "Hierarchy" : "Item";
+  ctxDelete.textContent = hierarchy ? "Delete hierarchy" : "Delete";
+  ctxCopy.textContent = hierarchy ? "Copy hierarchy" : "Copy to clipboard";
+
+  // Build tag list
+  ctxTags.innerHTML = "";
+  for (const tagDef of currentTags) {
+    const row = document.createElement("div");
+    row.className = "context-menu-tag";
+
+    const check = document.createElement("span");
+    check.className = "ctx-tag-check";
+
+    if (hierarchy) {
+      const dataIdx = currentItems.indexOf(item);
+      const [start, end] = getChildRange(dataIdx);
+      const block = [item, ...currentItems.slice(start, end)];
+      const allHave = block.every((it) => itemHasTag(it, tagDef.id));
+      const someHave = block.some((it) => itemHasTag(it, tagDef.id));
+      check.textContent = allHave ? "\u2713" : someHave ? "\u2013" : "";
+    } else {
+      check.textContent = itemHasTag(item, tagDef.id) ? "\u2713" : "";
+    }
+
+    const dot = document.createElement("span");
+    dot.className = "ctx-tag-dot";
+    dot.style.background = tagDef.color;
+
+    const name = document.createElement("span");
+    name.textContent = tagDef.name;
+
+    row.append(check, dot, name);
+    row.addEventListener("click", () => {
+      if (hierarchy) {
+        toggleTagOnContextHierarchy(tagDef.id);
+      } else {
+        toggleTagOnContextItem(tagDef.id);
+      }
+    });
+    ctxTags.appendChild(row);
+  }
+
+  // Position menu
+  ctxMenu.classList.remove("hidden");
+  const menuRect = ctxMenu.getBoundingClientRect();
+  let x = e.clientX;
+  let y = e.clientY;
+  if (x + menuRect.width > window.innerWidth) x = window.innerWidth - menuRect.width - 5;
+  if (y + menuRect.height > window.innerHeight) y = window.innerHeight - menuRect.height - 5;
+  ctxMenu.style.left = x + "px";
+  ctxMenu.style.top = y + "px";
+}
+
+function hideContextMenu() {
+  ctxMenu.classList.add("hidden");
+  ctxItemId = null;
+}
+
+function toggleTagOnContextItem(tagId) {
+  const item = currentItems.find((it) => it.id === ctxItemId);
+  if (!item) return;
+  if (itemHasTag(item, tagId)) {
+    removeTagFromItemData(item, tagId);
+  } else {
+    addTagToItem(item, tagId);
+  }
+  renderItems();
+  api(`/lists/${currentListId}/items/${ctxItemId}`, {
+    method: "PATCH",
+    body: { tags: item.tags },
+  }).then(() => scheduleSyncFromServer())
+    .catch(() => refreshItems());
+  // Refresh the menu to update checks
+  showContextMenuForCurrentItem();
+}
+
+function toggleTagOnContextHierarchy(tagId) {
+  const item = currentItems.find((it) => it.id === ctxItemId);
+  if (!item) return;
+  const dataIdx = currentItems.indexOf(item);
+  const [start, end] = getChildRange(dataIdx);
+  const block = [item, ...currentItems.slice(start, end)];
+  const allHave = block.every((it) => itemHasTag(it, tagId));
+  const updates = [];
+  for (const it of block) {
+    if (allHave) {
+      removeTagFromItemData(it, tagId);
+    } else {
+      addTagToItem(it, tagId);
+    }
+    updates.push({ id: it.id, tags: [...it.tags] });
+  }
+  renderItems();
+  api(`/lists/${currentListId}/items`, {
+    method: "PATCH",
+    body: { updates },
+  }).then(() => scheduleSyncFromServer())
+    .catch(() => refreshItems());
+  showContextMenuForCurrentItem();
+}
+
+function showContextMenuForCurrentItem() {
+  // Re-show the menu at its current position to refresh tag checks
+  if (!ctxItemId) return;
+  const rect = ctxMenu.getBoundingClientRect();
+  const fakeEvent = { preventDefault() {}, clientX: rect.left, clientY: rect.top };
+  showContextMenu(fakeEvent, ctxItemId, ctxHierarchy);
+}
+
+ctxDelete.addEventListener("click", () => {
+  if (!ctxItemId) return;
+  if (ctxHierarchy) {
+    const item = currentItems.find((it) => it.id === ctxItemId);
+    if (!item) return;
+    const dataIdx = currentItems.indexOf(item);
+    const [start, end] = getChildRange(dataIdx);
+    const ids = [item.id, ...currentItems.slice(start, end).map((it) => it.id)];
+    for (const id of ids) deleteItem(id);
+  } else {
+    deleteItem(ctxItemId);
+  }
+  hideContextMenu();
+});
+
+ctxCopy.addEventListener("click", async () => {
+  if (!ctxItemId) return;
+  const item = currentItems.find((it) => it.id === ctxItemId);
+  if (!item) return;
+  let items;
+  if (ctxHierarchy) {
+    const dataIdx = currentItems.indexOf(item);
+    const [start, end] = getChildRange(dataIdx);
+    items = [item, ...currentItems.slice(start, end)];
+  } else {
+    items = [item];
+  }
+  const baseDepth = items[0].depth;
+  const lines = items.map((it) => {
+    const indent = "  ".repeat(it.depth - baseDepth);
+    const checkbox = it.done ? "[x]" : "[ ]";
+    return `${indent}- ${checkbox} ${it.text}`;
+  });
+  await navigator.clipboard.writeText(lines.join("\n"));
+  hideContextMenu();
+});
+
+// Close context menu on click elsewhere
+document.addEventListener("click", (e) => {
+  if (!ctxMenu.contains(e.target)) hideContextMenu();
+});
+document.addEventListener("contextmenu", (e) => {
+  if (!ctxMenu.contains(e.target) && !e.target.closest(".item")) hideContextMenu();
 });
 
 // -------------------------------------------------------------------
