@@ -229,7 +229,7 @@ main {
 #search-row {
   display: flex;
   gap: 0.5rem;
-  align-items: center;
+  align-items: stretch;
 }
 
 #completion-filter {
@@ -240,10 +240,11 @@ main {
 .comp-btn {
   background: #e8eef4;
   border: 1px solid #ccd6e0;
-  padding: 0.3rem 0.5rem;
+  padding: 0 0.5rem;
   font-size: 0.8rem;
   cursor: pointer;
   color: #555;
+  height: 100%;
 }
 
 .comp-btn:first-child {
