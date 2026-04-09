@@ -983,5 +983,70 @@ main {
   .item-left {
     max-width: none;
   }
+
+  /* Make hover-only buttons always visible on mobile */
+  .list-delete-btn {
+    opacity: 0.4 !important;
+  }
+
+  .item .btn-icon {
+    opacity: 0.4 !important;
+  }
+
+  .view-save-btn,
+  .view-delete-btn {
+    opacity: 0.4 !important;
+  }
+
+  /* Larger touch targets */
+  .item {
+    height: 36px;
+    padding: 0.4rem 0.5rem;
+  }
+
+  .gutter-toggle {
+    height: 36px;
+  }
+
+  .item input[type="checkbox"] {
+    width: 22px;
+    height: 22px;
+  }
+
+  #fold-gutter {
+    width: 24px;
+    min-width: 24px;
+  }
+
+  .gutter-toggle {
+    width: 24px;
+    font-size: 0.7rem;
+  }
+
+  .list-delete-btn {
+    font-size: 1.5rem;
+    padding: 0 8px;
+  }
+
+  #list-index li {
+    padding: 0.8rem 1rem;
+  }
+
+  .tag-entry {
+    padding: 0.6rem 0.7rem;
+  }
+
+  .view-entry {
+    padding: 0.6rem 0.7rem;
+  }
+
+  .drag-ghost {
+    height: 36px;
+  }
+
+  /* Search row stacks vertically on narrow screens */
+  #search-row {
+    flex-wrap: wrap;
+  }
 }
 

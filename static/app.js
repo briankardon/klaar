@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.6.0";
+const KLAAR_VERSION = "0.6.1";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 const API = "/api";
@@ -19,6 +19,7 @@ const btnNewTag = document.getElementById("btn-new-tag");
 const searchInput = document.getElementById("search-input");
 const filterBar = document.getElementById("filter-bar");
 
+const mobileQuery = window.matchMedia("(max-width: 768px)");
 let currentListId = null;
 let currentItems = [];          // latest items from server
 let currentTags = [];           // tag definitions for current list
@@ -566,7 +567,8 @@ function rerenderVisible() {
 // Items
 // -------------------------------------------------------------------
 
-const ITEM_HEIGHT = 26;
+function getItemHeight() { return mobileQuery.matches ? 36 : 26; }
+let ITEM_HEIGHT = getItemHeight();
 const RENDER_OVERSCAN = 10; // extra items above/below viewport
 let visibleList = [];        // computed list of visible items [{item, dataIdx, isParent, isCollapsed, isFilterAncestor}]
 
@@ -667,6 +669,8 @@ function renderViewport() {
     li.addEventListener("contextmenu", (e) => {
       showContextMenu(e, item.id, e.ctrlKey);
     });
+    // Unified touch handler: long-press → context menu, drag threshold → drag
+    setupItemTouch(li, item.id);
 
     // checkbox
     const cb = document.createElement("input");
@@ -2368,7 +2372,7 @@ function startDrag(e, itemId, startY, ctrlKey) {
     blockSize,
     useFullReorder,
     offsetY: startY - rect.top,
-    itemHeight: 26,
+    itemHeight: ITEM_HEIGHT,
     itemsRect,
     currentVisibleIdx: getVisibleIndex(itemId),
     sourceListId: currentListId,
@@ -2521,6 +2525,9 @@ function onDragEnd() {
   if (!dragState) return;
   document.removeEventListener("mousemove", onDragMove);
   document.removeEventListener("mouseup", onDragEnd);
+  document.removeEventListener("touchmove", onTouchDragMove);
+  document.removeEventListener("touchend", onTouchDragEnd);
+  document.removeEventListener("touchcancel", onTouchDragEnd);
 
   const { itemId, blockIds, blockSize, useFullReorder, ghost, sourceListId, crossListTarget, switchedList } = dragState;
   ghost.remove();
@@ -2573,6 +2580,77 @@ function onDragEnd() {
 }
 
 // -------------------------------------------------------------------
+// Touch support (long-press context menu + touch drag)
+// -------------------------------------------------------------------
+
+function onTouchDragMove(e) {
+  if (!dragState) return;
+  e.preventDefault();
+  const t = e.touches[0];
+  onDragMove({ clientX: t.clientX, clientY: t.clientY });
+}
+
+function onTouchDragEnd() {
+  onDragEnd();
+}
+
+function setupItemTouch(li, itemId) {
+  let longPressTimer = null;
+  let startX, startY;
+  let dragStarted = false;
+  let longPressFired = false;
+
+  li.addEventListener("touchstart", (e) => {
+    if (e.target.type === "checkbox") return;
+    const touch = e.touches[0];
+    startX = touch.clientX;
+    startY = touch.clientY;
+    dragStarted = false;
+    longPressFired = false;
+
+    longPressTimer = setTimeout(() => {
+      longPressTimer = null;
+      longPressFired = true;
+      navigator.vibrate?.(30);
+      showContextMenu(
+        { preventDefault() {}, clientX: touch.clientX, clientY: touch.clientY },
+        itemId, false
+      );
+    }, 500);
+  }, { passive: true });
+
+  li.addEventListener("touchmove", (e) => {
+    const touch = e.touches[0];
+    const dx = touch.clientX - startX;
+    const dy = touch.clientY - startY;
+
+    if (longPressFired) { e.preventDefault(); return; }
+
+    const TOUCH_DRAG_THRESHOLD = 15;
+    if (!dragStarted && Math.sqrt(dx * dx + dy * dy) >= TOUCH_DRAG_THRESHOLD) {
+      // Cancel long-press, start drag
+      if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+      dragStarted = true;
+      document.body.style.userSelect = "none";
+      if (document.activeElement?.classList?.contains("item-text")) {
+        document.activeElement.blur();
+      }
+      startDrag({ clientX: touch.clientX, clientY: touch.clientY }, itemId, startY, false);
+      document.addEventListener("touchmove", onTouchDragMove, { passive: false });
+      document.addEventListener("touchend", onTouchDragEnd);
+      document.addEventListener("touchcancel", onTouchDragEnd);
+    }
+
+    if (dragStarted) e.preventDefault();
+  }, { passive: false });
+
+  li.addEventListener("touchend", () => {
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+    document.body.style.userSelect = "";
+  });
+}
+
+// -------------------------------------------------------------------
 // Auth
 // -------------------------------------------------------------------
 
@@ -2592,7 +2670,6 @@ async function loadCurrentUser() {
 // Mobile panel toggles
 // -------------------------------------------------------------------
 
-const mobileQuery = window.matchMedia("(max-width: 768px)");
 const panelBackdrop = document.getElementById("panel-backdrop");
 const sidebar = document.getElementById("sidebar");
 
@@ -2624,9 +2701,11 @@ document.getElementById("btn-toggle-tagpane").addEventListener("click", () => {
 panelBackdrop.addEventListener("click", closePanels);
 
 
-// Close panels when leaving mobile breakpoint
+// Handle mobile breakpoint changes
 mobileQuery.addEventListener("change", (e) => {
   if (!e.matches) closePanels();
+  ITEM_HEIGHT = getItemHeight();
+  if (currentListId) renderItems();
 });
 
 // -------------------------------------------------------------------
