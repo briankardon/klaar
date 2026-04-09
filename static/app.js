@@ -786,23 +786,6 @@ function renderItems() {
       badge.textContent = `(${end - start})`;
     }
 
-    // indent/outdent buttons
-    const btnOut = document.createElement("button");
-    btnOut.className = "btn-icon";
-    btnOut.textContent = "\u2190";
-    btnOut.title = "Outdent";
-    btnOut.addEventListener("click", () =>
-      updateItem(item.id, { depth: Math.max(0, item.depth - 1) })
-    );
-
-    const btnIn = document.createElement("button");
-    btnIn.className = "btn-icon";
-    btnIn.textContent = "\u2192";
-    btnIn.title = "Indent";
-    btnIn.addEventListener("click", () =>
-      updateItem(item.id, { depth: item.depth + 1 })
-    );
-
     // delete button
     const btnDel = document.createElement("button");
     btnDel.className = "btn-icon";
@@ -813,7 +796,7 @@ function renderItems() {
     const leftGroup = document.createElement("div");
     leftGroup.className = "item-left";
     leftGroup.append(cb, txt);
-    li.append(leftGroup, tagsContainer, badge, btnOut, btnIn, btnDel);
+    li.append(leftGroup, tagsContainer, badge, btnDel);
     itemsEl.appendChild(li);
   }
   applySelectionStyles();
