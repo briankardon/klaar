@@ -25,7 +25,7 @@ const selectedIds = new Set();   // client-side selection state
 let lastSelectedId = null;       // anchor for shift-click range selection
 const hiddenTagIds = new Set();  // client-side tag visibility state
 const textFilters = [];          // [{pattern: string, regex: RegExp}]
-const tagFilters = new Map();    // tag ID -> condition string (null = presence only)
+const tagFilters = [];           // [{tagId, condition}] — multiple per tag allowed
 let currentSort = null;          // {tagId, direction: "asc"|"desc"} or null
 let completionFilter = "all";    // "all" | "active" | "done"
 
@@ -1014,7 +1014,7 @@ function deleteItem(itemId) {
 // -------------------------------------------------------------------
 
 function hasActiveFilters() {
-  return textFilters.length > 0 || tagFilters.size > 0 || completionFilter !== "all";
+  return textFilters.length > 0 || tagFilters.length > 0 || completionFilter !== "all";
 }
 
 function smartCompare(a, b) {
@@ -1048,7 +1048,7 @@ function itemMatchesFilters(item) {
   for (const f of textFilters) {
     if (!f.regex.test(item.text)) return false;
   }
-  for (const [tagId, condition] of tagFilters) {
+  for (const { tagId, condition } of tagFilters) {
     if (!itemHasTag(item, tagId)) return false;
     if (condition && !matchesCondition(itemTagValue(item, tagId), condition)) return false;
   }
@@ -1151,7 +1151,8 @@ function renderFilterBar() {
     filterBar.appendChild(bubble);
   }
 
-  for (const [tagId, condition] of tagFilters) {
+  for (let fi = 0; fi < tagFilters.length; fi++) {
+    const { tagId, condition } = tagFilters[fi];
     const tagDef = currentTags.find((t) => t.id === tagId);
     if (!tagDef) continue;
     const bubble = document.createElement("span");
@@ -1166,11 +1167,12 @@ function renderFilterBar() {
     bubble.append(labelSpan, xSpan);
     bubble.title = "Click: remove / Double-click: set condition";
     let clickTimer = null;
+    const filterIdx = fi;
     bubble.addEventListener("click", () => {
       if (clickTimer) clearTimeout(clickTimer);
       clickTimer = setTimeout(() => {
         clickTimer = null;
-        tagFilters.delete(tagId);
+        tagFilters.splice(filterIdx, 1);
         renderFilterBar();
         renderItems();
         renderTagPane();
@@ -1179,7 +1181,6 @@ function renderFilterBar() {
     bubble.addEventListener("dblclick", (e) => {
       e.stopPropagation();
       if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
-      // Replace bubble content with inline input
       bubble.textContent = tagDef.name + " ";
       const inp = document.createElement("input");
       inp.type = "text";
@@ -1195,7 +1196,7 @@ function renderFilterBar() {
       });
       function commitFilter() {
         const val = inp.value.trim() || null;
-        tagFilters.set(tagId, val);
+        tagFilters[filterIdx] = { tagId, condition: val };
         renderFilterBar();
         renderItems();
       }
@@ -1265,11 +1266,7 @@ document.querySelectorAll(".comp-btn").forEach((btn) => {
 });
 
 function toggleTagFilter(tagId) {
-  if (tagFilters.has(tagId)) {
-    tagFilters.delete(tagId);
-  } else {
-    tagFilters.set(tagId, null);
-  }
+  tagFilters.push({ tagId, condition: null });
   renderFilterBar();
   renderItems();
   renderTagPane();
@@ -1332,9 +1329,10 @@ function renderTagPane() {
 
     // Filter toggle
     const filterBtn = document.createElement("button");
-    filterBtn.className = "tag-filter-btn" + (tagFilters.has(tag.id) ? " active" : "");
+    const hasFilter = tagFilters.some((f) => f.tagId === tag.id);
+    filterBtn.className = "tag-filter-btn" + (hasFilter ? " active" : "");
     filterBtn.textContent = "\u25e2";
-    filterBtn.title = tagFilters.has(tag.id) ? "Remove filter" : "Filter by this tag";
+    filterBtn.title = hasFilter ? "Click: add another / remove via bubble" : "Filter by this tag";
     filterBtn.addEventListener("click", () => toggleTagFilter(tag.id));
 
     // Delete button
