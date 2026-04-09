@@ -817,6 +817,100 @@ def redo(list_id: str):
 
 
 # ---------------------------------------------------------------------------
+# Gather
+# ---------------------------------------------------------------------------
+
+@app.post("/api/lists/<list_id>/items/gather")
+@_require_auth
+def gather_items(list_id: str):
+    """Gather items with matching names at the same depth under the target.
+    Body: {item_id}. Merges children of duplicates into the target item.
+    """
+    data, snap = _load_and_snapshot(list_id)
+    if data is None:
+        return jsonify({"error": "list not found"}), 404
+    user = _current_user()
+    if not _can_write(data, user):
+        return jsonify({"error": "forbidden"}), 403
+    body = request.get_json(force=True)
+    target_id = body.get("item_id")
+    items = data["items"]
+
+    target_idx = next((i for i, it in enumerate(items) if it["id"] == target_id), None)
+    if target_idx is None:
+        return jsonify({"error": "item not found"}), 404
+
+    target = items[target_idx]
+    target_name = target["text"].strip().lower()
+    target_depth = target["depth"]
+
+    # Determine search scope for non-root items
+    scope_start = 0
+    scope_end = len(items)
+    if target_depth > 0:
+        # Find parent
+        for i in range(target_idx - 1, -1, -1):
+            if items[i]["depth"] < target_depth:
+                scope_start = i + 1
+                # Find parent's hierarchy end
+                parent_depth = items[i]["depth"]
+                scope_end = i + 1
+                while scope_end < len(items) and items[scope_end]["depth"] > parent_depth:
+                    scope_end += 1
+                break
+
+    # Find matching items at the same depth
+    def _child_range(idx):
+        d = items[idx]["depth"]
+        end = idx + 1
+        while end < len(items) and items[end]["depth"] > d:
+            end += 1
+        return idx + 1, end
+
+    # Collect matches and their children
+    indices_to_remove = set()
+    children_to_gather = []  # (original_index, item) pairs for ordering
+
+    for i in range(scope_start, scope_end):
+        if i == target_idx:
+            continue
+        if items[i]["depth"] != target_depth:
+            continue
+        if items[i]["text"].strip().lower() != target_name:
+            continue
+        # Found a match — collect its children and mark for removal
+        c_start, c_end = _child_range(i)
+        for c in range(c_start, c_end):
+            children_to_gather.append((c, items[c]))
+            indices_to_remove.add(c)
+        indices_to_remove.add(i)
+
+    if not indices_to_remove:
+        return jsonify(data)
+
+    # Sort gathered children by original position
+    children_to_gather.sort(key=lambda x: x[0])
+    gathered = [it for _, it in children_to_gather]
+
+    # Find target's child end
+    _, target_child_end = _child_range(target_idx)
+
+    # Build new items list: keep everything except removed items,
+    # insert gathered children after target's existing children
+    new_items = []
+    for i, it in enumerate(items):
+        if i in indices_to_remove:
+            continue
+        new_items.append(it)
+        if i == target_child_end - 1 or (target_child_end == target_idx + 1 and i == target_idx):
+            new_items.extend(gathered)
+
+    data["items"] = new_items
+    _save_with_undo(data, snap)
+    return jsonify(data)
+
+
+# ---------------------------------------------------------------------------
 # Debug / testing
 # ---------------------------------------------------------------------------
 

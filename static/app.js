@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.4.2";
+const KLAAR_VERSION = "0.4.3";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 const API = "/api";
@@ -1862,6 +1862,91 @@ ctxCopy.addEventListener("click", async () => {
   });
   await navigator.clipboard.writeText(lines.join("\n"));
   hideContextMenu();
+});
+
+const ctxGather = document.getElementById("ctx-gather");
+
+ctxGather.addEventListener("click", () => {
+  if (!ctxItemId) return;
+  const target = currentItems.find((it) => it.id === ctxItemId);
+  if (!target) return;
+  const targetIdx = currentItems.indexOf(target);
+  const targetName = target.text.trim().toLowerCase();
+  const targetDepth = target.depth;
+
+  // Determine search scope
+  let scopeStart = 0;
+  let scopeEnd = currentItems.length;
+  if (targetDepth > 0) {
+    // Find parent's hierarchy bounds
+    for (let i = targetIdx - 1; i >= 0; i--) {
+      if (currentItems[i].depth < targetDepth) {
+        scopeStart = i + 1;
+        break;
+      }
+    }
+    const parentIdx = scopeStart - 1;
+    if (parentIdx >= 0) {
+      const [, pEnd] = getChildRange(parentIdx);
+      scopeEnd = pEnd;
+    }
+  }
+
+  // Find matching items at the same depth within scope
+  const matchIndices = [];
+  for (let i = scopeStart; i < scopeEnd; i++) {
+    if (i === targetIdx) continue;
+    if (currentItems[i].depth === targetDepth &&
+        currentItems[i].text.trim().toLowerCase() === targetName) {
+      matchIndices.push(i);
+    }
+  }
+
+  if (matchIndices.length === 0) {
+    hideContextMenu();
+    return;
+  }
+
+  // Collect children from each match (in global order) and remove duplicates
+  const childrenToGather = [];
+  const indicesToRemove = new Set();
+  // Process matches in reverse so indices stay valid
+  for (const mi of matchIndices.slice().reverse()) {
+    const [cStart, cEnd] = getChildRange(mi);
+    // Collect children, adjusting depth relative to target
+    for (let c = cStart; c < cEnd; c++) {
+      childrenToGather.push(currentItems[c]);
+      indicesToRemove.add(c);
+    }
+    // Mark the duplicate parent for removal
+    indicesToRemove.add(mi);
+  }
+
+  // Sort gathered children by their original index to maintain global order
+  childrenToGather.sort((a, b) => currentItems.indexOf(a) - currentItems.indexOf(b));
+
+  // Find where to insert: after target's existing children
+  const [, targetChildEnd] = getChildRange(targetIdx);
+
+  // Remove gathered items from list
+  currentItems = currentItems.filter((_, i) => !indicesToRemove.has(i));
+
+  // Find target's new position (may have shifted after removals)
+  const newTargetIdx = currentItems.indexOf(target);
+  const [, newEnd] = getChildRange(newTargetIdx);
+
+  // Insert gathered children after existing children
+  currentItems.splice(newEnd, 0, ...childrenToGather);
+
+  renderItems();
+  hideContextMenu();
+
+  // Send gather request to server
+  api(`/lists/${currentListId}/items/gather`, {
+    method: "POST",
+    body: { item_id: ctxItemId },
+  }).then(() => scheduleSyncFromServer())
+    .catch(() => refreshItems());
 });
 
 // Close context menu on click elsewhere
