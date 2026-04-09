@@ -803,6 +803,30 @@ def redo(list_id: str):
 # Debug / testing
 # ---------------------------------------------------------------------------
 
+@app.post("/api/lists/<list_id>/items/bulk-add")
+@_require_auth
+def bulk_add_items(list_id: str):
+    """Add multiple items at once. Body: {items: [{text, depth?, done?}]}."""
+    data, snap = _load_and_snapshot(list_id)
+    if data is None:
+        return jsonify({"error": "list not found"}), 404
+    user = _current_user()
+    if not _can_write(data, user):
+        return jsonify({"error": "forbidden"}), 403
+    body = request.get_json(force=True)
+    new_items = body.get("items", [])
+    for ni in new_items:
+        text = str(ni.get("text", "")).strip()[:1000]
+        depth = max(0, min(20, int(ni.get("depth", 0))))
+        item = _new_item(text, depth)
+        if ni.get("done"):
+            item["done"] = True
+            item["completed"] = _now()
+        data["items"].append(item)
+    _save_with_undo(data, snap)
+    return jsonify(data), 201
+
+
 @app.post("/api/lists/generate-test")
 @_require_auth
 def generate_test_list():

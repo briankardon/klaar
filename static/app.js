@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.3.0";
+const KLAAR_VERSION = "0.3.1";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 const API = "/api";
@@ -297,18 +297,10 @@ function parseImportText(text) {
 }
 
 async function doImport(targetListId, parsedItems) {
-  for (const pi of parsedItems) {
-    const result = await api(`/lists/${targetListId}/items`, {
-      method: "POST",
-      body: { text: pi.text, depth: pi.depth },
-    });
-    if (result && result.id && pi.done) {
-      await api(`/lists/${targetListId}/items/${result.id}`, {
-        method: "PATCH",
-        body: { done: true },
-      });
-    }
-  }
+  await api(`/lists/${targetListId}/items/bulk-add`, {
+    method: "POST",
+    body: { items: parsedItems },
+  });
 }
 
 // -------------------------------------------------------------------
