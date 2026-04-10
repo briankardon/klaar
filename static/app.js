@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.6.7";
+const KLAAR_VERSION = "0.6.8";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 const API = "/api";

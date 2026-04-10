@@ -1102,7 +1102,7 @@ main {
     box-shadow: 0 -4px 20px rgba(0,0,0,0.25);
     padding: 8px 0;
     padding-bottom: env(safe-area-inset-bottom, 8px);
-    max-height: 60vh;
+    max-height: 45vh;
     overflow-y: auto;
   }
 
