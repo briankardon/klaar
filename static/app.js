@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.7.10";
+const KLAAR_VERSION = "0.7.11";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 const API = "/api";
@@ -2951,6 +2951,8 @@ document.addEventListener("touchstart", (e) => {
   // If tap is inside the open panel or on a toggle button, let it through
   if (sidebar.contains(e.target) || tagPane.contains(e.target)) return;
   if (e.target.closest(".header-toggle")) return;
+  e.preventDefault();
+  e.stopPropagation();
   closePanels();
   hideContextMenu();
 });
