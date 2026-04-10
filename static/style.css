@@ -487,6 +487,21 @@ main {
   background: #f0f4f8;
 }
 
+/* Expand truncated items on hover (desktop only) */
+@media (hover: hover) {
+  .item:hover {
+    height: auto;
+    min-height: 26px;
+    z-index: 10;
+  }
+  .item:hover .item-text {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+    word-break: break-word;
+  }
+}
+
 .item.selected {
   background: #d6e8f7;
 }
