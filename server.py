@@ -519,6 +519,8 @@ def update_list(list_id: str):
         data["shared_with"] = body["shared_with"]
     if "views" in body:
         data["views"] = body["views"]
+    if "active_view" in body:
+        data["active_view"] = body["active_view"]
     _save_list(data)
     return jsonify(data)
 

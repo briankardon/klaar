@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.8.0";
+const KLAAR_VERSION = "0.8.1";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -198,6 +198,15 @@ async function selectList(id) {
   lastSelectedId = null;
   hiddenTagIds.clear();
   searchInput.value = "";
+  // Restore last-used view if one was saved
+  const savedViewId = data.active_view;
+  if (savedViewId) {
+    const savedView = currentViews.find((v) => v.id === savedViewId);
+    if (savedView) {
+      activeViewId = savedViewId;
+      applyViewState(savedView);
+    }
+  }
   listTitle.textContent = data.name;
   emptyState.classList.add("hidden");
   listView.classList.remove("hidden");
@@ -1934,6 +1943,13 @@ function saveViewsToServer() {
   });
 }
 
+function saveActiveViewToServer() {
+  api(`/lists/${currentListId}`, {
+    method: "PATCH",
+    body: { active_view: activeViewId },
+  });
+}
+
 function renderViewPane() {
   viewListEl.innerHTML = "";
   for (const view of currentViews) {
@@ -1963,7 +1979,10 @@ function renderViewPane() {
     delBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       currentViews = currentViews.filter((v) => v.id !== view.id);
-      if (activeViewId === view.id) activeViewId = null;
+      if (activeViewId === view.id) {
+        activeViewId = null;
+        saveActiveViewToServer();
+      }
       saveViewsToServer();
       renderViewPane();
     });
@@ -1976,8 +1995,23 @@ function renderViewPane() {
       if (viewClickTimer) clearTimeout(viewClickTimer);
       viewClickTimer = setTimeout(() => {
         viewClickTimer = null;
-        activeViewId = view.id;
-        applyViewState(view);
+        if (activeViewId === view.id) {
+          // Toggle off: clear filters and deactivate view
+          activeViewId = null;
+          textFilters.length = 0;
+          tagFilters.length = 0;
+          currentSort = null;
+          completionFilter = "all";
+          hiddenTagIds.clear();
+          searchInput.value = "";
+          renderFilterBar();
+          renderItems();
+          renderTagPane();
+        } else {
+          activeViewId = view.id;
+          applyViewState(view);
+        }
+        saveActiveViewToServer();
         renderViewPane();
       }, 250);
     });
@@ -2040,6 +2074,7 @@ btnSaveView.addEventListener("click", () => {
       currentViews.push(view);
       activeViewId = view.id;
       saveViewsToServer();
+      saveActiveViewToServer();
     }
     renderViewPane();
   }
