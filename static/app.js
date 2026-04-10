@@ -77,6 +77,8 @@ async function api(path, opts = {}) {
     return null;
   }
   if (res.status === 204) return null;
+  const ct = res.headers.get("content-type") || "";
+  if (!ct.includes("application/json")) return { error: "not json", status: res.status };
   return res.json();
 }
 
@@ -1080,9 +1082,8 @@ async function syncFromServer() {
   if (!currentListId) return;
   // Lightweight version check first
   const ver = await api(`/lists/${currentListId}/version`);
-  if (!ver || ver.error) return;
-  if (ver.version === knownVersion) return;  // no changes
-  // Version changed — fetch full list
+  if (ver && !ver.error && ver.version === knownVersion) return;  // no changes
+  // Version changed or endpoint unavailable — fetch full list
   const data = await api(`/lists/${currentListId}`);
   if (data && !data.error) {
     knownVersion = data.version ?? null;
