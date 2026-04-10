@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.8.8";
+const KLAAR_VERSION = "0.8.9";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -96,17 +96,24 @@ function friendlyDate(val) {
 
   const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-  if (diffDays === 0) return "Today";
-  if (diffDays === 1) return "Tomorrow";
-  if (diffDays === -1) return "Yesterday";
-  if (diffDays >= 2 && diffDays <= 6) return `This ${dayNames[target.getDay()]}`;
-  if (diffDays === 7) return `Next ${dayNames[target.getDay()]}`;
-  if (diffDays >= -6 && diffDays <= -2) return `Last ${dayNames[target.getDay()]}`;
+  let label;
+  if (diffDays === 0) label = "Today";
+  else if (diffDays === 1) label = "Tomorrow";
+  else if (diffDays === -1) label = "Yesterday";
+  else if (diffDays >= 2 && diffDays <= 6) label = `This ${dayNames[target.getDay()]}`;
+  else if (diffDays === 7) label = `Next ${dayNames[target.getDay()]}`;
+  else if (diffDays >= -6 && diffDays <= -2) label = `Last ${dayNames[target.getDay()]}`;
+  else {
+    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const yr = target.getFullYear() !== now.getFullYear() ? `, ${target.getFullYear()}` : "";
+    label = `${months[target.getMonth()]} ${target.getDate()}${yr}`;
+  }
 
-  // Beyond a week: show short date
-  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  const yr = target.getFullYear() !== now.getFullYear() ? `, ${target.getFullYear()}` : "";
-  return `${months[target.getMonth()]} ${target.getDate()}${yr}`;
+  // Append time if non-midnight
+  if (parsed.getHours() !== 0 || parsed.getMinutes() !== 0) {
+    label += " " + parsed.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  }
+  return label;
 }
 
 async function api(path, opts = {}) {
@@ -952,7 +959,7 @@ function renderViewport() {
           if (ke.ctrlKey && ke.key === "d") {
             ke.preventDefault();
             const picker = document.createElement("input");
-            picker.type = "datetime-local";
+            picker.type = "date";
             picker.className = "tag-date-picker";
             const bubbleRect = bubble.getBoundingClientRect();
             picker.style.position = "fixed";
@@ -960,7 +967,7 @@ function renderViewport() {
             picker.style.top = (bubbleRect.bottom + 2) + "px";
             picker.style.zIndex = "2000";
             if (current) {
-              try { picker.value = new Date(current).toISOString().slice(0, 16); } catch (e) {}
+              try { picker.value = new Date(current).toISOString().slice(0, 10); } catch (e) {}
             }
             document.body.appendChild(picker);
             pickerActive = true;
@@ -972,7 +979,7 @@ function renderViewport() {
               closed = true;
               pickerActive = false;
               if (picker.value) {
-                inp.value = new Date(picker.value).toISOString().replace(/\.\d{3}Z$/, "Z");
+                inp.value = picker.value;  // stores as YYYY-MM-DD
                 inp.size = Math.max(3, inp.value.length + 1);
               }
               if (document.body.contains(picker)) picker.remove();
