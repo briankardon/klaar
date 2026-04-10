@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.7.19-debug";
+const KLAAR_VERSION = "0.7.20-debug";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (tap version in header to toggle)
@@ -2963,7 +2963,11 @@ document.addEventListener("touchstart", (e) => {
   if (sidebar.contains(e.target) || tagPane.contains(e.target)) return;
   if (e.target.closest(".header-toggle")) return;
   dbg("tap outside panel → closing");
-  closePanels();
+  // Close panels but keep pointer-events:none briefly so the click event
+  // from this same tap doesn't reach the now-interactive items
+  sidebar.classList.remove("panel-open");
+  tagPane.classList.remove("panel-open");
+  setTimeout(() => document.body.classList.remove("panel-active"), 400);
 }, true);
 
 
