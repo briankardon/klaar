@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.8.11";
+const KLAAR_VERSION = "0.8.12";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -2666,23 +2666,15 @@ function startDrag(e, itemId, startY, ctrlKey) {
 }
 
 function getVisibleIndex(itemId) {
-  const hidden = computeCollapseHidden();
-  let vis = 0;
-  for (let i = 0; i < currentItems.length; i++) {
-    if (hidden.has(i)) continue;
-    if (currentItems[i].id === itemId) return vis;
-    vis++;
+  for (let i = 0; i < visibleList.length; i++) {
+    if (visibleList[i].item.id === itemId) return i;
   }
   return -1;
 }
 
 function getDataIndexOfVisibleRow(visibleRow) {
-  const hidden = computeCollapseHidden();
-  let vis = 0;
-  for (let i = 0; i < currentItems.length; i++) {
-    if (hidden.has(i)) continue;
-    if (vis === visibleRow) return i;
-    vis++;
+  if (visibleRow >= 0 && visibleRow < visibleList.length) {
+    return visibleList[visibleRow].dataIdx;
   }
   return currentItems.length;
 }
@@ -2745,10 +2737,10 @@ function onDragMove(e) {
   dragState.crossListTarget = null;
 
   // Normal within-list drag logic
-  const relY = e.clientY - itemsRect.top;
-  const visibleCount = itemsEl.querySelectorAll(".item").length;
+  const container = document.getElementById("items-container");
+  const relY = e.clientY - itemsRect.top + container.scrollTop;
   let targetRow = Math.round(relY / itemHeight);
-  targetRow = Math.max(0, Math.min(targetRow, visibleCount));
+  targetRow = Math.max(0, Math.min(targetRow, visibleList.length));
 
   if (targetRow === dragState.currentVisibleIdx) return;
 
