@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.7.12";
+const KLAAR_VERSION = "0.7.13";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 const API = "/api";
@@ -2956,6 +2956,17 @@ document.addEventListener("touchstart", (e) => {
   closePanels();
   hideContextMenu();
 }, true);  // capture phase — fires before element-level listeners
+
+// Also block click events when closing panels (tap = touchstart + touchend + click)
+document.addEventListener("click", (e) => {
+  const sidebarOpen = sidebar.classList.contains("panel-open");
+  const tagOpen    = tagPane.classList.contains("panel-open");
+  if (!sidebarOpen && !tagOpen) return;
+  if (sidebar.contains(e.target) || tagPane.contains(e.target)) return;
+  if (e.target.closest(".header-toggle")) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+}, true);
 
 
 // Handle mobile breakpoint changes
