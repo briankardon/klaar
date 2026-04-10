@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.8.21";
+const KLAAR_VERSION = "0.9.0";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 (function initTheme() {

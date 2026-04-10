@@ -279,6 +279,13 @@ def index():
     return send_from_directory("static", "index.html")
 
 
+@app.route("/user")
+def user_page():
+    if not _current_user():
+        return send_from_directory("static", "login.html")
+    return send_from_directory("static", "user.html")
+
+
 @app.post("/api/setup")
 def setup():
     """Create the first (admin) user."""
@@ -397,6 +404,137 @@ def list_users():
         "display_name": u["display_name"],
         "admin": u.get("admin", False),
     } for u in users])
+
+
+@app.patch("/api/me")
+@_require_auth
+def update_me():
+    """Update own profile: display_name and/or password."""
+    user = _current_user()
+    body = request.get_json(force=True)
+    users = _load_users()
+    u = next((u for u in users if u["id"] == user["id"]), None)
+    if u is None:
+        return jsonify({"error": "user not found"}), 404
+
+    if "display_name" in body:
+        dn = str(body["display_name"]).strip()[:200]
+        if dn:
+            u["display_name"] = dn
+
+    if "new_password" in body:
+        current_pw = body.get("current_password", "")
+        if not check_password_hash(u["password_hash"], current_pw):
+            return jsonify({"error": "current password is incorrect"}), 403
+        new_pw = body["new_password"]
+        if len(new_pw) < 6:
+            return jsonify({"error": "password must be at least 6 characters"}), 400
+        u["password_hash"] = generate_password_hash(new_pw)
+
+    _save_users(users)
+    return jsonify({
+        "id": u["id"],
+        "username": u["username"],
+        "display_name": u["display_name"],
+        "admin": u.get("admin", False),
+    })
+
+
+@app.delete("/api/me")
+@_require_auth
+def delete_me():
+    """Delete own account. Requires password confirmation."""
+    user = _current_user()
+    body = request.get_json(force=True)
+    password = body.get("password", "")
+    users = _load_users()
+    u = next((u for u in users if u["id"] == user["id"]), None)
+    if u is None:
+        return jsonify({"error": "user not found"}), 404
+    if not check_password_hash(u["password_hash"], password):
+        return jsonify({"error": "incorrect password"}), 403
+
+    # Delete user's lists
+    for path in list(DATA_DIR.glob("*.json")):
+        if path.name == "users.json":
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if data.get("owner") == user["id"]:
+                path.unlink()
+        except (json.JSONDecodeError, KeyError):
+            pass
+
+    users = [x for x in users if x["id"] != user["id"]]
+    _save_users(users)
+    session.clear()
+    return "", 204
+
+
+@app.delete("/api/users/<user_id>")
+@_require_auth
+def delete_user(user_id: str):
+    """Admin: delete another user."""
+    user = _current_user()
+    if not user.get("admin"):
+        return jsonify({"error": "admin required"}), 403
+    if user_id == user["id"]:
+        return jsonify({"error": "cannot delete yourself here, use DELETE /api/me"}), 400
+    users = _load_users()
+    target = next((u for u in users if u["id"] == user_id), None)
+    if target is None:
+        return jsonify({"error": "user not found"}), 404
+
+    # Delete target user's lists
+    for path in list(DATA_DIR.glob("*.json")):
+        if path.name == "users.json":
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if data.get("owner") == user_id:
+                path.unlink()
+        except (json.JSONDecodeError, KeyError):
+            pass
+
+    users = [x for x in users if x["id"] != user_id]
+    _save_users(users)
+    return "", 204
+
+
+@app.patch("/api/users/<user_id>")
+@_require_auth
+def admin_update_user(user_id: str):
+    """Admin: update another user (toggle admin, change display name, reset password)."""
+    user = _current_user()
+    if not user.get("admin"):
+        return jsonify({"error": "admin required"}), 403
+    users = _load_users()
+    target = next((u for u in users if u["id"] == user_id), None)
+    if target is None:
+        return jsonify({"error": "user not found"}), 404
+    body = request.get_json(force=True)
+
+    if "display_name" in body:
+        dn = str(body["display_name"]).strip()[:200]
+        if dn:
+            target["display_name"] = dn
+    if "admin" in body:
+        target["admin"] = bool(body["admin"])
+    if "password" in body:
+        pw = body["password"]
+        if len(pw) < 6:
+            return jsonify({"error": "password must be at least 6 characters"}), 400
+        target["password_hash"] = generate_password_hash(pw)
+
+    _save_users(users)
+    return jsonify({
+        "id": target["id"],
+        "username": target["username"],
+        "display_name": target["display_name"],
+        "admin": target.get("admin", False),
+    })
 
 
 @app.post("/api/users")
