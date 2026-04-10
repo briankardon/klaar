@@ -928,7 +928,7 @@ main {
 
 /* ---- Mobile reorder mode ---- */
 
-#ctx-move {
+#ctx-move, #ctx-move-hierarchy {
   display: none;
 }
 
@@ -1080,8 +1080,8 @@ main {
     opacity: 0.4 !important;
   }
 
-  /* Show Move option in context menu on mobile */
-  #ctx-move {
+  /* Show Move options in context menu on mobile */
+  #ctx-move, #ctx-move-hierarchy {
     display: block;
   }
 
@@ -1138,9 +1138,26 @@ main {
     height: 36px;
   }
 
-  /* Search row stacks vertically on narrow screens */
+  /* Compact tag bubbles: colored circle with first letter */
+  .tag-bubble {
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border-radius: 50%;
+    font-size: 0.6rem;
+    line-height: 18px;
+    text-align: center;
+    overflow: hidden;
+  }
+
+  /* Hide depth collapse buttons */
+  #collapse-bar {
+    display: none !important;
+  }
+
+  /* Keep search and completion filter on same row */
   #search-row {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
   }
 }
 

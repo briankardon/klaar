@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.6.3";
+const KLAAR_VERSION = "0.6.4";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 const API = "/api";
@@ -777,9 +777,14 @@ function renderViewport() {
       const tagVal = itemTagValue(item, tagId);
       const bubble = document.createElement("span");
       bubble.className = "tag-bubble";
-      bubble.textContent = tagVal != null ? `${tagDef.name}: ${tagVal}` : tagDef.name;
+      if (mobileQuery.matches) {
+        bubble.textContent = tagDef.name.charAt(0).toUpperCase();
+        bubble.title = tagVal != null ? `${tagDef.name}: ${tagVal}` : tagDef.name;
+      } else {
+        bubble.textContent = tagVal != null ? `${tagDef.name}: ${tagVal}` : tagDef.name;
+        bubble.title = "Click: remove / Ctrl: hierarchy / Dbl-click: set value";
+      }
       bubble.style.background = tagDef.color;
-      bubble.title = "Click: remove / Ctrl: hierarchy / Dbl-click: set value";
       let clickTimer = null;
       let editing = false;
       bubble.addEventListener("click", (e) => {
@@ -2719,9 +2724,13 @@ document.getElementById("reorder-place").addEventListener("click", commitReorder
 document.getElementById("reorder-cancel").addEventListener("click", exitReorderMode);
 document.getElementById("ctx-move").addEventListener("click", () => {
   const itemId = ctxItemId;
-  const hierarchy = ctxHierarchy;
   hideContextMenu();
-  enterReorderMode(itemId, hierarchy);
+  enterReorderMode(itemId, false);
+});
+document.getElementById("ctx-move-hierarchy").addEventListener("click", () => {
+  const itemId = ctxItemId;
+  hideContextMenu();
+  enterReorderMode(itemId, true);
 });
 
 // -------------------------------------------------------------------
