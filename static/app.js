@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.7.15-debug";
+const KLAAR_VERSION = "0.7.16-debug";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (tap version in header to toggle)
@@ -2928,7 +2928,7 @@ function closePanels() {
   dbg("closePanels()");
   sidebar.classList.remove("panel-open");
   tagPane.classList.remove("panel-open");
-  panelBackdrop.classList.remove("active");
+  panelBackdrop.classList.remove("active", "hidden");
 }
 
 document.getElementById("btn-toggle-sidebar").addEventListener("click", () => {
