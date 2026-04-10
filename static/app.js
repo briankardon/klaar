@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.7.3";
+const KLAAR_VERSION = "0.7.4";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 const API = "/api";
@@ -1008,16 +1008,17 @@ async function addItemAfter(afterId, depth) {
     method: "POST",
     body,
   });
-  await refreshItems();
   if (result && result.id) {
     selectedIds.clear();
     selectedIds.add(result.id);
     lastSelectedId = result.id;
-    renderViewport();
+  }
+  await refreshItems();
+  if (result && result.id) {
     const newEl = itemsEl.querySelector(`.item[data-id="${result.id}"] .item-text`);
     if (newEl) {
-      newEl.value = "";
-      newEl.focus();
+      if (newEl.tagName === "INPUT") { newEl.value = ""; newEl.focus(); }
+      else { newEl.click(); } // mobile: tap span to open input
     }
   }
 }
