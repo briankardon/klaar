@@ -17,8 +17,6 @@ header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  position: relative;
-  z-index: 1000;
 }
 
 .header-left {
@@ -77,8 +75,6 @@ header h1 {
 main {
   display: flex;
   height: calc(100vh - 48px);
-  position: relative;
-  z-index: 1;
 }
 
 /* ---- Sidebar ---- */
@@ -1081,6 +1077,11 @@ main {
 
   .item-left {
     max-width: none;
+  }
+
+  /* Block interaction with items when a panel is open */
+  body.panel-active #list-view {
+    pointer-events: none;
   }
 
   /* Make hover-only buttons always visible on mobile */

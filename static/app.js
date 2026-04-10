@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.7.17-debug";
+const KLAAR_VERSION = "0.7.18-debug";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (tap version in header to toggle)
@@ -2928,7 +2928,7 @@ function closePanels() {
   dbg("closePanels()");
   sidebar.classList.remove("panel-open");
   tagPane.classList.remove("panel-open");
-  panelBackdrop.classList.remove("active", "hidden");
+  document.body.classList.remove("panel-active");
 }
 
 document.getElementById("btn-toggle-sidebar").addEventListener("click", () => {
@@ -2937,12 +2937,7 @@ document.getElementById("btn-toggle-sidebar").addEventListener("click", () => {
   closePanels();
   if (opening) {
     sidebar.classList.add("panel-open");
-    panelBackdrop.classList.add("active");
-    dbg(`backdrop classes: ${panelBackdrop.className}`);
-    dbg(`backdrop display: ${getComputedStyle(panelBackdrop).display}`);
-    dbg(`backdrop opacity: ${getComputedStyle(panelBackdrop).opacity}`);
-    dbg(`backdrop z-index: ${getComputedStyle(panelBackdrop).zIndex}`);
-    dbg(`backdrop pointerEvents: ${getComputedStyle(panelBackdrop).pointerEvents}`);
+    document.body.classList.add("panel-active");
   }
 });
 
@@ -2953,25 +2948,19 @@ document.getElementById("btn-toggle-tagpane").addEventListener("click", () => {
   closePanels();
   if (opening) {
     tagPane.classList.add("panel-open");
-    panelBackdrop.classList.add("active");
-    dbg(`backdrop classes: ${panelBackdrop.className}`);
-    dbg(`backdrop opacity: ${getComputedStyle(panelBackdrop).opacity}`);
-    dbg(`backdrop z-index: ${getComputedStyle(panelBackdrop).zIndex}`);
-    dbg(`backdrop pointerEvents: ${getComputedStyle(panelBackdrop).pointerEvents}`);
+    document.body.classList.add("panel-active");
   }
 });
 
-// Backdrop catches all taps/clicks when panels are open
-panelBackdrop.addEventListener("click", () => {
-  dbg("backdrop clicked!");
+// Close panels when tapping outside them (pointer-events:none on list-view
+// means touches fall through to body, so document listener catches them)
+document.addEventListener("touchstart", (e) => {
+  if (!document.body.classList.contains("panel-active")) return;
+  if (sidebar.contains(e.target) || tagPane.contains(e.target)) return;
+  if (e.target.closest(".header-toggle")) return;
+  dbg("tap outside panel → closing");
   closePanels();
-  hideContextMenu();
-});
-panelBackdrop.addEventListener("touchend", (e) => {
-  e.preventDefault();
-  closePanels();
-  hideContextMenu();
-});
+}, true);
 
 
 // Handle mobile breakpoint changes
