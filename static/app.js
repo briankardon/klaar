@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.8.17";
+const KLAAR_VERSION = "0.8.18";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 (function initTheme() {
@@ -2604,7 +2604,7 @@ function onItemMouseDown(e, itemId, isTextClick = false) {
     if (started) {
       document.body.style.userSelect = "";
       onDragEnd();
-    } else if (isTextClick) {
+    } else if (isTextClick && !ue.shiftKey && !ue.ctrlKey) {
       // Select the item without re-rendering (which would destroy the focused input)
       selectedIds.clear();
       selectedIds.add(itemId);
