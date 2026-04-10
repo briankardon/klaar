@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.6.8";
+const KLAAR_VERSION = "0.6.9";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 const API = "/api";
@@ -2009,6 +2009,15 @@ function showContextMenu(e, itemId, hierarchy) {
     ctxMenu.style.left = "";
     ctxMenu.style.top = "";
     panelBackdrop.classList.remove("hidden");
+    // Scroll item above the bottom sheet
+    const itemEl = itemsEl.querySelector(`.item[data-id="${itemId}"]`);
+    if (itemEl) {
+      const menuTop = window.innerHeight - ctxMenu.getBoundingClientRect().height;
+      const itemRect = itemEl.getBoundingClientRect();
+      if (itemRect.bottom > menuTop) {
+        itemsContainer.scrollTop += itemRect.bottom - menuTop + 10;
+      }
+    }
   } else {
     const menuRect = ctxMenu.getBoundingClientRect();
     let x = e.clientX;
