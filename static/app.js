@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.7.20-debug";
+const KLAAR_VERSION = "0.7.21-debug";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (tap version in header to toggle)
@@ -2956,19 +2956,32 @@ document.getElementById("btn-toggle-tagpane").addEventListener("click", () => {
   }
 });
 
-// Close panels when tapping outside them (pointer-events:none on list-view
-// means touches fall through to body, so document listener catches them)
+// Close panels when tapping outside them
+let panelRecentlyClosed = false;
 document.addEventListener("touchstart", (e) => {
   if (!document.body.classList.contains("panel-active")) return;
   if (sidebar.contains(e.target) || tagPane.contains(e.target)) return;
   if (e.target.closest(".header-toggle")) return;
   dbg("tap outside panel → closing");
-  // Close panels but keep pointer-events:none briefly so the click event
-  // from this same tap doesn't reach the now-interactive items
-  sidebar.classList.remove("panel-open");
-  tagPane.classList.remove("panel-open");
-  setTimeout(() => document.body.classList.remove("panel-active"), 400);
+  closePanels();
+  panelRecentlyClosed = true;
+  setTimeout(() => { panelRecentlyClosed = false; }, 800);
 }, true);
+
+// Block ALL events on list-view items while panels are open or just closed.
+// iOS WebKit ignores pointer-events:none for touch events and replays them
+// when the property is removed, so we must guard in JS.
+const listView = document.getElementById("list-view");
+for (const evt of ["touchstart", "touchend", "click", "mousedown", "mouseup"]) {
+  document.addEventListener(evt, (e) => {
+    if (!panelRecentlyClosed && !document.body.classList.contains("panel-active")) return;
+    if (listView && listView.contains(e.target)) {
+      dbg(`blocked ${evt} on item while panel active/recent`);
+      e.stopImmediatePropagation();
+      e.preventDefault();
+    }
+  }, true);
+}
 
 
 // Handle mobile breakpoint changes
