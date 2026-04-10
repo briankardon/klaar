@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.7.4";
+const KLAAR_VERSION = "0.7.5";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 const API = "/api";
@@ -550,7 +550,11 @@ function handleSelectionClick(itemId, shiftKey, ctrlKey) {
     selectedIds.add(itemId);
     lastSelectedId = itemId;
   }
-  applySelectionStyles();
+  if (hasActiveFilters()) {
+    renderItems();
+  } else {
+    applySelectionStyles();
+  }
 }
 
 function getVisibleItemIds() {
