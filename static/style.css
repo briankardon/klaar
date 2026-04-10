@@ -810,6 +810,11 @@ main {
   border-radius: 3px;
 }
 
+.item .btn-link {
+  opacity: 0.5;
+  color: var(--accent-primary);
+}
+
 .item:hover .btn-icon {
   opacity: 0.5;
 }

@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.8.19";
+const KLAAR_VERSION = "0.8.20";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 (function initTheme() {
@@ -1045,6 +1045,20 @@ function renderViewport() {
       badge.textContent = `(${end - start})`;
     }
 
+    // link button (if item contains a URL)
+    const urlMatch = item.text.match(/https?:\/\/[^\s]+/);
+    let btnLink = null;
+    if (urlMatch) {
+      btnLink = document.createElement("button");
+      btnLink.className = "btn-icon btn-link";
+      btnLink.textContent = "\u2197";
+      btnLink.title = urlMatch[0];
+      btnLink.addEventListener("click", (e) => {
+        e.stopPropagation();
+        window.open(urlMatch[0], "_blank", "noopener");
+      });
+    }
+
     // delete button
     const btnDel = document.createElement("button");
     btnDel.className = "btn-icon";
@@ -1056,7 +1070,9 @@ function renderViewport() {
     leftGroup.className = "item-left";
     if (item.depth > 0) leftGroup.style.paddingLeft = (item.depth * 1.5) + "rem";
     leftGroup.append(cb, txt);
-    li.append(leftGroup, btnDel, tagsContainer, badge);
+    li.append(leftGroup);
+    if (btnLink) li.append(btnLink);
+    li.append(btnDel, tagsContainer, badge);
     itemsEl.appendChild(li);
   }
 }
