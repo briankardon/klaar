@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.6.6";
+const KLAAR_VERSION = "0.6.7";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 const API = "/api";
@@ -2004,17 +2004,25 @@ function showContextMenu(e, itemId, hierarchy) {
 
   // Position menu
   ctxMenu.classList.remove("hidden");
-  const menuRect = ctxMenu.getBoundingClientRect();
-  let x = e.clientX;
-  let y = e.clientY;
-  if (x + menuRect.width > window.innerWidth) x = window.innerWidth - menuRect.width - 5;
-  if (y + menuRect.height > window.innerHeight) y = window.innerHeight - menuRect.height - 5;
-  ctxMenu.style.left = x + "px";
-  ctxMenu.style.top = y + "px";
+  if (mobileQuery.matches) {
+    // Bottom sheet — CSS handles positioning, show backdrop
+    ctxMenu.style.left = "";
+    ctxMenu.style.top = "";
+    panelBackdrop.classList.remove("hidden");
+  } else {
+    const menuRect = ctxMenu.getBoundingClientRect();
+    let x = e.clientX;
+    let y = e.clientY;
+    if (x + menuRect.width > window.innerWidth) x = window.innerWidth - menuRect.width - 5;
+    if (y + menuRect.height > window.innerHeight) y = window.innerHeight - menuRect.height - 5;
+    ctxMenu.style.left = x + "px";
+    ctxMenu.style.top = y + "px";
+  }
 }
 
 function hideContextMenu() {
   ctxMenu.classList.add("hidden");
+  if (mobileQuery.matches) panelBackdrop.classList.add("hidden");
   ctxItemId = null;
 }
 
@@ -2825,7 +2833,10 @@ document.getElementById("btn-toggle-tagpane").addEventListener("click", () => {
   }
 });
 
-panelBackdrop.addEventListener("click", closePanels);
+panelBackdrop.addEventListener("click", () => {
+  closePanels();
+  hideContextMenu();
+});
 
 
 // Handle mobile breakpoint changes

@@ -1089,6 +1089,34 @@ main {
     display: block;
   }
 
+  /* Context menu as bottom sheet */
+  #context-menu {
+    left: 0 !important;
+    right: 0;
+    bottom: 0;
+    top: auto !important;
+    width: 100%;
+    min-width: unset;
+    border-radius: 16px 16px 0 0;
+    border: none;
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.25);
+    padding: 8px 0;
+    padding-bottom: env(safe-area-inset-bottom, 8px);
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+
+  #context-menu .context-menu-header {
+    padding: 8px 16px;
+    font-size: 0.85rem;
+  }
+
+  #context-menu .context-menu-item,
+  #context-menu .context-menu-tag {
+    padding: 12px 16px;
+    font-size: 1rem;
+  }
+
   /* Suppress iOS native callout/selection on long-press */
   .item, .item .item-text {
     -webkit-touch-callout: none;
