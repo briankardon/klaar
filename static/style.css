@@ -1082,6 +1082,7 @@ main {
   /* Block interaction with items when a panel is open */
   body.panel-active #list-view {
     pointer-events: none;
+    opacity: 0.3;  /* DEBUG: visual confirmation that CSS rule is applying */
   }
 
   /* Make hover-only buttons always visible on mobile */

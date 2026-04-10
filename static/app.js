@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.7.18-debug";
+const KLAAR_VERSION = "0.7.19-debug";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (tap version in header to toggle)
@@ -2938,6 +2938,10 @@ document.getElementById("btn-toggle-sidebar").addEventListener("click", () => {
   if (opening) {
     sidebar.classList.add("panel-open");
     document.body.classList.add("panel-active");
+    const lv = document.getElementById("list-view");
+    dbg(`body classes: ${document.body.className}`);
+    dbg(`list-view pointer-events: ${getComputedStyle(lv).pointerEvents}`);
+    dbg(`list-view opacity: ${getComputedStyle(lv).opacity}`);
   }
 });
 
