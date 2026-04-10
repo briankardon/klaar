@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.8.14";
+const KLAAR_VERSION = "0.8.15";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -3163,7 +3163,8 @@ for (const evt of ["mousedown", "keydown", "touchstart", "scroll"]) {
 // -------------------------------------------------------------------
 
 const _h1 = document.querySelector("header h1");
-_h1.textContent = `Klaar v${KLAAR_VERSION}`;
+_h1.textContent = "Klaar";
+dbg(`Klaar v${KLAAR_VERSION}`);
 // Debug panel toggle: long-press on mobile, double-click on desktop
 if (_isMobile && _dbgEl) {
   let _dbgTimer = null;
