@@ -539,6 +539,10 @@ main {
   color: inherit;
   outline: none;
   border-radius: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .item .item-text:focus {

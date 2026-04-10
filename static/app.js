@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.6.5";
+const KLAAR_VERSION = "0.6.6";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 const API = "/api";
@@ -688,84 +688,111 @@ function renderViewport() {
       }
     });
 
-    // text input
-    const txt = document.createElement("input");
-    txt.type = "text";
-    txt.className = "item-text";
-    txt.value = item.text;
-    txt.draggable = false;
+    // text — input on desktop, span (tap-to-edit) on mobile
+    let txt;
     let deleted = false;
     let skipBlur = false;
-    txt.addEventListener("blur", () => {
-      if (deleted || skipBlur) return;
-      const val = txt.value.trim();
-      if (val !== item.text) {
-        updateItem(item.id, { text: val });
-      }
-    });
-    txt.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        if (txt.value.trim() !== item.text) {
-          updateItem(item.id, { text: txt.value.trim() });
-        }
-        addItemAfter(item.id, item.depth);
-        return;
-      }
-      if (e.key === "Backspace" && txt.value === "") {
-        e.preventDefault();
-        deleted = true;
-        const allItems = Array.from(itemsEl.querySelectorAll(".item"));
-        const idx = allItems.findIndex((el) => el.dataset.id === item.id);
-        const prevId = idx > 0 ? allItems[idx - 1].dataset.id : null;
-        deleteItem(item.id);
-        if (prevId) {
-          const el = itemsEl.querySelector(`.item[data-id="${prevId}"] .item-text`);
-          if (el) el.focus();
-        }
-        return;
-      }
-      if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-        e.preventDefault();
+
+    if (mobileQuery.matches) {
+      txt = document.createElement("span");
+      txt.className = "item-text";
+      txt.textContent = item.text;
+      txt.addEventListener("click", (e) => {
+        e.stopPropagation();
+        // Swap to input for editing
+        const inp = document.createElement("input");
+        inp.type = "text";
+        inp.className = "item-text";
+        inp.value = item.text;
+        inp.addEventListener("blur", () => {
+          const val = inp.value.trim();
+          if (val !== item.text) {
+            updateItem(item.id, { text: val });
+          } else {
+            // Swap back to span
+            renderItems();
+          }
+        });
+        inp.addEventListener("keydown", (ke) => {
+          if (ke.key === "Enter") { ke.preventDefault(); inp.blur(); }
+        });
+        txt.replaceWith(inp);
+        inp.focus();
+      });
+    } else {
+      txt = document.createElement("input");
+      txt.type = "text";
+      txt.value = item.text;
+      txt.draggable = false;
+      txt.className = "item-text";
+      txt.addEventListener("blur", () => {
+        if (deleted || skipBlur) return;
         const val = txt.value.trim();
         if (val !== item.text) {
-          skipBlur = true;
-          item.text = val;
-          api(`/lists/${currentListId}/items/${item.id}`, {
-            method: "PATCH",
-            body: { text: val },
-          }).then(() => scheduleSyncFromServer())
-            .catch(() => refreshItems());
+          updateItem(item.id, { text: val });
         }
-        // Navigate using visibleList instead of DOM
-        const visRow = visibleList.findIndex((v) => v.item.id === item.id);
-        const targetRow = visRow + (e.key === "ArrowUp" ? -1 : 1);
-        if (targetRow >= 0 && targetRow < visibleList.length) {
-          // Scroll into view if needed
-          const targetTop = targetRow * ITEM_HEIGHT;
-          const container = document.getElementById("items-container");
-          if (targetTop < container.scrollTop) container.scrollTop = targetTop;
-          if (targetTop + ITEM_HEIGHT > container.scrollTop + container.clientHeight) {
-            container.scrollTop = targetTop + ITEM_HEIGHT - container.clientHeight;
+      });
+      txt.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          if (txt.value.trim() !== item.text) {
+            updateItem(item.id, { text: txt.value.trim() });
           }
-          // Re-render viewport then focus
-          renderViewport();
-          const targetId = visibleList[targetRow].item.id;
-          const el = itemsEl.querySelector(`.item[data-id="${targetId}"] .item-text`);
-          if (el) el.focus();
+          addItemAfter(item.id, item.depth);
+          return;
         }
-        return;
-      }
-      if (e.key === "Tab") {
-        e.preventDefault();
-        if (selectedIds.size > 1 && selectedIds.has(item.id)) {
-          changeDepthSelected(e.shiftKey ? -1 : 1, item.id);
-        } else {
-          const newDepth = item.depth + (e.shiftKey ? -1 : 1);
-          updateItem(item.id, { depth: Math.max(0, newDepth) }, { refocusId: item.id });
+        if (e.key === "Backspace" && txt.value === "") {
+          e.preventDefault();
+          deleted = true;
+          const allItems = Array.from(itemsEl.querySelectorAll(".item"));
+          const idx = allItems.findIndex((el) => el.dataset.id === item.id);
+          const prevId = idx > 0 ? allItems[idx - 1].dataset.id : null;
+          deleteItem(item.id);
+          if (prevId) {
+            const el = itemsEl.querySelector(`.item[data-id="${prevId}"] .item-text`);
+            if (el) el.focus();
+          }
+          return;
         }
-      }
-    });
+        if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+          e.preventDefault();
+          const val = txt.value.trim();
+          if (val !== item.text) {
+            skipBlur = true;
+            item.text = val;
+            api(`/lists/${currentListId}/items/${item.id}`, {
+              method: "PATCH",
+              body: { text: val },
+            }).then(() => scheduleSyncFromServer())
+              .catch(() => refreshItems());
+          }
+          const visRow = visibleList.findIndex((v) => v.item.id === item.id);
+          const targetRow = visRow + (e.key === "ArrowUp" ? -1 : 1);
+          if (targetRow >= 0 && targetRow < visibleList.length) {
+            const targetTop = targetRow * ITEM_HEIGHT;
+            const container = document.getElementById("items-container");
+            if (targetTop < container.scrollTop) container.scrollTop = targetTop;
+            if (targetTop + ITEM_HEIGHT > container.scrollTop + container.clientHeight) {
+              container.scrollTop = targetTop + ITEM_HEIGHT - container.clientHeight;
+            }
+            renderViewport();
+            const targetId = visibleList[targetRow].item.id;
+            const el = itemsEl.querySelector(`.item[data-id="${targetId}"] .item-text`);
+            if (el) el.focus();
+          }
+          return;
+        }
+        if (e.key === "Tab") {
+          e.preventDefault();
+          if (selectedIds.size > 1 && selectedIds.has(item.id)) {
+            changeDepthSelected(e.shiftKey ? -1 : 1, item.id);
+          } else {
+            const newDepth = item.depth + (e.shiftKey ? -1 : 1);
+            updateItem(item.id, { depth: Math.max(0, newDepth) }, { refocusId: item.id });
+          }
+        }
+      });
+    }
 
     // tag bubbles
     const tagsContainer = document.createElement("span");
