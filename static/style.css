@@ -1086,15 +1086,10 @@ main {
   }
 
   /* Suppress iOS native callout/selection on long-press */
-  .item {
+  .item, .item .item-text {
     -webkit-touch-callout: none;
     -webkit-user-select: none;
     user-select: none;
-  }
-
-  .item .item-text {
-    -webkit-user-select: text;
-    user-select: text;
   }
 
   /* Larger touch targets */
