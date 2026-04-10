@@ -21,6 +21,14 @@
   </header>
 
   <div id="panel-backdrop" class="hidden"></div>
+
+  <!-- Mobile reorder mode -->
+  <div id="reorder-banner" class="hidden">
+    <span id="reorder-label"></span>
+    <button id="reorder-place">Place here</button>
+    <button id="reorder-cancel">Cancel</button>
+  </div>
+  <div id="reorder-cursor" class="hidden"></div>
   <main>
     <!-- Sidebar: list of todo lists -->
     <nav id="sidebar">
@@ -82,6 +90,7 @@
   <!-- Context menu -->
   <div id="context-menu" class="hidden">
     <div id="context-menu-header" class="context-menu-header"></div>
+    <div class="context-menu-item" id="ctx-move">Move</div>
     <div class="context-menu-item" id="ctx-delete">Delete</div>
     <div class="context-menu-item" id="ctx-copy">Copy to clipboard</div>
     <div class="context-menu-item" id="ctx-gather">Gather matching</div>

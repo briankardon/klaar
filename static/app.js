@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.6.2";
+const KLAAR_VERSION = "0.6.3";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 const API = "/api";
@@ -2525,9 +2525,6 @@ function onDragEnd() {
   if (!dragState) return;
   document.removeEventListener("mousemove", onDragMove);
   document.removeEventListener("mouseup", onDragEnd);
-  document.removeEventListener("touchmove", onTouchDragMove);
-  document.removeEventListener("touchend", onTouchDragEnd);
-  document.removeEventListener("touchcancel", onTouchDragEnd);
 
   const { itemId, blockIds, blockSize, useFullReorder, ghost, sourceListId, crossListTarget, switchedList } = dragState;
   ghost.remove();
@@ -2580,127 +2577,152 @@ function onDragEnd() {
 }
 
 // -------------------------------------------------------------------
-// Touch support (long-press context menu + touch drag)
+// Touch support (long-press context menu)
 // -------------------------------------------------------------------
 
 const itemsContainer = document.getElementById("items-container");
-let autoScrollRAF = null;
-let lastTouchY = 0;
-
-function onTouchDragMove(e) {
-  if (!dragState) return;
-  e.preventDefault();
-  const t = e.touches[0];
-  lastTouchY = t.clientY;
-  onDragMove({ clientX: t.clientX, clientY: t.clientY });
-}
-
-function onTouchDragEnd() {
-  stopAutoScroll();
-  itemsContainer.style.overflowY = "";
-  onDragEnd();
-}
-
-function startAutoScroll() {
-  const EDGE_ZONE = 50;   // px from edge to trigger scroll
-  const MAX_SPEED = 8;    // px per frame at the very edge
-
-  function tick() {
-    if (!dragState) { stopAutoScroll(); return; }
-    const rect = itemsContainer.getBoundingClientRect();
-    const distFromTop = lastTouchY - rect.top;
-    const distFromBottom = rect.bottom - lastTouchY;
-
-    if (distFromTop < EDGE_ZONE && distFromTop > 0) {
-      const speed = MAX_SPEED * (1 - distFromTop / EDGE_ZONE);
-      itemsContainer.scrollTop -= speed;
-    } else if (distFromBottom < EDGE_ZONE && distFromBottom > 0) {
-      const speed = MAX_SPEED * (1 - distFromBottom / EDGE_ZONE);
-      itemsContainer.scrollTop += speed;
-    }
-    autoScrollRAF = requestAnimationFrame(tick);
-  }
-  autoScrollRAF = requestAnimationFrame(tick);
-}
-
-function stopAutoScroll() {
-  if (autoScrollRAF) { cancelAnimationFrame(autoScrollRAF); autoScrollRAF = null; }
-}
 
 function setupItemTouch(li, itemId) {
   let longPressTimer = null;
   let startX, startY;
-  let dragStarted = false;
-  let liftFired = false;  // item "lifted" after long-press hold
 
   li.addEventListener("touchstart", (e) => {
     if (e.target.type === "checkbox") return;
     const touch = e.touches[0];
     startX = touch.clientX;
     startY = touch.clientY;
-    dragStarted = false;
-    liftFired = false;
 
     longPressTimer = setTimeout(() => {
       longPressTimer = null;
-      liftFired = true;
-      navigator.vibrate?.(30);
       window.getSelection()?.removeAllRanges();
-      document.body.style.userSelect = "none";
-      // Freeze native scrolling so drag works reliably on iOS
-      itemsContainer.style.overflowY = "hidden";
-      // Visual feedback: highlight the lifted item
-      li.classList.add("touch-lifted");
-    }, 500);
-  }, { passive: true });
-
-  li.addEventListener("touchmove", (e) => {
-    const touch = e.touches[0];
-    const dx = touch.clientX - startX;
-    const dy = touch.clientY - startY;
-
-    if (!liftFired) {
-      // Finger moved before long-press — cancel, let browser scroll
-      if (Math.sqrt(dx * dx + dy * dy) >= 10) {
-        if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
-      }
-      return;  // don't preventDefault — allow native scroll
-    }
-
-    // Item is lifted — start drag on first movement
-    e.preventDefault();
-    if (!dragStarted) {
-      dragStarted = true;
-      li.classList.remove("touch-lifted");
-      if (document.activeElement?.classList?.contains("item-text")) {
-        document.activeElement.blur();
-      }
-      startDrag({ clientX: touch.clientX, clientY: touch.clientY }, itemId, startY, false);
-      lastTouchY = touch.clientY;
-      startAutoScroll();
-      document.addEventListener("touchmove", onTouchDragMove, { passive: false });
-      document.addEventListener("touchend", onTouchDragEnd);
-      document.addEventListener("touchcancel", onTouchDragEnd);
-    }
-  }, { passive: false });
-
-  li.addEventListener("touchend", (e) => {
-    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
-    li.classList.remove("touch-lifted");
-
-    if (liftFired && !dragStarted) {
-      // Long-pressed but didn't drag — show context menu
-      e.preventDefault();
-      const touch = e.changedTouches[0];
       showContextMenu(
         { preventDefault() {}, clientX: touch.clientX, clientY: touch.clientY },
         itemId, false
       );
-      itemsContainer.style.overflowY = "";
-    }
-    document.body.style.userSelect = "";
+    }, 500);
+  }, { passive: true });
+
+  li.addEventListener("touchmove", () => {
+    // Finger moved — cancel long-press, allow native scroll
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+  }, { passive: true });
+
+  li.addEventListener("touchend", () => {
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
   });
 }
+
+// -------------------------------------------------------------------
+// Mobile reorder mode
+// -------------------------------------------------------------------
+
+const reorderBanner = document.getElementById("reorder-banner");
+const reorderLabel = document.getElementById("reorder-label");
+const reorderCursor = document.getElementById("reorder-cursor");
+let reorderItemId = null;   // the item being moved
+let reorderBlockIds = null; // Set of ids (item + children if hierarchy)
+
+function enterReorderMode(itemId, hierarchy) {
+  const item = currentItems.find((it) => it.id === itemId);
+  if (!item) return;
+
+  reorderItemId = itemId;
+  const dataIdx = currentItems.indexOf(item);
+
+  if (hierarchy) {
+    const [start, end] = getChildRange(dataIdx);
+    reorderBlockIds = new Set(currentItems.slice(dataIdx, end).map((it) => it.id));
+  } else {
+    reorderBlockIds = new Set([itemId]);
+  }
+
+  const label = item.text || "(untitled)";
+  const count = reorderBlockIds.size;
+  reorderLabel.textContent = count > 1
+    ? `Moving: ${label} (+${count - 1})`
+    : `Moving: ${label}`;
+
+  // Mark source items
+  for (const id of reorderBlockIds) {
+    const el = itemsEl.querySelector(`.item[data-id="${id}"]`);
+    if (el) el.classList.add("drag-source");
+  }
+
+  reorderBanner.classList.remove("hidden");
+  reorderCursor.classList.remove("hidden");
+  updateReorderCursor();
+  itemsContainer.addEventListener("scroll", updateReorderCursor);
+}
+
+function updateReorderCursor() {
+  if (!reorderItemId) return;
+  const containerRect = itemsContainer.getBoundingClientRect();
+  // Cursor sits at vertical center of the items container
+  const cursorY = containerRect.top + containerRect.height / 2;
+  reorderCursor.style.top = cursorY + "px";
+}
+
+function getReorderInsertIndex() {
+  const containerRect = itemsContainer.getBoundingClientRect();
+  const centerY = containerRect.height / 2;
+  const scrollTop = itemsContainer.scrollTop;
+  // Which visible row is at the center?
+  const row = Math.round((scrollTop + centerY) / ITEM_HEIGHT);
+  // Convert visible row to data index
+  const dataIdx = getDataIndexOfVisibleRow(Math.max(0, row));
+  return dataIdx;
+}
+
+function commitReorder() {
+  if (!reorderItemId) return;
+
+  const destIdx = getReorderInsertIndex();
+
+  // Remove the block from current position
+  const block = currentItems.filter((it) => reorderBlockIds.has(it.id));
+  currentItems = currentItems.filter((it) => !reorderBlockIds.has(it.id));
+
+  // Insert at destination (adjust for removal shift)
+  const clampedIdx = Math.min(destIdx, currentItems.length);
+  // Find the right insert position — destIdx was computed before removal,
+  // so recalculate based on new array
+  const insertAt = Math.min(clampedIdx, currentItems.length);
+  currentItems.splice(insertAt, 0, ...block);
+
+  renderItems();
+
+  // Send reorder to server
+  api(`/lists/${currentListId}/items/reorder`, {
+    method: "POST",
+    body: { order: currentItems.map((it) => it.id) },
+  }).then(() => scheduleSyncFromServer())
+    .catch(() => refreshItems());
+
+  exitReorderMode();
+}
+
+function exitReorderMode() {
+  if (reorderBlockIds) {
+    for (const id of reorderBlockIds) {
+      const el = itemsEl.querySelector(`.item[data-id="${id}"]`);
+      if (el) el.classList.remove("drag-source");
+    }
+  }
+  reorderItemId = null;
+  reorderBlockIds = null;
+  reorderBanner.classList.add("hidden");
+  reorderCursor.classList.add("hidden");
+  itemsContainer.removeEventListener("scroll", updateReorderCursor);
+}
+
+document.getElementById("reorder-place").addEventListener("click", commitReorder);
+document.getElementById("reorder-cancel").addEventListener("click", exitReorderMode);
+document.getElementById("ctx-move").addEventListener("click", () => {
+  const itemId = ctxItemId;
+  const hierarchy = ctxHierarchy;
+  hideContextMenu();
+  enterReorderMode(itemId, hierarchy);
+});
 
 // -------------------------------------------------------------------
 // Auth
