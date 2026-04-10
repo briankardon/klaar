@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.8.9";
+const KLAAR_VERSION = "0.8.10";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -86,7 +86,16 @@ function friendlyDate(val) {
   if (!val || typeof val !== "string") return null;
   // Match ISO dates: 2026-04-10, 2026-04-10T14:30:00Z, etc.
   if (!/^\d{4}-\d{2}-\d{2}/.test(val)) return null;
-  const parsed = new Date(val);
+
+  // Date-only strings (YYYY-MM-DD) must be parsed as local, not UTC
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(val);
+  let parsed;
+  if (dateOnly) {
+    const [y, m, d] = val.split("-").map(Number);
+    parsed = new Date(y, m - 1, d);
+  } else {
+    parsed = new Date(val);
+  }
   if (isNaN(parsed)) return null;
 
   const now = new Date();
