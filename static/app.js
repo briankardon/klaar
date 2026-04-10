@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.8.5";
+const KLAAR_VERSION = "0.8.6";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -79,6 +79,34 @@ function removeTagFromItemData(item, tagId) {
 function setTagValue(item, tagId, value) {
   const t = item.tags.find((t) => t.id === tagId);
   if (t) t.value = value;
+}
+
+// Format ISO date strings as friendly relative labels
+function friendlyDate(val) {
+  if (!val || typeof val !== "string") return null;
+  // Match ISO dates: 2026-04-10, 2026-04-10T14:30:00Z, etc.
+  if (!/^\d{4}-\d{2}-\d{2}/.test(val)) return null;
+  const parsed = new Date(val);
+  if (isNaN(parsed)) return null;
+
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const target = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+  const diffDays = Math.round((target - today) / 86400000);
+
+  const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Tomorrow";
+  if (diffDays === -1) return "Yesterday";
+  if (diffDays >= 2 && diffDays <= 6) return `This ${dayNames[target.getDay()]}`;
+  if (diffDays === 7) return `Next ${dayNames[target.getDay()]}`;
+  if (diffDays >= -6 && diffDays <= -2) return `Last ${dayNames[target.getDay()]}`;
+
+  // Beyond a week: show short date
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const yr = target.getFullYear() !== now.getFullYear() ? `, ${target.getFullYear()}` : "";
+  return `${months[target.getMonth()]} ${target.getDate()}${yr}`;
 }
 
 async function api(path, opts = {}) {
@@ -865,12 +893,14 @@ function renderViewport() {
       const tagVal = itemTagValue(item, tagId);
       const bubble = document.createElement("span");
       bubble.className = "tag-bubble";
+      const friendly = friendlyDate(tagVal);
+      const displayVal = friendly ?? tagVal;
       if (mobileQuery.matches) {
         bubble.textContent = tagDef.name.charAt(0).toUpperCase();
         bubble.title = tagVal != null ? `${tagDef.name}: ${tagVal}` : tagDef.name;
       } else {
-        bubble.textContent = tagVal != null ? `${tagDef.name}: ${tagVal}` : tagDef.name;
-        bubble.title = "Click: remove / Ctrl: hierarchy / Dbl-click: set value";
+        bubble.textContent = displayVal != null ? `${tagDef.name}: ${displayVal}` : tagDef.name;
+        bubble.title = friendly ? tagVal : "Click: remove / Ctrl: hierarchy / Dbl-click: set value";
       }
       bubble.style.background = tagDef.color;
       let clickTimer = null;
