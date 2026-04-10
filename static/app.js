@@ -1097,8 +1097,9 @@ async function syncFromServer() {
       const el = itemsEl.querySelector(`.item[data-id="${focusedId}"] .item-text`);
       if (el) el.focus();
     }
-    // Remote change — keep polling alive
+    // Remote change — keep polling alive and fast
     lastActivity = Date.now();
+    resetPollInterval();
   }
 }
 
@@ -2877,36 +2878,48 @@ mobileQuery.addEventListener("change", (e) => {
 // Background polling (sync from other devices)
 // -------------------------------------------------------------------
 
-const POLL_INTERVAL = 30000;  // 30 seconds
-const IDLE_TIMEOUT = 300000;  // 5 minutes
+const POLL_MIN = 5000;      // start at 5 seconds
+const POLL_MAX = 30000;     // slow down to 30 seconds
+const IDLE_TIMEOUT = 300000; // 5 minutes
 let lastActivity = Date.now();
 let pollTimer = null;
+let pollInterval = POLL_MIN;
 
 function onUserActivity() {
   const wasIdle = Date.now() - lastActivity > IDLE_TIMEOUT;
   lastActivity = Date.now();
   if (wasIdle) {
-    // Returning from idle — sync immediately and restart polling
+    pollInterval = POLL_MIN;
     syncFromServer();
     startPolling();
   }
 }
 
+function resetPollInterval() {
+  pollInterval = POLL_MIN;
+}
+
+function schedulePollTick() {
+  pollTimer = setTimeout(() => {
+    pollTimer = null;
+    if (!currentListId || document.hidden) return;
+    if (Date.now() - lastActivity > IDLE_TIMEOUT) return;
+    syncFromServer();
+    // Slow down if no changes were detected (pollInterval unchanged),
+    // speed up if syncFromServer detected changes (it calls resetPollInterval)
+    pollInterval = Math.min(pollInterval * 1.5, POLL_MAX);
+    schedulePollTick();
+  }, pollInterval);
+}
+
 function startPolling() {
   stopPolling();
-  pollTimer = setInterval(() => {
-    if (!currentListId) return;
-    if (document.hidden) return;
-    if (Date.now() - lastActivity > IDLE_TIMEOUT) {
-      stopPolling();
-      return;
-    }
-    syncFromServer();
-  }, POLL_INTERVAL);
+  pollInterval = POLL_MIN;
+  schedulePollTick();
 }
 
 function stopPolling() {
-  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
 }
 
 document.addEventListener("visibilitychange", () => {
