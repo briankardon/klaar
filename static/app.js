@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.6.9";
+const KLAAR_VERSION = "0.7.0";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 const API = "/api";
@@ -170,6 +170,7 @@ async function selectList(id) {
   currentItems = data.items;
   currentTags = data.tags || [];
   currentViews = data.views || [];
+  knownVersion = data.version ?? null;
   activeViewId = null;
   listTitle.textContent = data.name;
   emptyState.classList.add("hidden");
@@ -184,6 +185,7 @@ async function selectList(id) {
   if (currentItems.length === 0) {
     addItemAfter(null, 0);
   }
+  startPolling();
 }
 
 async function refreshItems() {
@@ -192,6 +194,7 @@ async function refreshItems() {
   currentItems = data.items;
   currentTags = data.tags || [];
   currentViews = data.views || [];
+  knownVersion = data.version ?? null;
   renderItems();
   renderTagPane();
   renderViewPane();
@@ -1070,23 +1073,37 @@ function toggleDoneHierarchy(index) {
 
 // Schedule a full server refresh after edits go idle
 let syncTimer = null;
+
+let knownVersion = null;  // version counter from server
+
+async function syncFromServer() {
+  if (!currentListId) return;
+  // Lightweight version check first
+  const ver = await api(`/lists/${currentListId}/version`);
+  if (!ver || ver.error) return;
+  if (ver.version === knownVersion) return;  // no changes
+  // Version changed — fetch full list
+  const data = await api(`/lists/${currentListId}`);
+  if (data && !data.error) {
+    knownVersion = data.version ?? null;
+    currentItems = data.items;
+    currentTags = data.tags || [];
+    const focused = document.activeElement;
+    const focusedId = focused?.closest?.(".item")?.dataset?.id;
+    renderItems();
+    renderTagPane();
+    if (focusedId) {
+      const el = itemsEl.querySelector(`.item[data-id="${focusedId}"] .item-text`);
+      if (el) el.focus();
+    }
+    // Remote change — keep polling alive
+    lastActivity = Date.now();
+  }
+}
+
 function scheduleSyncFromServer() {
   if (syncTimer) clearTimeout(syncTimer);
-  syncTimer = setTimeout(async () => {
-    const data = await api(`/lists/${currentListId}`);
-    if (data && !data.error) {
-      currentItems = data.items;
-      currentTags = data.tags || [];
-      const focused = document.activeElement;
-      const focusedId = focused?.closest?.(".item")?.dataset?.id;
-      renderItems();
-      renderTagPane();
-      if (focusedId) {
-        const el = itemsEl.querySelector(`.item[data-id="${focusedId}"] .item-text`);
-        if (el) el.focus();
-      }
-    }
-  }, 1000);
+  syncTimer = setTimeout(syncFromServer, 1000);
 }
 
 function updateItem(itemId, fields, {refocusId} = {}) {
@@ -2854,6 +2871,56 @@ mobileQuery.addEventListener("change", (e) => {
   ITEM_HEIGHT = getItemHeight();
   if (currentListId) renderItems();
 });
+
+// -------------------------------------------------------------------
+// Background polling (sync from other devices)
+// -------------------------------------------------------------------
+
+const POLL_INTERVAL = 30000;  // 30 seconds
+const IDLE_TIMEOUT = 300000;  // 5 minutes
+let lastActivity = Date.now();
+let pollTimer = null;
+
+function onUserActivity() {
+  const wasIdle = Date.now() - lastActivity > IDLE_TIMEOUT;
+  lastActivity = Date.now();
+  if (wasIdle) {
+    // Returning from idle — sync immediately and restart polling
+    syncFromServer();
+    startPolling();
+  }
+}
+
+function startPolling() {
+  stopPolling();
+  pollTimer = setInterval(() => {
+    if (!currentListId) return;
+    if (document.hidden) return;
+    if (Date.now() - lastActivity > IDLE_TIMEOUT) {
+      stopPolling();
+      return;
+    }
+    syncFromServer();
+  }, POLL_INTERVAL);
+}
+
+function stopPolling() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    stopPolling();
+  } else {
+    lastActivity = Date.now();
+    syncFromServer();
+    startPolling();
+  }
+});
+
+for (const evt of ["mousedown", "keydown", "touchstart", "scroll"]) {
+  document.addEventListener(evt, onUserActivity, { passive: true, capture: true });
+}
 
 // -------------------------------------------------------------------
 // Init

@@ -151,6 +151,7 @@ def _save_with_undo(data: dict, snapshot: dict) -> None:
 
 
 def _save_list(data: dict) -> None:
+    data["version"] = data.get("version", 0) + 1
     path = _list_path(data["id"])
     fd, tmp = tempfile.mkstemp(dir=DATA_DIR, suffix=".tmp")
     try:
@@ -488,6 +489,18 @@ def get_list(list_id: str):
     if not _can_access(data, user):
         return jsonify({"error": "not found"}), 404
     return jsonify(data)
+
+
+@app.get("/api/lists/<list_id>/version")
+@_require_auth
+def get_list_version(list_id: str):
+    data = _load_list(list_id)
+    if data is None:
+        return jsonify({"error": "not found"}), 404
+    user = _current_user()
+    if not _can_access(data, user):
+        return jsonify({"error": "not found"}), 404
+    return jsonify({"version": data.get("version", 0)})
 
 
 @app.patch("/api/lists/<list_id>")
