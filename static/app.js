@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.7.8";
+const KLAAR_VERSION = "0.7.9";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 const API = "/api";
@@ -2939,6 +2939,11 @@ document.getElementById("btn-toggle-tagpane").addEventListener("click", () => {
 });
 
 panelBackdrop.addEventListener("click", () => {
+  closePanels();
+  hideContextMenu();
+});
+panelBackdrop.addEventListener("touchend", (e) => {
+  e.preventDefault();   // prevent delayed click / ghost tap
   closePanels();
   hideContextMenu();
 });
