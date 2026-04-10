@@ -489,7 +489,7 @@ main {
 
 /* Tooltip for truncated item text (desktop hover) */
 #item-tooltip {
-  position: absolute;
+  position: fixed;
   background: #f0f4f8;
   border: 1px solid #ccc;
   border-radius: 4px;

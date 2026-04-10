@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.8.3";
+const KLAAR_VERSION = "0.8.4";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -1008,9 +1008,8 @@ if (!_isMobile) {
     tooltip.textContent = txt.value ?? txt.textContent;
     tooltip.classList.remove("hidden");
     const rect = txt.getBoundingClientRect();
-    const contRect = itemsContainer.getBoundingClientRect();
-    tooltip.style.left = (rect.left - contRect.left) + "px";
-    tooltip.style.top = (rect.bottom - contRect.top + itemsContainer.scrollTop + 2) + "px";
+    tooltip.style.left = rect.left + "px";
+    tooltip.style.top = (rect.bottom + 2) + "px";
   });
 
   itemsContainer.addEventListener("mouseout", (e) => {
