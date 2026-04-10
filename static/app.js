@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.8.7";
+const KLAAR_VERSION = "0.8.8";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -901,7 +901,7 @@ function renderViewport() {
         bubble.title = tagVal != null ? `${tagDef.name}: ${tagVal}` : tagDef.name;
       } else {
         bubble.textContent = displayVal != null ? `${tagDef.name}: ${displayVal}` : tagDef.name;
-        bubble.title = friendly ? tagVal : "Click: remove / Ctrl: hierarchy / Dbl-click: set value";
+        if (friendly) bubble.dataset.rawDate = tagVal;
       }
       bubble.style.background = tagDef.color;
       let clickTimer = null;
@@ -1025,12 +1025,23 @@ document.getElementById("items-container").addEventListener("scroll", () => {
   if (visibleList.length > 0) renderViewport();
 });
 
-// Tooltip for truncated item text (desktop only)
+// Tooltip for truncated item text and date tag values (desktop only)
 if (!_isMobile) {
   const tooltip = document.getElementById("item-tooltip");
   const itemsContainer = document.getElementById("items-container");
 
   itemsContainer.addEventListener("mouseover", (e) => {
+    // Date tag bubble tooltip
+    const bubble = e.target.closest(".tag-bubble");
+    if (bubble && bubble.dataset.rawDate) {
+      tooltip.textContent = bubble.dataset.rawDate;
+      tooltip.classList.remove("hidden");
+      const rect = bubble.getBoundingClientRect();
+      tooltip.style.left = rect.left + "px";
+      tooltip.style.top = (rect.bottom + 2) + "px";
+      return;
+    }
+    // Truncated item text tooltip
     const txt = e.target.closest(".item-text");
     if (!txt || txt.scrollWidth <= txt.clientWidth) {
       tooltip.classList.add("hidden");
@@ -1044,8 +1055,9 @@ if (!_isMobile) {
   });
 
   itemsContainer.addEventListener("mouseout", (e) => {
-    const txt = e.target.closest(".item-text");
-    if (txt) tooltip.classList.add("hidden");
+    if (e.target.closest(".item-text") || e.target.closest(".tag-bubble")) {
+      tooltip.classList.add("hidden");
+    }
   });
 }
 
