@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.8.18";
+const KLAAR_VERSION = "0.8.19";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 (function initTheme() {
@@ -2544,8 +2544,28 @@ document.addEventListener("keydown", (e) => {
 // Undo / Redo
 // -------------------------------------------------------------------
 
+async function flushActiveEdit() {
+  const active = document.activeElement;
+  if (active?.classList?.contains("item-text")) {
+    const itemEl = active.closest(".item");
+    if (itemEl) {
+      const itemId = itemEl.dataset.id;
+      const item = currentItems.find((it) => it.id === itemId);
+      const val = active.value.trim();
+      if (item && val !== item.text) {
+        item.text = val;
+        await api(`/lists/${currentListId}/items/${itemId}`, {
+          method: "PATCH",
+          body: { text: val },
+        });
+      }
+    }
+  }
+}
+
 async function performUndo() {
   if (!currentListId) return;
+  await flushActiveEdit();
   const data = await api(`/lists/${currentListId}/undo`, { method: "POST" });
   if (data && !data.error) {
     currentItems = data.items;
