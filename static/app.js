@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.7.2";
+const KLAAR_VERSION = "0.7.3";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 const API = "/api";
@@ -174,10 +174,20 @@ async function selectList(id) {
   currentViews = data.views || [];
   knownVersion = data.version ?? null;
   activeViewId = null;
+  // Clear all filters and view state from previous list
+  textFilters.length = 0;
+  tagFilters.length = 0;
+  currentSort = null;
+  completionFilter = "all";
+  selectedIds.clear();
+  lastSelectedId = null;
+  hiddenTagIds.clear();
+  searchInput.value = "";
   listTitle.textContent = data.name;
   emptyState.classList.add("hidden");
   listView.classList.remove("hidden");
   tagPane.classList.remove("hidden");
+  renderFilterBar();
   renderItems();
   renderTagPane();
   renderViewPane();
