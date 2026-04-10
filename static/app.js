@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.8.2";
+const KLAAR_VERSION = "0.8.3";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -993,6 +993,31 @@ function renderViewport() {
 document.getElementById("items-container").addEventListener("scroll", () => {
   if (visibleList.length > 0) renderViewport();
 });
+
+// Tooltip for truncated item text (desktop only)
+if (!_isMobile) {
+  const tooltip = document.getElementById("item-tooltip");
+  const itemsContainer = document.getElementById("items-container");
+
+  itemsContainer.addEventListener("mouseover", (e) => {
+    const txt = e.target.closest(".item-text");
+    if (!txt || txt.scrollWidth <= txt.clientWidth) {
+      tooltip.classList.add("hidden");
+      return;
+    }
+    tooltip.textContent = txt.value ?? txt.textContent;
+    tooltip.classList.remove("hidden");
+    const rect = txt.getBoundingClientRect();
+    const contRect = itemsContainer.getBoundingClientRect();
+    tooltip.style.left = (rect.left - contRect.left) + "px";
+    tooltip.style.top = (rect.bottom - contRect.top + itemsContainer.scrollTop + 2) + "px";
+  });
+
+  itemsContainer.addEventListener("mouseout", (e) => {
+    const txt = e.target.closest(".item-text");
+    if (txt) tooltip.classList.add("hidden");
+  });
+}
 
 function updateCollapseBar(maxDepth) {
   collapseBar.innerHTML = "";

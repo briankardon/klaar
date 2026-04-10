@@ -487,19 +487,21 @@ main {
   background: #f0f4f8;
 }
 
-/* Expand truncated items on hover (desktop only) */
-@media (hover: hover) {
-  .item:hover {
-    height: auto;
-    min-height: 26px;
-    z-index: 10;
-  }
-  .item:hover .item-text {
-    white-space: normal;
-    overflow: visible;
-    text-overflow: unset;
-    word-break: break-word;
-  }
+/* Tooltip for truncated item text (desktop hover) */
+#item-tooltip {
+  position: absolute;
+  background: #f0f4f8;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  color: #2c3e50;
+  max-width: 500px;
+  word-break: break-word;
+  z-index: 100;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
 }
 
 .item.selected {
