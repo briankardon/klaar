@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.8.12";
+const KLAAR_VERSION = "0.8.13";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -751,9 +751,8 @@ function renderViewport() {
     li.addEventListener("mousedown", (e) => {
       if (e.target.type === "checkbox") return;
       if (e.target.closest(".tag-bubble")) return;
-      if (e.target.closest(".item-text")) return;
       if (e.shiftKey) e.preventDefault();
-      onItemMouseDown(e, item.id);
+      onItemMouseDown(e, item.id, !!e.target.closest(".item-text"));
     });
     li.addEventListener("contextmenu", (e) => {
       showContextMenu(e, item.id, e.ctrlKey);
@@ -2549,7 +2548,7 @@ async function performRedo() {
 let dragState = null;
 const DRAG_THRESHOLD = 5;
 
-function onItemMouseDown(e, itemId) {
+function onItemMouseDown(e, itemId, isTextClick = false) {
   const startX = e.clientX;
   const startY = e.clientY;
   const ctrlKey = e.ctrlKey;
@@ -2580,7 +2579,7 @@ function onItemMouseDown(e, itemId) {
     if (started) {
       document.body.style.userSelect = "";
       onDragEnd();
-    } else {
+    } else if (!isTextClick) {
       handleSelectionClick(itemId, ue.shiftKey, ue.ctrlKey);
     }
   }
