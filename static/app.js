@@ -2015,7 +2015,7 @@ function showContextMenu(e, itemId, hierarchy) {
       const menuTop = window.innerHeight - ctxMenu.getBoundingClientRect().height;
       const itemRect = itemEl.getBoundingClientRect();
       if (itemRect.bottom > menuTop) {
-        itemsContainer.scrollTop += itemRect.bottom - menuTop + 10;
+        itemsContainer.scrollBy({ top: itemRect.bottom - menuTop + 10, behavior: "smooth" });
       }
     }
   } else {
