@@ -1018,8 +1018,8 @@ main {
 #panel-backdrop {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.3);
-  z-index: 999;          /* just below panels (1000), above everything else */
+  background: rgba(255,0,0,0.5);  /* DEBUG: bright red to confirm visibility */
+  z-index: 999;
   cursor: pointer;
   pointer-events: none;
   opacity: 0;

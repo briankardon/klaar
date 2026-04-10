@@ -1,6 +1,17 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.7.14";
+const KLAAR_VERSION = "0.7.15-debug";
 console.log(`Klaar v${KLAAR_VERSION}`);
+
+// On-screen debug log (tap version in header to toggle)
+const _dbgEl = document.getElementById("debug-log");
+function dbg(msg) {
+  console.log(msg);
+  if (!_dbgEl) return;
+  const line = document.createElement("div");
+  line.textContent = `${new Date().toLocaleTimeString()} ${msg}`;
+  _dbgEl.appendChild(line);
+  _dbgEl.scrollTop = _dbgEl.scrollHeight;
+}
 
 const API = "/api";
 
@@ -2914,6 +2925,7 @@ const panelBackdrop = document.getElementById("panel-backdrop");
 const sidebar = document.getElementById("sidebar");
 
 function closePanels() {
+  dbg("closePanels()");
   sidebar.classList.remove("panel-open");
   tagPane.classList.remove("panel-open");
   panelBackdrop.classList.remove("active");
@@ -2921,25 +2933,37 @@ function closePanels() {
 
 document.getElementById("btn-toggle-sidebar").addEventListener("click", () => {
   const opening = !sidebar.classList.contains("panel-open");
+  dbg(`sidebar toggle, opening=${opening}`);
   closePanels();
   if (opening) {
     sidebar.classList.add("panel-open");
     panelBackdrop.classList.add("active");
+    dbg(`backdrop classes: ${panelBackdrop.className}`);
+    dbg(`backdrop display: ${getComputedStyle(panelBackdrop).display}`);
+    dbg(`backdrop opacity: ${getComputedStyle(panelBackdrop).opacity}`);
+    dbg(`backdrop z-index: ${getComputedStyle(panelBackdrop).zIndex}`);
+    dbg(`backdrop pointerEvents: ${getComputedStyle(panelBackdrop).pointerEvents}`);
   }
 });
 
 document.getElementById("btn-toggle-tagpane").addEventListener("click", () => {
-  if (!currentListId) return;  // no list selected
+  if (!currentListId) return;
   const opening = !tagPane.classList.contains("panel-open");
+  dbg(`tagpane toggle, opening=${opening}`);
   closePanels();
   if (opening) {
     tagPane.classList.add("panel-open");
     panelBackdrop.classList.add("active");
+    dbg(`backdrop classes: ${panelBackdrop.className}`);
+    dbg(`backdrop opacity: ${getComputedStyle(panelBackdrop).opacity}`);
+    dbg(`backdrop z-index: ${getComputedStyle(panelBackdrop).zIndex}`);
+    dbg(`backdrop pointerEvents: ${getComputedStyle(panelBackdrop).pointerEvents}`);
   }
 });
 
-// Backdrop catches all taps/clicks when panels are open (z-index 999, just below panels)
+// Backdrop catches all taps/clicks when panels are open
 panelBackdrop.addEventListener("click", () => {
+  dbg("backdrop clicked!");
   closePanels();
   hideContextMenu();
 });
@@ -3023,6 +3047,10 @@ for (const evt of ["mousedown", "keydown", "touchstart", "scroll"]) {
 // Init
 // -------------------------------------------------------------------
 
-document.querySelector("header h1").textContent = `Klaar v${KLAAR_VERSION}`;
+const _h1 = document.querySelector("header h1");
+_h1.textContent = `Klaar v${KLAAR_VERSION}`;
+_h1.addEventListener("click", () => {
+  if (_dbgEl) _dbgEl.style.display = _dbgEl.style.display === "none" ? "block" : "none";
+});
 loadCurrentUser();
 loadLists();
