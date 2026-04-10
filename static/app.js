@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.8.13";
+const KLAAR_VERSION = "0.8.14";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -2649,6 +2649,7 @@ function startDrag(e, itemId, startY, ctrlKey) {
     blockIds,
     blockSize,
     useFullReorder,
+    offsetX: e.clientX - rect.left,
     offsetY: startY - rect.top,
     itemHeight: ITEM_HEIGHT,
     itemsRect,
@@ -2708,7 +2709,7 @@ function onDragMove(e) {
   const { ghost, itemId, blockIds, blockSize, offsetY, itemHeight, itemsRect } = dragState;
 
   // Move ghost to follow mouse
-  ghost.style.left = (e.clientX + 10) + "px";
+  ghost.style.left = (e.clientX - dragState.offsetX) + "px";
   ghost.style.top = (e.clientY - offsetY) + "px";
 
   // Check if mouse is over sidebar list
