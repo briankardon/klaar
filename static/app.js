@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.7.11";
+const KLAAR_VERSION = "0.7.12";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 const API = "/api";
@@ -2952,10 +2952,10 @@ document.addEventListener("touchstart", (e) => {
   if (sidebar.contains(e.target) || tagPane.contains(e.target)) return;
   if (e.target.closest(".header-toggle")) return;
   e.preventDefault();
-  e.stopPropagation();
+  e.stopImmediatePropagation();
   closePanels();
   hideContextMenu();
-});
+}, true);  // capture phase — fires before element-level listeners
 
 
 // Handle mobile breakpoint changes
