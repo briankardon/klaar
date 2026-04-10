@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.7.13";
+const KLAAR_VERSION = "0.7.14";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 const API = "/api";
@@ -2916,7 +2916,7 @@ const sidebar = document.getElementById("sidebar");
 function closePanels() {
   sidebar.classList.remove("panel-open");
   tagPane.classList.remove("panel-open");
-  panelBackdrop.classList.add("hidden");
+  panelBackdrop.classList.remove("active");
 }
 
 document.getElementById("btn-toggle-sidebar").addEventListener("click", () => {
@@ -2924,7 +2924,7 @@ document.getElementById("btn-toggle-sidebar").addEventListener("click", () => {
   closePanels();
   if (opening) {
     sidebar.classList.add("panel-open");
-    panelBackdrop.classList.remove("hidden");
+    panelBackdrop.classList.add("active");
   }
 });
 
@@ -2934,39 +2934,20 @@ document.getElementById("btn-toggle-tagpane").addEventListener("click", () => {
   closePanels();
   if (opening) {
     tagPane.classList.add("panel-open");
-    panelBackdrop.classList.remove("hidden");
+    panelBackdrop.classList.add("active");
   }
 });
 
+// Backdrop catches all taps/clicks when panels are open (z-index 999, just below panels)
 panelBackdrop.addEventListener("click", () => {
   closePanels();
   hideContextMenu();
 });
-
-// Close panels when tapping outside them (iOS may not fire click on backdrop div)
-document.addEventListener("touchstart", (e) => {
-  const sidebarOpen = sidebar.classList.contains("panel-open");
-  const tagOpen    = tagPane.classList.contains("panel-open");
-  if (!sidebarOpen && !tagOpen) return;
-  // If tap is inside the open panel or on a toggle button, let it through
-  if (sidebar.contains(e.target) || tagPane.contains(e.target)) return;
-  if (e.target.closest(".header-toggle")) return;
+panelBackdrop.addEventListener("touchend", (e) => {
   e.preventDefault();
-  e.stopImmediatePropagation();
   closePanels();
   hideContextMenu();
-}, true);  // capture phase — fires before element-level listeners
-
-// Also block click events when closing panels (tap = touchstart + touchend + click)
-document.addEventListener("click", (e) => {
-  const sidebarOpen = sidebar.classList.contains("panel-open");
-  const tagOpen    = tagPane.classList.contains("panel-open");
-  if (!sidebarOpen && !tagOpen) return;
-  if (sidebar.contains(e.target) || tagPane.contains(e.target)) return;
-  if (e.target.closest(".header-toggle")) return;
-  e.preventDefault();
-  e.stopImmediatePropagation();
-}, true);
+});
 
 
 // Handle mobile breakpoint changes
