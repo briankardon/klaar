@@ -609,6 +609,7 @@ main {
   list-style: none;
   overflow-y: auto;
   flex: 1;
+  min-height: 0;
 }
 
 .tag-entry {
@@ -820,6 +821,8 @@ main {
 #view-list {
   list-style: none;
   overflow-y: auto;
+  flex: 1;
+  min-height: 0;
 }
 
 .view-entry {
