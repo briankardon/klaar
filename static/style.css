@@ -315,6 +315,7 @@ main {
   align-items: center;
   gap: 4px;
   padding: 1px 8px;
+  border: 2px solid transparent;
   border-radius: 4px;
   font-size: 0.75rem;
   line-height: 18px;
