@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.7.22-debug";
+const KLAAR_VERSION = "0.7.23-debug";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (tap version in header to toggle)
@@ -2974,7 +2974,6 @@ document.addEventListener("touchstart", (e) => {
 // Block ALL events on list-view items while panels are open or just closed.
 // iOS WebKit ignores pointer-events:none for touch events and replays them
 // when the property is removed, so we must guard in JS.
-const listView = document.getElementById("list-view");
 for (const evt of ["touchstart", "touchend", "click", "mousedown", "mouseup"]) {
   document.addEventListener(evt, (e) => {
     if (!panelRecentlyClosed && !document.body.classList.contains("panel-active")) return;
