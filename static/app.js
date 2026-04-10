@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.6.4";
+const KLAAR_VERSION = "0.6.5";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 const API = "/api";
@@ -2587,29 +2587,46 @@ function onDragEnd() {
 
 const itemsContainer = document.getElementById("items-container");
 
+let longPressActive = false;  // true while a long-press timer is running
+
+// Suppress native context menu and text selection on mobile
+if (mobileQuery.matches) {
+  window.oncontextmenu = (e) => { e.preventDefault(); return false; };
+}
+mobileQuery.addEventListener("change", (e) => {
+  window.oncontextmenu = e.matches ? (ev) => { ev.preventDefault(); return false; } : null;
+});
+document.addEventListener("selectstart", (e) => {
+  if (longPressActive && mobileQuery.matches) e.preventDefault();
+});
+
 function setupItemTouch(li, itemId) {
   let longPressTimer = null;
-  let startX, startY;
 
   li.addEventListener("touchstart", (e) => {
     if (e.target.type === "checkbox") return;
     const touch = e.touches[0];
-    startX = touch.clientX;
-    startY = touch.clientY;
+    longPressActive = true;
 
     longPressTimer = setTimeout(() => {
       longPressTimer = null;
+      longPressActive = false;
       window.getSelection()?.removeAllRanges();
+      // Blur input to dismiss iOS keyboard/selection
+      if (document.activeElement?.classList?.contains("item-text")) {
+        document.activeElement.blur();
+      }
       showContextMenu(
         { preventDefault() {}, clientX: touch.clientX, clientY: touch.clientY },
         itemId, false
       );
+      // Clear selection again after a tick (iOS sometimes re-selects)
+      setTimeout(() => window.getSelection()?.removeAllRanges(), 50);
     }, 500);
   }, { passive: true });
 
   li.addEventListener("touchmove", () => {
-    // Finger moved — cancel long-press, allow native scroll
-    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; longPressActive = false; }
   }, { passive: true });
 
   li.addEventListener("touchend", () => {
