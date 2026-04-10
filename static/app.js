@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.7.5";
+const KLAAR_VERSION = "0.7.6";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 const API = "/api";
@@ -733,7 +733,14 @@ function renderViewport() {
           }
         });
         inp.addEventListener("keydown", (ke) => {
-          if (ke.key === "Enter") { ke.preventDefault(); inp.blur(); }
+          if (ke.key === "Enter") {
+            ke.preventDefault();
+            const val = inp.value.trim();
+            if (val !== item.text) {
+              updateItem(item.id, { text: val });
+            }
+            addItemAfter(item.id, item.depth);
+          }
         });
         txt.replaceWith(inp);
         inp.focus();
