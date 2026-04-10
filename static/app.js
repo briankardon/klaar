@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.7.6";
+const KLAAR_VERSION = "0.7.7";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 const API = "/api";
@@ -723,7 +723,9 @@ function renderViewport() {
         inp.type = "text";
         inp.className = "item-text";
         inp.value = item.text;
+        let mobileDeleted = false;
         inp.addEventListener("blur", () => {
+          if (mobileDeleted) return;
           const val = inp.value.trim();
           if (val !== item.text) {
             updateItem(item.id, { text: val });
@@ -740,6 +742,11 @@ function renderViewport() {
               updateItem(item.id, { text: val });
             }
             addItemAfter(item.id, item.depth);
+          }
+          if (ke.key === "Backspace" && inp.value === "") {
+            ke.preventDefault();
+            mobileDeleted = true;
+            deleteItem(item.id);
           }
         });
         txt.replaceWith(inp);
