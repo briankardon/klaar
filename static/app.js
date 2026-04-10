@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.7.7";
+const KLAAR_VERSION = "0.7.8";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 const API = "/api";
@@ -707,6 +707,19 @@ function renderViewport() {
       }
     });
 
+    // Shared keydown logic for both mobile and desktop inputs
+    function handleItemEnter(inp) {
+      if (inp.selectionStart === 0 && inp.value !== "") {
+        addItemBefore(item.id, item.depth);
+      } else {
+        const val = inp.value.trim();
+        if (val !== item.text) {
+          updateItem(item.id, { text: val });
+        }
+        addItemAfter(item.id, item.depth);
+      }
+    }
+
     // text — input on desktop, span (tap-to-edit) on mobile
     let txt;
     let deleted = false;
@@ -718,7 +731,6 @@ function renderViewport() {
       txt.textContent = item.text;
       txt.addEventListener("click", (e) => {
         e.stopPropagation();
-        // Swap to input for editing
         const inp = document.createElement("input");
         inp.type = "text";
         inp.className = "item-text";
@@ -730,18 +742,13 @@ function renderViewport() {
           if (val !== item.text) {
             updateItem(item.id, { text: val });
           } else {
-            // Swap back to span
             renderItems();
           }
         });
         inp.addEventListener("keydown", (ke) => {
           if (ke.key === "Enter") {
             ke.preventDefault();
-            const val = inp.value.trim();
-            if (val !== item.text) {
-              updateItem(item.id, { text: val });
-            }
-            addItemAfter(item.id, item.depth);
+            handleItemEnter(inp);
           }
           if (ke.key === "Backspace" && inp.value === "") {
             ke.preventDefault();
@@ -768,10 +775,7 @@ function renderViewport() {
       txt.addEventListener("keydown", (e) => {
         if (e.key === "Enter") {
           e.preventDefault();
-          if (txt.value.trim() !== item.text) {
-            updateItem(item.id, { text: txt.value.trim() });
-          }
-          addItemAfter(item.id, item.depth);
+          handleItemEnter(txt);
           return;
         }
         if (e.key === "Backspace" && txt.value === "") {
@@ -1037,6 +1041,27 @@ async function addItemAfter(afterId, depth) {
     if (newEl) {
       if (newEl.tagName === "INPUT") { newEl.value = ""; newEl.focus(); }
       else { newEl.click(); } // mobile: tap span to open input
+    }
+  }
+}
+
+async function addItemBefore(beforeId, depth) {
+  const body = { text: "", depth, before_id: beforeId };
+  const result = await api(`/lists/${currentListId}/items`, {
+    method: "POST",
+    body,
+  });
+  if (result && result.id) {
+    selectedIds.clear();
+    selectedIds.add(result.id);
+    lastSelectedId = result.id;
+  }
+  await refreshItems();
+  if (result && result.id) {
+    const newEl = itemsEl.querySelector(`.item[data-id="${result.id}"] .item-text`);
+    if (newEl) {
+      if (newEl.tagName === "INPUT") { newEl.value = ""; newEl.focus(); }
+      else { newEl.click(); }
     }
   }
 }

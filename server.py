@@ -555,7 +555,14 @@ def add_item(list_id: str):
     depth = max(0, min(20, int(body.get("depth", 0))))
     item = _new_item(text, depth)
     after_id = body.get("after_id")
-    if after_id and _valid_id(after_id):
+    before_id = body.get("before_id")
+    if before_id and _valid_id(before_id):
+        idx = next((i for i, it in enumerate(data["items"]) if it["id"] == before_id), None)
+        if idx is not None:
+            data["items"].insert(idx, item)
+        else:
+            data["items"].append(item)
+    elif after_id and _valid_id(after_id):
         idx = next((i for i, it in enumerate(data["items"]) if it["id"] == after_id), None)
         if idx is not None:
             data["items"].insert(idx + 1, item)
