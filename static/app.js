@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.7.9";
+const KLAAR_VERSION = "0.7.10";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 const API = "/api";
@@ -2942,8 +2942,15 @@ panelBackdrop.addEventListener("click", () => {
   closePanels();
   hideContextMenu();
 });
-panelBackdrop.addEventListener("touchend", (e) => {
-  e.preventDefault();   // prevent delayed click / ghost tap
+
+// Close panels when tapping outside them (iOS may not fire click on backdrop div)
+document.addEventListener("touchstart", (e) => {
+  const sidebarOpen = sidebar.classList.contains("panel-open");
+  const tagOpen    = tagPane.classList.contains("panel-open");
+  if (!sidebarOpen && !tagOpen) return;
+  // If tap is inside the open panel or on a toggle button, let it through
+  if (sidebar.contains(e.target) || tagPane.contains(e.target)) return;
+  if (e.target.closest(".header-toggle")) return;
   closePanels();
   hideContextMenu();
 });
