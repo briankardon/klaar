@@ -1018,7 +1018,7 @@ main {
 #panel-backdrop {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(255,0,0,0.5);  /* DEBUG: bright red to confirm visibility */
+  background: rgba(0,0,0,0.3);
   z-index: 999;
   cursor: pointer;
   pointer-events: none;
@@ -1082,7 +1082,6 @@ main {
   /* Block interaction with items when a panel is open */
   body.panel-active #list-view {
     pointer-events: none;
-    opacity: 0.3;  /* DEBUG: visual confirmation that CSS rule is applying */
   }
 
   /* Make hover-only buttons always visible on mobile */

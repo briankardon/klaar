@@ -1,12 +1,13 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.7.23-debug";
+const KLAAR_VERSION = "0.8.0";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
-// On-screen debug log (tap version in header to toggle)
+// On-screen debug log (mobile only — long-press title to toggle)
 const _dbgEl = document.getElementById("debug-log");
+const _isMobile = window.matchMedia("(max-width: 768px)").matches;
 function dbg(msg) {
   console.log(msg);
-  if (!_dbgEl) return;
+  if (!_isMobile || !_dbgEl) return;
   const line = document.createElement("div");
   line.textContent = `${new Date().toLocaleTimeString()} ${msg}`;
   _dbgEl.appendChild(line);
@@ -2118,7 +2119,7 @@ function showContextMenu(e, itemId, hierarchy) {
     // Bottom sheet — CSS handles positioning, show backdrop
     ctxMenu.style.left = "";
     ctxMenu.style.top = "";
-    panelBackdrop.classList.remove("hidden");
+    panelBackdrop.classList.add("active");
     // Scroll item above the bottom sheet
     const itemEl = itemsEl.querySelector(`.item[data-id="${itemId}"]`);
     if (itemEl) {
@@ -2141,7 +2142,7 @@ function showContextMenu(e, itemId, hierarchy) {
 
 function hideContextMenu() {
   ctxMenu.classList.add("hidden");
-  if (mobileQuery.matches) panelBackdrop.classList.add("hidden");
+  if (mobileQuery.matches) panelBackdrop.classList.remove("active");
   ctxItemId = null;
 }
 
@@ -2928,7 +2929,6 @@ const panelBackdrop = document.getElementById("panel-backdrop");
 const sidebar = document.getElementById("sidebar");
 
 function closePanels() {
-  dbg("closePanels()");
   sidebar.classList.remove("panel-open");
   tagPane.classList.remove("panel-open");
   document.body.classList.remove("panel-active");
@@ -2936,22 +2936,16 @@ function closePanels() {
 
 document.getElementById("btn-toggle-sidebar").addEventListener("click", () => {
   const opening = !sidebar.classList.contains("panel-open");
-  dbg(`sidebar toggle, opening=${opening}`);
   closePanels();
   if (opening) {
     sidebar.classList.add("panel-open");
     document.body.classList.add("panel-active");
-    const lv = document.getElementById("list-view");
-    dbg(`body classes: ${document.body.className}`);
-    dbg(`list-view pointer-events: ${getComputedStyle(lv).pointerEvents}`);
-    dbg(`list-view opacity: ${getComputedStyle(lv).opacity}`);
   }
 });
 
 document.getElementById("btn-toggle-tagpane").addEventListener("click", () => {
   if (!currentListId) return;
   const opening = !tagPane.classList.contains("panel-open");
-  dbg(`tagpane toggle, opening=${opening}`);
   closePanels();
   if (opening) {
     tagPane.classList.add("panel-open");
@@ -2965,7 +2959,6 @@ document.addEventListener("touchstart", (e) => {
   if (!document.body.classList.contains("panel-active")) return;
   if (sidebar.contains(e.target) || tagPane.contains(e.target)) return;
   if (e.target.closest(".header-toggle")) return;
-  dbg("tap outside panel → closing");
   closePanels();
   panelRecentlyClosed = true;
   setTimeout(() => { panelRecentlyClosed = false; }, 800);
@@ -2978,7 +2971,6 @@ for (const evt of ["touchstart", "touchend", "click", "mousedown", "mouseup"]) {
   document.addEventListener(evt, (e) => {
     if (!panelRecentlyClosed && !document.body.classList.contains("panel-active")) return;
     if (listView && listView.contains(e.target)) {
-      dbg(`blocked ${evt} on item while panel active/recent`);
       e.stopImmediatePropagation();
       e.preventDefault();
     }
@@ -3061,8 +3053,17 @@ for (const evt of ["mousedown", "keydown", "touchstart", "scroll"]) {
 
 const _h1 = document.querySelector("header h1");
 _h1.textContent = `Klaar v${KLAAR_VERSION}`;
-_h1.addEventListener("click", () => {
-  if (_dbgEl) _dbgEl.style.display = _dbgEl.style.display === "none" ? "block" : "none";
-});
+// Debug panel toggle: long-press on mobile, double-click on desktop
+if (_isMobile && _dbgEl) {
+  let _dbgTimer = null;
+  _h1.addEventListener("touchstart", () => {
+    _dbgTimer = setTimeout(() => {
+      _dbgEl.style.display = _dbgEl.style.display === "none" ? "block" : "none";
+      _dbgTimer = null;
+    }, 500);
+  }, { passive: true });
+  _h1.addEventListener("touchend", () => { if (_dbgTimer) { clearTimeout(_dbgTimer); _dbgTimer = null; } });
+  _h1.addEventListener("touchmove", () => { if (_dbgTimer) { clearTimeout(_dbgTimer); _dbgTimer = null; } });
+}
 loadCurrentUser();
 loadLists();
