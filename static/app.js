@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.7.21-debug";
+const KLAAR_VERSION = "0.7.22-debug";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (tap version in header to toggle)
@@ -12,6 +12,9 @@ function dbg(msg) {
   _dbgEl.appendChild(line);
   _dbgEl.scrollTop = _dbgEl.scrollHeight;
 }
+
+dbg(`UA: ${navigator.userAgent}`);
+dbg(`Standalone: ${window.navigator.standalone ?? "N/A"}`);
 
 const API = "/api";
 
