@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.7.1";
+const KLAAR_VERSION = "0.7.2";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 const API = "/api";
@@ -1186,9 +1186,18 @@ function itemMatchesFilters(item) {
   for (const f of textFilters) {
     if (!f.regex.test(item.text)) return false;
   }
-  for (const { tagId, condition } of tagFilters) {
-    if (!itemHasTag(item, tagId)) return false;
-    if (condition && !matchesCondition(itemTagValue(item, tagId), condition)) return false;
+  for (const { tagId, condition, exclude } of tagFilters) {
+    if (exclude) {
+      // Exclude mode: hide items that HAVE this tag (with optional condition)
+      if (condition) {
+        if (itemHasTag(item, tagId) && matchesCondition(itemTagValue(item, tagId), condition)) return false;
+      } else {
+        if (itemHasTag(item, tagId)) return false;
+      }
+    } else {
+      if (!itemHasTag(item, tagId)) return false;
+      if (condition && !matchesCondition(itemTagValue(item, tagId), condition)) return false;
+    }
   }
   return true;
 }
@@ -1292,12 +1301,18 @@ function renderFilterBar() {
   }
 
   for (let fi = 0; fi < tagFilters.length; fi++) {
-    const { tagId, condition } = tagFilters[fi];
+    const { tagId, condition, exclude } = tagFilters[fi];
     const tagDef = currentTags.find((t) => t.id === tagId);
     if (!tagDef) continue;
     const bubble = document.createElement("span");
     bubble.className = "filter-bubble filter-bubble-tag";
-    bubble.style.background = tagDef.color;
+    if (exclude) {
+      bubble.style.background = "transparent";
+      bubble.style.border = `2px solid ${tagDef.color}`;
+      bubble.style.color = tagDef.color;
+    } else {
+      bubble.style.background = tagDef.color;
+    }
     const label = condition ? `${tagDef.name} ${condition}` : tagDef.name;
     const labelSpan = document.createElement("span");
     labelSpan.textContent = label;
@@ -1305,17 +1320,25 @@ function renderFilterBar() {
     xSpan.className = "filter-x";
     xSpan.textContent = "\u00d7";
     bubble.append(labelSpan, xSpan);
-    bubble.title = "Click: remove / Double-click: set condition";
+    bubble.title = "Click: toggle include/exclude / Double-click: set condition";
     let clickTimer = null;
     const filterIdx = fi;
+    xSpan.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
+      tagFilters.splice(filterIdx, 1);
+      renderFilterBar();
+      renderItems();
+      renderTagPane();
+      scrollToItem(lastSelectedId);
+    });
     bubble.addEventListener("click", () => {
       if (clickTimer) clearTimeout(clickTimer);
       clickTimer = setTimeout(() => {
         clickTimer = null;
-        tagFilters.splice(filterIdx, 1);
+        tagFilters[filterIdx] = { tagId, condition, exclude: !exclude };
         renderFilterBar();
         renderItems();
-        renderTagPane();
         scrollToItem(lastSelectedId);
       }, 250);
     });
@@ -1410,7 +1433,7 @@ document.querySelectorAll(".comp-btn").forEach((btn) => {
 });
 
 function toggleTagFilter(tagId) {
-  tagFilters.push({ tagId, condition: null });
+  tagFilters.push({ tagId, condition: null, exclude: false });
   renderFilterBar();
   renderItems();
   renderTagPane();
@@ -1788,7 +1811,7 @@ const btnSaveView = document.getElementById("btn-save-view");
 function captureViewState() {
   return {
     textFilters: textFilters.map((f) => f.pattern),
-    tagFilters: tagFilters.map((f) => ({ tagId: f.tagId, condition: f.condition })),
+    tagFilters: tagFilters.map((f) => ({ tagId: f.tagId, condition: f.condition, exclude: f.exclude || false })),
     completionFilter,
     sort: currentSort ? { tagId: currentSort.tagId, direction: currentSort.direction } : null,
     hiddenTagIds: [...hiddenTagIds],
@@ -1809,7 +1832,7 @@ function applyViewState(view) {
   tagFilters.length = 0;
   for (const f of (view.tagFilters || [])) {
     if (validTagIds.has(f.tagId)) {
-      tagFilters.push({ tagId: f.tagId, condition: f.condition });
+      tagFilters.push({ tagId: f.tagId, condition: f.condition, exclude: f.exclude || false });
     }
   }
 
