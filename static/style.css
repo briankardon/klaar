@@ -810,11 +810,6 @@ main {
   border-radius: 3px;
 }
 
-.item .btn-link {
-  opacity: 0.5;
-  color: var(--accent-primary);
-}
-
 .item:hover .btn-icon {
   opacity: 0.5;
 }
@@ -1148,6 +1143,15 @@ main {
 
 .context-menu-item:hover {
   background: var(--bg-context-hover);
+}
+
+.context-menu-item.disabled {
+  color: var(--text-disabled);
+  cursor: default;
+}
+
+.context-menu-item.disabled:hover {
+  background: none;
 }
 
 .context-menu-divider {

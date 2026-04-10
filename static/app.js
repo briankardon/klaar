@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.8.20";
+const KLAAR_VERSION = "0.8.21";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 (function initTheme() {
@@ -1045,20 +1045,6 @@ function renderViewport() {
       badge.textContent = `(${end - start})`;
     }
 
-    // link button (if item contains a URL)
-    const urlMatch = item.text.match(/https?:\/\/[^\s]+/);
-    let btnLink = null;
-    if (urlMatch) {
-      btnLink = document.createElement("button");
-      btnLink.className = "btn-icon btn-link";
-      btnLink.textContent = "\u2197";
-      btnLink.title = urlMatch[0];
-      btnLink.addEventListener("click", (e) => {
-        e.stopPropagation();
-        window.open(urlMatch[0], "_blank", "noopener");
-      });
-    }
-
     // delete button
     const btnDel = document.createElement("button");
     btnDel.className = "btn-icon";
@@ -1070,9 +1056,7 @@ function renderViewport() {
     leftGroup.className = "item-left";
     if (item.depth > 0) leftGroup.style.paddingLeft = (item.depth * 1.5) + "rem";
     leftGroup.append(cb, txt);
-    li.append(leftGroup);
-    if (btnLink) li.append(btnLink);
-    li.append(btnDel, tagsContainer, badge);
+    li.append(leftGroup, btnDel, tagsContainer, badge);
     itemsEl.appendChild(li);
   }
 }
@@ -2234,6 +2218,17 @@ function showContextMenu(e, itemId, hierarchy) {
   ctxDelete.textContent = hierarchy ? "Delete hierarchy" : "Delete";
   ctxCopy.textContent = hierarchy ? "Copy hierarchy" : "Copy to clipboard";
 
+  // Show/hide "Visit link"
+  const urlMatch = item.text.match(/https?:\/\/[^\s]+/);
+  const ctxLink = document.getElementById("ctx-link");
+  if (urlMatch) {
+    ctxLink.classList.remove("disabled");
+    ctxLink.dataset.url = urlMatch[0];
+  } else {
+    ctxLink.classList.add("disabled");
+    ctxLink.dataset.url = "";
+  }
+
   // Build tag list
   ctxTags.innerHTML = "";
   for (const tagDef of currentTags) {
@@ -2399,6 +2394,14 @@ ctxCopy.addEventListener("click", async () => {
   });
   await navigator.clipboard.writeText(lines.join("\n"));
   hideContextMenu();
+});
+
+document.getElementById("ctx-link").addEventListener("click", () => {
+  const url = document.getElementById("ctx-link").dataset.url;
+  if (url) {
+    window.open(url, "_blank", "noopener");
+    hideContextMenu();
+  }
 });
 
 const ctxGather = document.getElementById("ctx-gather");
