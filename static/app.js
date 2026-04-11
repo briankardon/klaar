@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.2";
+const KLAAR_VERSION = "0.9.3";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 (function initTheme() {
@@ -191,6 +191,13 @@ async function loadLists() {
       deleteListById(l.id, l.name);
     });
 
+    if (l.owner && l.owner !== currentUserId) {
+      const shared = document.createElement("span");
+      shared.className = "list-shared-icon";
+      shared.textContent = "\u{1F465}";
+      shared.title = "Shared with you";
+      nameSpan.prepend(shared);
+    }
     li.append(nameSpan, delBtn);
     li.addEventListener("click", () => selectList(l.id));
     li.addEventListener("dblclick", (e) => {
@@ -199,7 +206,7 @@ async function loadLists() {
     });
     li.addEventListener("contextmenu", (e) => {
       e.preventDefault();
-      showListContextMenu(e, l.id, l.name);
+      showListContextMenu(e, l.id, l.name, l.owner);
     });
     if (mobileQuery.matches) {
       let lpTimer = null;
@@ -208,7 +215,7 @@ async function loadLists() {
           lpTimer = null;
           showListContextMenu(
             { preventDefault() {}, clientX: te.touches[0].clientX, clientY: te.touches[0].clientY },
-            l.id, l.name
+            l.id, l.name, l.owner
           );
         }, 500);
       }, { passive: true });
@@ -2587,12 +2594,17 @@ const listCtxHeader = document.getElementById("list-ctx-header");
 let listCtxId = null;
 let listCtxName = null;
 
-function showListContextMenu(e, listId, listName) {
+function showListContextMenu(e, listId, listName, ownerId) {
   e.preventDefault();
   listCtxId = listId;
   listCtxName = listName;
   listCtxHeader.textContent = listName;
   hideContextMenu();
+
+  const isOwner = !ownerId || ownerId === currentUserId;
+  document.getElementById("list-ctx-rename").style.display = isOwner ? "" : "none";
+  document.getElementById("list-ctx-delete").style.display = isOwner ? "" : "none";
+  document.getElementById("list-ctx-leave").style.display = isOwner ? "none" : "";
 
   if (mobileQuery.matches) {
     listCtxMenu.style.left = "0";
@@ -2627,6 +2639,19 @@ document.getElementById("list-ctx-rename").addEventListener("click", () => {
 document.getElementById("list-ctx-delete").addEventListener("click", () => {
   hideListContextMenu();
   deleteListById(listCtxId, listCtxName);
+});
+
+document.getElementById("list-ctx-leave").addEventListener("click", async () => {
+  hideListContextMenu();
+  if (!confirm(`Leave "${listCtxName}"? You will lose access unless re-shared.`)) return;
+  await api(`/lists/${listCtxId}/leave`, { method: "POST" });
+  if (listCtxId === currentListId) {
+    currentListId = null;
+    listView.classList.add("hidden");
+    tagPane.classList.add("hidden");
+    emptyState.classList.remove("hidden");
+  }
+  await loadLists();
 });
 
 document.getElementById("list-ctx-sharing").addEventListener("click", () => {
@@ -3280,9 +3305,11 @@ document.getElementById("btn-logout").addEventListener("click", async () => {
   window.location.href = "/";
 });
 
+let currentUserId = null;
 async function loadCurrentUser() {
   const data = await api("/me");
   if (data && !data.error) {
+    currentUserId = data.id;
     document.getElementById("user-display").textContent = data.display_name || data.username;
   }
 }

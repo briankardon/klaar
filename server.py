@@ -903,6 +903,20 @@ def get_list_sharing(list_id: str):
     })
 
 
+@app.post("/api/lists/<list_id>/leave")
+@_require_auth
+def leave_list(list_id: str):
+    data = _load_list(list_id)
+    if data is None:
+        return jsonify({"error": "not found"}), 404
+    user = _current_user()
+    if data.get("owner") == user["id"]:
+        return jsonify({"error": "owners cannot leave their own list"}), 400
+    data["shared_with"] = [s for s in data.get("shared_with", []) if s["user_id"] != user["id"]]
+    _save_list(data)
+    return jsonify({"ok": True})
+
+
 @app.delete("/api/lists/<list_id>")
 @_require_auth
 def delete_list(list_id: str):

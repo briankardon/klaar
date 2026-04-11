@@ -401,6 +401,11 @@ main {
   white-space: nowrap;
 }
 
+.list-shared-icon {
+  font-size: 0.75rem;
+  margin-right: 0.3rem;
+}
+
 .list-delete-btn {
   background: none;
   border: none;
