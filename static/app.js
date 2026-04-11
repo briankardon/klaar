@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.7";
+const KLAAR_VERSION = "0.9.8";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 (function initTheme() {
@@ -865,6 +865,7 @@ function renderViewport() {
     li.addEventListener("mousedown", (e) => {
       if (e.target.type === "checkbox") return;
       if (e.target.closest(".tag-bubble")) return;
+      if (e.target.closest(".btn-icon")) return;
       if (e.shiftKey) e.preventDefault();
       onItemMouseDown(e, item.id, !!e.target.closest(".item-text"));
     });
