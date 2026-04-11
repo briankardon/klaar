@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.12";
+const KLAAR_VERSION = "0.9.13";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 (function initTheme() {
@@ -2658,6 +2658,22 @@ document.addEventListener("keydown", (e) => {
   if (e.ctrlKey && ((e.key === "z" && e.shiftKey) || (e.key === "y" && !e.shiftKey)) && !e.altKey) {
     e.preventDefault();
     performRedo();
+    return;
+  }
+
+  // Backspace/Delete — delete all selected items (only when multiple selected)
+  if ((e.key === "Backspace" || e.key === "Delete") && selectedIds.size > 1) {
+    if (document.activeElement?.classList?.contains("item-text")) return;
+    e.preventDefault();
+    const ids = [...selectedIds];
+    currentItems = currentItems.filter(it => !selectedIds.has(it.id));
+    selectedIds.clear();
+    lastSelectedId = null;
+    renderItems();
+    api(`/lists/${currentListId}/items/bulk-delete`, {
+      method: "POST",
+      body: { item_ids: ids },
+    }).then(() => scheduleSyncFromServer()).catch(() => refreshItems());
     return;
   }
 });
