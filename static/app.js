@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.14";
+const KLAAR_VERSION = "0.9.15-debug";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 (function initTheme() {
@@ -2412,6 +2412,7 @@ function showContextMenu(e, itemId, hierarchy) {
 }
 
 function hideContextMenu() {
+  if (ctxItemId) dbg(`hideContextMenu (was ${ctxItemId}) from: ${new Error().stack.split("\n")[2]?.trim()}`);
   ctxMenu.classList.add("hidden");
   if (mobileQuery.matches) panelBackdrop.classList.remove("active");
   ctxItemId = null;
@@ -2607,6 +2608,7 @@ ctxGather.addEventListener("click", () => {
 });
 
 document.getElementById("ctx-indent").addEventListener("click", () => {
+  dbg(`ctx-indent click, ctxItemId=${ctxItemId}`);
   if (!ctxItemId) return;
   const item = currentItems.find(it => it.id === ctxItemId);
   if (!item || item.depth >= 20) return;
@@ -2640,7 +2642,10 @@ document.getElementById("ctx-select-to").addEventListener("click", () => {
 
 // Close context menu on click elsewhere
 document.addEventListener("click", (e) => {
-  if (!ctxMenu.contains(e.target)) hideContextMenu();
+  if (!ctxMenu.contains(e.target)) {
+    dbg(`doc click closing ctx menu, target: ${e.target.tagName}.${e.target.className}, contains=${ctxMenu.contains(e.target)}`);
+    hideContextMenu();
+  }
 });
 document.addEventListener("contextmenu", (e) => {
   if (!ctxMenu.contains(e.target) && !e.target.closest(".item")) hideContextMenu();
