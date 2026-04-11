@@ -2613,19 +2613,26 @@ ctxGather.addEventListener("click", () => {
 
 document.getElementById("ctx-indent").addEventListener("click", () => {
   dbg(`ctx-indent click, ctxItemId=${ctxItemId}`);
-  if (!ctxItemId) return;
+  if (!ctxItemId) { dbg("bail: no ctxItemId"); return; }
   const item = currentItems.find(it => it.id === ctxItemId);
-  if (!item || item.depth >= 20) return;
+  dbg(`item found: ${!!item}, depth: ${item?.depth}`);
+  if (!item || item.depth >= 20) { dbg("bail: no item or depth>=20"); return; }
+  const id = ctxItemId;
   hideContextMenu();
-  updateItem(ctxItemId, { depth: item.depth + 1 });
+  dbg(`calling updateItem(${id}, depth=${item.depth + 1})`);
+  updateItem(id, { depth: item.depth + 1 });
 });
 
 document.getElementById("ctx-outdent").addEventListener("click", () => {
-  if (!ctxItemId) return;
+  dbg(`ctx-outdent click, ctxItemId=${ctxItemId}`);
+  if (!ctxItemId) { dbg("bail: no ctxItemId"); return; }
   const item = currentItems.find(it => it.id === ctxItemId);
-  if (!item || item.depth <= 0) return;
+  dbg(`item found: ${!!item}, depth: ${item?.depth}`);
+  if (!item || item.depth <= 0) { dbg("bail: no item or depth<=0"); return; }
+  const id = ctxItemId;
   hideContextMenu();
-  updateItem(ctxItemId, { depth: item.depth - 1 });
+  dbg(`calling updateItem(${id}, depth=${item.depth - 1})`);
+  updateItem(id, { depth: item.depth - 1 });
 });
 
 document.getElementById("ctx-select-to").addEventListener("click", () => {
