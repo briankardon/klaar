@@ -248,8 +248,6 @@ def _can_access(data: dict, user: dict) -> bool:
         return True  # legacy unowned lists
     if data["owner"] == user["id"]:
         return True
-    if user.get("admin"):
-        return True
     for s in data.get("shared_with", []):
         if s["user_id"] == user["id"]:
             return True
@@ -263,8 +261,6 @@ def _get_permission(data: dict, user: dict) -> str:
     if data["owner"] is None:
         return "edit"
     if data["owner"] == user["id"]:
-        return "edit"
-    if user.get("admin"):
         return "edit"
     for s in data.get("shared_with", []):
         if s["user_id"] == user["id"]:
