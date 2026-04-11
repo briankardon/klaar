@@ -2465,6 +2465,7 @@ function showContextMenu(e, itemId, hierarchy) {
         picker.style.position = "fixed";
         picker.style.opacity = "0";
         picker.style.pointerEvents = "none";
+        picker.style.fontSize = "16px";
         document.body.appendChild(picker);
         if (tagVal) {
           try { picker.value = new Date(tagVal).toISOString().slice(0, 10); } catch (e) {}
