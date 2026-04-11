@@ -1235,6 +1235,37 @@ main {
   flex-shrink: 0;
 }
 
+.ctx-tag-value {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  padding: 1px 6px;
+  background: var(--bg-comp-btn);
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.ctx-tag-value-input {
+  margin-left: auto;
+  font-size: 0.8rem;
+  width: 80px;
+  padding: 1px 4px;
+  border: 1px solid var(--border-input);
+  border-radius: 3px;
+  background: var(--bg-input-focus);
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+.ctx-tag-date-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0 2px;
+  flex-shrink: 0;
+}
+
 /* ---- Mobile reorder mode ---- */
 
 #ctx-move, #ctx-move-hierarchy {

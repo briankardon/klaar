@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.19";
+const KLAAR_VERSION = "0.9.20";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 (function initTheme() {
@@ -2419,6 +2419,71 @@ function showContextMenu(e, itemId, hierarchy) {
     name.textContent = tagDef.name;
 
     row.append(check, dot, name);
+
+    // Tag value editing (non-hierarchy, when tag is applied)
+    if (!hierarchy && itemHasTag(item, tagDef.id)) {
+      const tagVal = itemTagValue(item, tagDef.id);
+      const valSpan = document.createElement("span");
+      valSpan.className = "ctx-tag-value";
+      const friendly = friendlyDate(tagVal);
+      valSpan.textContent = friendly ?? tagVal ?? "set value";
+      if (!tagVal) valSpan.style.opacity = "0.4";
+      valSpan.addEventListener("click", (ve) => {
+        ve.stopPropagation();
+        const valInp = document.createElement("input");
+        valInp.type = "text";
+        valInp.className = "ctx-tag-value-input";
+        valInp.value = tagVal ?? "";
+        valInp.placeholder = "value";
+        valSpan.replaceWith(valInp);
+        valInp.focus();
+        valInp.select();
+        function commitVal() {
+          const newVal = valInp.value.trim() === "" ? null : valInp.value.trim();
+          setTagValue(item, tagDef.id, newVal);
+          updateItem(itemId, { tags: [...item.tags] });
+          showContextMenuForCurrentItem();
+        }
+        valInp.addEventListener("blur", commitVal);
+        valInp.addEventListener("keydown", (ke) => {
+          if (ke.key === "Enter") { ke.preventDefault(); valInp.blur(); }
+          ke.stopPropagation();
+        });
+        valInp.addEventListener("click", (ce) => ce.stopPropagation());
+      });
+      row.appendChild(valSpan);
+
+      // Date picker button
+      const dateBtn = document.createElement("button");
+      dateBtn.className = "ctx-tag-date-btn";
+      dateBtn.textContent = "\u{1F4C5}";
+      dateBtn.title = "Pick date";
+      dateBtn.addEventListener("click", (de) => {
+        de.stopPropagation();
+        const picker = document.createElement("input");
+        picker.type = "date";
+        picker.style.position = "fixed";
+        picker.style.opacity = "0";
+        picker.style.pointerEvents = "none";
+        document.body.appendChild(picker);
+        if (tagVal) {
+          try { picker.value = new Date(tagVal).toISOString().slice(0, 10); } catch (e) {}
+        }
+        picker.addEventListener("change", () => {
+          if (picker.value) {
+            setTagValue(item, tagDef.id, picker.value);
+            updateItem(itemId, { tags: [...item.tags] });
+            showContextMenuForCurrentItem();
+          }
+          picker.remove();
+        });
+        picker.addEventListener("blur", () => setTimeout(() => { if (document.body.contains(picker)) picker.remove(); }, 200));
+        picker.focus();
+        try { picker.showPicker(); } catch (e) {}
+      });
+      row.appendChild(dateBtn);
+    }
+
     row.addEventListener("click", () => {
       if (hierarchy) {
         toggleTagOnContextHierarchy(tagDef.id);
