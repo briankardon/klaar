@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.5";
+const KLAAR_VERSION = "0.9.6";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 (function initTheme() {
@@ -2741,17 +2741,12 @@ async function showSharingModal(listId) {
       const controls = document.createElement("span");
       controls.className = "sharing-controls";
 
-      const btnRead = document.createElement("button");
-      btnRead.className = "sharing-btn" + (perm === "read" ? " active" : "");
-      btnRead.textContent = "Read";
-
-      const btnWrite = document.createElement("button");
-      btnWrite.className = "sharing-btn" + (perm === "write" ? " active" : "");
-      btnWrite.textContent = "Write";
-
-      const btnNone = document.createElement("button");
-      btnNone.className = "sharing-btn" + (!perm ? " active" : "");
-      btnNone.textContent = "None";
+      const levels = [
+        { key: null, label: "None" },
+        { key: "view", label: "View" },
+        { key: "check", label: "Check" },
+        { key: "edit", label: "Edit" },
+      ];
 
       async function setPermission(newPerm) {
         const current = await api(`/lists/${listId}`);
@@ -2765,11 +2760,13 @@ async function showSharingModal(listId) {
         showSharingModal(listId);
       }
 
-      btnRead.addEventListener("click", () => setPermission(perm === "read" ? null : "read"));
-      btnWrite.addEventListener("click", () => setPermission(perm === "write" ? null : "write"));
-      btnNone.addEventListener("click", () => setPermission(null));
-
-      controls.append(btnNone, btnRead, btnWrite);
+      for (const lvl of levels) {
+        const btn = document.createElement("button");
+        btn.className = "sharing-btn" + (perm === lvl.key ? " active" : "");
+        btn.textContent = lvl.label;
+        btn.addEventListener("click", () => setPermission(perm === lvl.key ? null : lvl.key));
+        controls.appendChild(btn);
+      }
       row.append(name, controls);
       listEl.appendChild(row);
     }

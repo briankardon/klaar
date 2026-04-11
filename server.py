@@ -256,18 +256,26 @@ def _can_access(data: dict, user: dict) -> bool:
     return False
 
 
-def _can_write(data: dict, user: dict) -> bool:
-    """Check if user can modify this list."""
+_PERM_MIGRATE = {"read": "view", "write": "edit"}
+
+def _get_permission(data: dict, user: dict) -> str:
+    """Return the user's permission level: 'edit', 'check', 'view', or 'none'."""
     if data["owner"] is None:
-        return True
+        return "edit"
     if data["owner"] == user["id"]:
-        return True
+        return "edit"
     if user.get("admin"):
-        return True
+        return "edit"
     for s in data.get("shared_with", []):
-        if s["user_id"] == user["id"] and s.get("permission") == "write":
-            return True
-    return False
+        if s["user_id"] == user["id"]:
+            p = s.get("permission", "view")
+            return _PERM_MIGRATE.get(p, p)
+    return "none"
+
+
+def _can_write(data: dict, user: dict) -> bool:
+    """Check if user can fully modify this list."""
+    return _get_permission(data, user) == "edit"
 
 
 # ---------------------------------------------------------------------------
@@ -975,12 +983,17 @@ def update_item(list_id: str, item_id: str):
     if data is None:
         return jsonify({"error": "list not found"}), 404
     user = _current_user()
-    if not _can_write(data, user):
+    perm = _get_permission(data, user)
+    if perm == "none" or perm == "view":
         return jsonify({"error": "forbidden"}), 403
     item = _find_item(data["items"], item_id)
     if item is None:
         return jsonify({"error": "item not found"}), 404
     body = request.get_json(force=True)
+    if perm == "check":
+        # Only allow toggling done status
+        if set(body.keys()) - {"done"}:
+            return jsonify({"error": "forbidden"}), 403
     _apply_item_fields(item, body)
     _save_with_undo(data, snap)
     return jsonify(item)
@@ -993,11 +1006,14 @@ def bulk_update_items(list_id: str):
     if data is None:
         return jsonify({"error": "list not found"}), 404
     user = _current_user()
-    if not _can_write(data, user):
+    perm = _get_permission(data, user)
+    if perm == "none" or perm == "view":
         return jsonify({"error": "forbidden"}), 403
     body = request.get_json(force=True)
     updates = body.get("updates", [])
     for upd in updates:
+        if perm == "check" and set(upd.keys()) - {"id", "done"}:
+            return jsonify({"error": "forbidden"}), 403
         item = _find_item(data["items"], upd["id"])
         if item:
             _apply_item_fields(item, upd)
