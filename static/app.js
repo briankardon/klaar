@@ -2663,7 +2663,6 @@ document.addEventListener("keydown", (e) => {
 
   // Backspace/Delete — delete all selected items (only when multiple selected)
   if ((e.key === "Backspace" || e.key === "Delete") && selectedIds.size > 1) {
-    if (document.activeElement?.classList?.contains("item-text")) return;
     e.preventDefault();
     const ids = [...selectedIds];
     currentItems = currentItems.filter(it => !selectedIds.has(it.id));
