@@ -300,6 +300,11 @@ def user_page():
     return send_from_directory("static", "user.html")
 
 
+@app.route("/help")
+def help_page():
+    return send_from_directory("static", "help.html")
+
+
 @app.post("/api/setup")
 def setup():
     """Create the first (admin) user."""

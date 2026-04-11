@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Klaar - Help</title>
+  <link rel="icon" type="image/png" href="/static/favicon.png">
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    main.help-main {
+      display: block;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 1.5rem;
+      height: auto;
+      overflow-y: auto;
+    }
+
+    .section {
+      background: var(--bg-sidebar);
+      border: 1px solid var(--border-light);
+      border-radius: 6px;
+      padding: 1.2rem;
+      margin-bottom: 1.2rem;
+    }
+
+    .section h2 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 0.8rem;
+      padding-bottom: 0.4rem;
+      border-bottom: 1px solid var(--border-lighter);
+    }
+
+    .section h3 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin-top: 1rem;
+      margin-bottom: 0.4rem;
+      color: var(--text-secondary);
+    }
+
+    .section p, .section li {
+      font-size: 0.9rem;
+      color: var(--text-primary);
+      line-height: 1.6;
+    }
+
+    .section ul {
+      margin: 0.4rem 0 0.6rem 1.2rem;
+      padding: 0;
+    }
+
+    .section li {
+      margin-bottom: 0.3rem;
+    }
+
+    kbd {
+      display: inline-block;
+      padding: 0.15rem 0.4rem;
+      font-size: 0.8rem;
+      font-family: monospace;
+      color: var(--text-primary);
+      background: var(--bg-body);
+      border: 1px solid var(--border-input);
+      border-radius: 3px;
+      white-space: nowrap;
+    }
+
+    .shortcut-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      margin: 0.6rem 0;
+    }
+
+    .shortcut-table th,
+    .shortcut-table td {
+      text-align: left;
+      padding: 0.5rem 0.6rem;
+      border-bottom: 1px solid var(--border-lighter);
+    }
+
+    .shortcut-table th {
+      font-weight: 600;
+      color: var(--text-secondary);
+      font-size: 0.8rem;
+    }
+
+    .shortcut-table tr:hover td {
+      background: var(--bg-item-hover);
+    }
+
+    .shortcut-table td:first-child {
+      white-space: nowrap;
+      width: 220px;
+    }
+
+    .back-link {
+      color: var(--text-header);
+      text-decoration: none;
+      font-size: 0.85rem;
+      opacity: 0.7;
+    }
+
+    .back-link:hover {
+      opacity: 1;
+    }
+
+    .toc {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      columns: 2;
+    }
+
+    .toc li {
+      margin-bottom: 0.3rem;
+    }
+
+    .toc a {
+      color: var(--accent-primary);
+      text-decoration: none;
+      font-size: 0.9rem;
+    }
+
+    .toc a:hover {
+      text-decoration: underline;
+    }
+
+    .help-footer {
+      text-align: center;
+      padding: 1.5rem 0;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+
+    .help-footer a {
+      color: var(--text-secondary);
+      text-decoration: none;
+    }
+
+    .help-footer a:hover {
+      color: var(--text-primary);
+    }
+
+    .github-icon {
+      display: inline-block;
+      vertical-align: middle;
+      width: 18px;
+      height: 18px;
+      margin-left: 0.3rem;
+      opacity: 0.6;
+    }
+
+    .help-footer a:hover .github-icon {
+      opacity: 1;
+    }
+
+    [data-theme="dark"] .github-icon {
+      filter: invert(1);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) .github-icon {
+        filter: invert(1);
+      }
+    }
+
+    .hidden { display: none !important; }
+
+    @media (max-width: 768px) {
+      main.help-main {
+        padding: 1rem;
+      }
+
+      .toc {
+        columns: 1;
+      }
+
+      .shortcut-table td:first-child {
+        width: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-left">
+      <a href="/" class="back-link">Back to Klaar</a>
+    </div>
+    <div class="header-right">
+      <button id="btn-theme-toggle" title="Toggle dark mode"></button>
+    </div>
+  </header>
+
+  <main class="help-main">
+
+    <!-- Table of Contents -->
+    <div class="section">
+      <h2>Klaar Help</h2>
+      <p>Klaar is a collaborative todo list application. It supports nested items, tags, filtering, views, sharing, and real-time sync across devices.</p>
+      <h3>Contents</h3>
+      <ul class="toc">
+        <li><a href="#getting-started">Getting Started</a></li>
+        <li><a href="#items">Items</a></li>
+        <li><a href="#keyboard-shortcuts">Keyboard Shortcuts</a></li>
+        <li><a href="#tags">Tags</a></li>
+        <li><a href="#views">Views</a></li>
+        <li><a href="#filtering">Filtering</a></li>
+        <li><a href="#lists">Lists</a></li>
+        <li><a href="#sharing">Sharing and Collaboration</a></li>
+        <li><a href="#dark-mode">Dark Mode</a></li>
+        <li><a href="#user-account">User Account</a></li>
+        <li><a href="#mobile">Mobile</a></li>
+      </ul>
+    </div>
+
+    <!-- Getting Started -->
+    <div class="section" id="getting-started">
+      <h2>Getting Started</h2>
+      <p>Klaar organizes your work into <strong>lists</strong>, each containing <strong>items</strong>. Items can be nested to form hierarchies, tagged for categorization, and filtered using text search, tags, or completion status. You can save filter and sort configurations as <strong>views</strong> for quick access.</p>
+      <p>The interface has three panels:</p>
+      <ul>
+        <li><strong>Lists panel</strong> (left) &mdash; shows all your lists and shared lists. Toggle with the hamburger button.</li>
+        <li><strong>Items area</strong> (center) &mdash; shows the items of the selected list, along with the search bar and completion filter.</li>
+        <li><strong>Tags and Views panel</strong> (right) &mdash; shows tag definitions and saved views for the current list. Toggle with the dots button.</li>
+      </ul>
+    </div>
+
+    <!-- Items -->
+    <div class="section" id="items">
+      <h2>Items</h2>
+
+      <h3>Creating items</h3>
+      <p>Press <kbd>Enter</kbd> in an item's text field to create a new item below it at the same depth. If the cursor is at the very beginning of a non-empty item, the new item is inserted above instead. When a list is first opened with no items, an empty item is created automatically.</p>
+      <p>Press <kbd>Shift+Enter</kbd> to create a new item that inherits the same tags (without values) as the current item.</p>
+
+      <h3>Editing items</h3>
+      <p>On desktop, each item is an editable text field. Changes are saved automatically when you move to another item or click away. On mobile, tap the item text to open an inline editor.</p>
+
+      <h3>Deleting items</h3>
+      <p>Click the <strong>x</strong> button on the right side of an item to delete it. Press <kbd>Backspace</kbd> on an empty item to delete it and focus the previous item.</p>
+      <p>Hold <kbd>Ctrl</kbd> and click the <strong>x</strong> button to delete the item and all its children.</p>
+
+      <h3>Hierarchy and nesting</h3>
+      <p>Items can be nested to create parent-child hierarchies. Press <kbd>Tab</kbd> to indent (increase depth) and <kbd>Shift+Tab</kbd> to outdent (decrease depth). Maximum nesting depth is 20 levels.</p>
+      <p>Parent items show a collapse/expand triangle in the left gutter. Click it or press <kbd>Ctrl+.</kbd> to toggle. Collapsed parents show a child count badge.</p>
+      <p>The depth bar above the items area provides buttons to collapse or expand all items at a given depth level. Click a depth number to collapse all items at that depth (expanding items above). Click it again to expand all. The "All" button expands everything.</p>
+
+      <h3>Checkboxes</h3>
+      <p>Each item has a checkbox to mark it as done. Completed items are displayed with strikethrough text.</p>
+      <p>Hold <kbd>Ctrl</kbd> and click a checkbox to toggle done status for the item and all its children.</p>
+      <p>If multiple items are selected, clicking any selected item's checkbox toggles done status for the entire selection.</p>
+
+      <h3>Selection</h3>
+      <ul>
+        <li><strong>Click</strong> an item to select it (clears previous selection).</li>
+        <li><strong>Ctrl+click</strong> to toggle an item in or out of the selection.</li>
+        <li><strong>Shift+click</strong> to select a range from the last-selected item to the clicked item.</li>
+      </ul>
+      <p>Selected items are highlighted and exempt from filtering &mdash; they remain visible even if they do not match active filters.</p>
+
+      <h3>Drag and drop reordering</h3>
+      <p>Click and drag an item to reorder it within the list. The item moves in real time as you drag.</p>
+      <ul>
+        <li><strong>Ctrl+drag</strong> moves the item along with all its children.</li>
+        <li>Dragging with multiple items selected consolidates and moves the entire selection.</li>
+        <li>Drag an item onto a list name in the sidebar to move it to that list. Hover over a different list for one second to switch to that list while dragging, letting you position the item precisely.</li>
+      </ul>
+    </div>
+
+    <!-- Keyboard Shortcuts -->
+    <div class="section" id="keyboard-shortcuts">
+      <h2>Keyboard Shortcuts</h2>
+
+      <h3>Item editing</h3>
+      <table class="shortcut-table">
+        <thead>
+          <tr><th>Shortcut</th><th>Action</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><kbd>Enter</kbd></td><td>Create a new item below the current one. If cursor is at the start of a non-empty item, inserts above instead.</td></tr>
+          <tr><td><kbd>Shift+Enter</kbd></td><td>Create a new item that inherits the same tags (without values).</td></tr>
+          <tr><td><kbd>Backspace</kbd> (on empty item)</td><td>Delete the empty item and focus the previous one.</td></tr>
+          <tr><td><kbd>Tab</kbd></td><td>Indent item (increase depth). If multiple items are selected, indents all.</td></tr>
+          <tr><td><kbd>Shift+Tab</kbd></td><td>Outdent item (decrease depth). If multiple items are selected, outdents all.</td></tr>
+          <tr><td><kbd>Arrow Up</kbd></td><td>Move focus to the previous visible item (saves current text first).</td></tr>
+          <tr><td><kbd>Arrow Down</kbd></td><td>Move focus to the next visible item (saves current text first).</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Undo and redo</h3>
+      <table class="shortcut-table">
+        <thead>
+          <tr><th>Shortcut</th><th>Action</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><kbd>Ctrl+Z</kbd></td><td>Undo the last change (up to 50 steps).</td></tr>
+          <tr><td><kbd>Ctrl+Shift+Z</kbd> or <kbd>Ctrl+Y</kbd></td><td>Redo.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Collapse and expand</h3>
+      <table class="shortcut-table">
+        <thead>
+          <tr><th>Shortcut</th><th>Action</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><kbd>Ctrl+.</kbd></td><td>Toggle collapse on the focused item (if it has children).</td></tr>
+          <tr><td><kbd>Ctrl+0</kbd> through <kbd>Ctrl+9</kbd></td><td>Toggle collapse at depth N. Collapses all items at that depth, or expands if all are already collapsed.</td></tr>
+          <tr><td><kbd>Ctrl+E</kbd></td><td>Expand all collapsed items (only when not editing text).</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Tags</h3>
+      <table class="shortcut-table">
+        <thead>
+          <tr><th>Shortcut</th><th>Action</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><kbd>Ctrl+D</kbd> (in tag value editor)</td><td>Open a date picker to set a date value.</td></tr>
+          <tr><td><kbd>Ctrl+click</kbd> tag bubble</td><td>Remove the tag from the item and all its children.</td></tr>
+          <tr><td><kbd>Ctrl+click</kbd> tag name in tag pane</td><td>Toggle the tag on selected/focused items and their children.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Other</h3>
+      <table class="shortcut-table">
+        <thead>
+          <tr><th>Shortcut</th><th>Action</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><kbd>Ctrl+click</kbd> delete button</td><td>Delete item with all its children.</td></tr>
+          <tr><td><kbd>Ctrl+drag</kbd></td><td>Drag an item along with all its children.</td></tr>
+          <tr><td><kbd>Ctrl+click</kbd> checkbox</td><td>Toggle done status for item and all its children.</td></tr>
+          <tr><td><kbd>Escape</kbd> (in search field)</td><td>Clear the search and deselect all items.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Tags -->
+    <div class="section" id="tags">
+      <h2>Tags</h2>
+      <p>Tags let you categorize and annotate items. Each list has its own set of tag definitions, shown in the Tags panel on the right.</p>
+
+      <h3>Creating tags</h3>
+      <p>Click the <strong>+</strong> button in the Tags panel header. Type a name and press <kbd>Enter</kbd> to create the tag. Each tag is assigned a color automatically.</p>
+
+      <h3>Applying tags to items</h3>
+      <ul>
+        <li><strong>From the tag pane:</strong> Select or focus one or more items, then click a tag name in the tag pane to toggle it on/off. Hold <kbd>Ctrl</kbd> while clicking the tag name to also apply to children of the selected items.</li>
+        <li><strong>From the context menu:</strong> Right-click an item (or long-press on mobile) and use the tag checklist at the bottom of the context menu.</li>
+        <li><strong>Removing a tag:</strong> Click a tag bubble on an item to remove it. Hold <kbd>Ctrl</kbd> while clicking the bubble to remove it from the item and all its children.</li>
+      </ul>
+
+      <h3>Tag values</h3>
+      <p>Tags can have optional values. Double-click a tag bubble on an item to edit its value. Values can be any text, number, or date.</p>
+
+      <h3>Date values</h3>
+      <p>If a tag value is a date (YYYY-MM-DD format), it is displayed as a friendly label such as "Today", "Tomorrow", "This Wednesday", or "Jan 15". Hover over the bubble to see the raw date in a tooltip. Press <kbd>Ctrl+D</kbd> while editing a tag value to open a date picker.</p>
+
+      <h3>Tag colors</h3>
+      <p>Click the colored dot next to a tag name in the tag pane to change its color using a color picker.</p>
+
+      <h3>Renaming tags</h3>
+      <p>Double-click a tag name in the tag pane to rename it.</p>
+
+      <h3>Hiding and showing tags</h3>
+      <p>Each tag has a visibility toggle (filled/hollow circle) in the tag pane. Hidden tags are not displayed as bubbles on items, reducing visual clutter. The tag still exists and can still be used for filtering.</p>
+
+      <h3>Sorting by tag value</h3>
+      <p>Click the sort button (up/down arrows) next to a tag to sort items by that tag's value. Click again to reverse direction, and a third time to clear the sort. Items without the tag sort to the end. Sorting operates on top-level blocks &mdash; children stay grouped with their parent.</p>
+
+      <h3>Reordering tags</h3>
+      <p>Drag a tag entry in the tag pane to reorder the tag list. This affects the order in which tag bubbles appear on items.</p>
+
+      <h3>Deleting tags</h3>
+      <p>Click the <strong>x</strong> button next to a tag to delete it. This removes the tag from all items in the list.</p>
+    </div>
+
+    <!-- Views -->
+    <div class="section" id="views">
+      <h2>Views</h2>
+      <p>Views save the current filter, sort, completion filter, and tag visibility state so you can quickly switch between different perspectives on your list.</p>
+
+      <h3>Saving a view</h3>
+      <p>Set up your desired filters, sort order, and hidden tags, then click the <strong>+</strong> button in the Views section of the tag pane. Type a name and press <kbd>Enter</kbd>. The new view captures the current state of:</p>
+      <ul>
+        <li>Text filters</li>
+        <li>Tag filters (include/exclude, with conditions)</li>
+        <li>Completion filter (All / Active / Done)</li>
+        <li>Sort order (tag and direction)</li>
+        <li>Hidden tag IDs</li>
+      </ul>
+
+      <h3>Applying a view</h3>
+      <p>Click a view name to apply it. The active view is highlighted. Click it again to toggle it off and clear all filters.</p>
+
+      <h3>Default view (auto-restore)</h3>
+      <p>When you apply a view, it is saved as the list's active view. The next time you open that list, the view is automatically restored.</p>
+
+      <h3>Overwriting a view</h3>
+      <p>Click the refresh button next to a view to overwrite it with the current filter/sort state.</p>
+
+      <h3>Renaming a view</h3>
+      <p>Double-click the view name to rename it.</p>
+
+      <h3>Deleting a view</h3>
+      <p>Click the <strong>x</strong> button next to a view to delete it.</p>
+    </div>
+
+    <!-- Filtering -->
+    <div class="section" id="filtering">
+      <h2>Filtering</h2>
+      <p>Filtering lets you focus on specific items. Multiple filters can be combined and are applied together (all must match).</p>
+
+      <h3>Text search</h3>
+      <p>Type in the search bar to highlight matching items in real time. The search supports regular expressions. Press <kbd>Enter</kbd> to commit the search as a persistent text filter (shown as a bubble below the search bar). Press <kbd>Escape</kbd> to clear the search input.</p>
+      <p>Multiple text filters can be stacked &mdash; each one narrows the results further. Click a filter bubble to remove it.</p>
+
+      <h3>Tag filters</h3>
+      <p>Click the filter button (triangle icon) next to a tag in the tag pane to add a tag filter. This shows only items that have that tag.</p>
+      <p>Tag filter bubbles appear in the filter bar:</p>
+      <ul>
+        <li><strong>Click</strong> a tag filter bubble to toggle between include mode (filled, showing items with the tag) and exclude mode (outlined, hiding items with the tag).</li>
+        <li><strong>Double-click</strong> a tag filter bubble to set a condition (e.g., <code>&gt;5</code>, <code>=Alice</code>, <code>&lt;=2026-01-01</code>). Conditions support <code>=</code>, <code>!=</code>, <code>&gt;</code>, <code>&lt;</code>, <code>&gt;=</code>, <code>&lt;=</code> operators, or plain text for substring matching.</li>
+        <li>Click the <strong>x</strong> on a filter bubble to remove it.</li>
+      </ul>
+      <p>Multiple filters for the same tag can be added for complex conditions.</p>
+
+      <h3>Completion filter</h3>
+      <p>The three buttons next to the search bar filter by completion status:</p>
+      <ul>
+        <li><strong>All</strong> &mdash; show all items.</li>
+        <li><strong>Active</strong> &mdash; show only uncompleted items.</li>
+        <li><strong>Done</strong> &mdash; show only completed items.</li>
+      </ul>
+
+      <h3>Ancestor visibility</h3>
+      <p>When filters are active, parent items that do not match the filter but have matching descendants are shown with a muted style, preserving the hierarchy context.</p>
+
+      <h3>Selected items</h3>
+      <p>Selected items are always visible regardless of filters. This allows you to keep working with selected items even when a filter would normally hide them.</p>
+    </div>
+
+    <!-- Lists -->
+    <div class="section" id="lists">
+      <h2>Lists</h2>
+
+      <h3>Creating a list</h3>
+      <p>Click the <strong>+</strong> button in the Lists panel header. Type a name and press <kbd>Enter</kbd>. The new list is created and selected automatically.</p>
+
+      <h3>Renaming a list</h3>
+      <p>Double-click a list name in the sidebar, or edit the list title at the top of the items area. You can also right-click (or long-press on mobile) and choose "Rename" from the context menu.</p>
+
+      <h3>Deleting a list</h3>
+      <p>Click the <strong>x</strong> button next to a list name in the sidebar, or right-click and choose "Delete". A confirmation dialog is shown before deletion.</p>
+
+      <h3>Reordering lists</h3>
+      <p>Drag and drop list names in the sidebar to reorder them. The order is saved per user.</p>
+
+      <h3>Importing</h3>
+      <p>Click the import button (up arrow) in the Lists panel to paste text and import it as items. The importer handles:</p>
+      <ul>
+        <li>Indentation (spaces or tabs) for nesting depth</li>
+        <li>Bullet prefixes (<code>-</code>, <code>*</code>, numbered lists, etc.)</li>
+        <li>Checkboxes (<code>[x]</code> for done, <code>[ ]</code> for active)</li>
+        <li>Markdown strikethrough</li>
+      </ul>
+      <p>You can import as a new list or add to the current list.</p>
+
+      <h3>Exporting</h3>
+      <p>Click the export button (down arrow) in the Lists panel to download the current list as a Markdown file. Items are exported with indentation, checkboxes, and tag annotations.</p>
+    </div>
+
+    <!-- Sharing & Collaboration -->
+    <div class="section" id="sharing">
+      <h2>Sharing and Collaboration</h2>
+      <p>Lists can be shared with other users for real-time collaboration.</p>
+
+      <h3>Permission levels</h3>
+      <ul>
+        <li><strong>None</strong> &mdash; no access (removes sharing).</li>
+        <li><strong>View</strong> &mdash; can see the list and its items, but cannot make changes.</li>
+        <li><strong>Check</strong> &mdash; can view and toggle item checkboxes, but cannot edit text, create/delete items, or modify tags.</li>
+        <li><strong>Edit</strong> &mdash; full read/write access to items, tags, and list settings.</li>
+      </ul>
+
+      <h3>Sharing a list</h3>
+      <p>Right-click a list (or long-press on mobile) and choose "Sharing" to open the sharing dialog. You must add contacts on the User settings page before you can share. In the dialog, select a permission level for each contact.</p>
+
+      <h3>Contacts</h3>
+      <p>Contacts are managed on the <a href="/user">User settings page</a>. Send a contact request by username. When the other user accepts, you can share lists with them.</p>
+
+      <h3>Shared list indicators</h3>
+      <p>Lists shared with you display a people icon next to the list name in the sidebar. The list owner is shown in the sharing dialog.</p>
+
+      <h3>Leaving a shared list</h3>
+      <p>If a list was shared with you by someone else, you can leave it by clicking the <strong>x</strong> next to the list name in the sidebar, or via the right-click context menu. You will lose access unless the owner shares it again.</p>
+
+      <h3>Real-time sync</h3>
+      <p>Changes made by other users are synced automatically via polling. The poll interval starts at 5 seconds and gradually slows to 30 seconds when no changes are detected. It speeds up again when activity is detected. Polling pauses when the browser tab is hidden and resumes immediately when you return.</p>
+    </div>
+
+    <!-- Dark Mode -->
+    <div class="section" id="dark-mode">
+      <h2>Dark Mode</h2>
+      <p>Click the sun/moon button in the header to toggle between light and dark modes. Your preference is saved in the browser.</p>
+      <p>If no preference has been set, Klaar follows your operating system's color scheme preference automatically.</p>
+    </div>
+
+    <!-- User Account -->
+    <div class="section" id="user-account">
+      <h2>User Account</h2>
+      <p>Click your display name in the header to access the <a href="/user">User settings page</a>.</p>
+      <ul>
+        <li><strong>Display name</strong> &mdash; change how your name appears to others.</li>
+        <li><strong>Password</strong> &mdash; change your password (requires current password).</li>
+        <li><strong>Contacts</strong> &mdash; send contact requests, accept or decline incoming requests, and manage your contact list.</li>
+        <li><strong>Delete account</strong> &mdash; permanently delete your account and all your owned lists.</li>
+      </ul>
+      <p>Admin users also see a user administration section where they can create, edit, and delete other users.</p>
+    </div>
+
+    <!-- Mobile -->
+    <div class="section" id="mobile">
+      <h2>Mobile</h2>
+      <p>Klaar adapts to smaller screens with a mobile-optimized layout.</p>
+
+      <h3>Panels</h3>
+      <p>On mobile, the Lists and Tags panels slide in as overlays from the left and right edges. Tap outside a panel or use the toggle buttons to close them.</p>
+
+      <h3>Touch interactions</h3>
+      <ul>
+        <li><strong>Tap</strong> an item's text to open an inline editor.</li>
+        <li><strong>Long-press</strong> (500ms) an item to open the context menu as a bottom sheet.</li>
+        <li><strong>Long-press</strong> a list name in the sidebar to open the list context menu.</li>
+      </ul>
+
+      <h3>Context menu</h3>
+      <p>On mobile, the context menu appears as a bottom sheet rather than a floating menu. It provides access to move, delete, copy, visit link, gather matching items, and tag management.</p>
+
+      <h3>Reorder mode</h3>
+      <p>Since drag and drop is not available on mobile, use the context menu's "Move" or "Move with children" option to enter reorder mode. A cursor line appears at the center of the screen. Scroll the list to position the cursor where you want the item, then tap "Place here" to confirm or "Cancel" to abort.</p>
+
+      <h3>Gather matching</h3>
+      <p>The "Gather matching" option in the context menu finds all sibling items with the same text as the selected item and merges their children under the selected item. This is useful for consolidating duplicate headings.</p>
+
+      <h3>Debug panel</h3>
+      <p>Long-press the "Klaar" title in the header to toggle an on-screen debug log, useful for troubleshooting mobile-specific issues.</p>
+    </div>
+
+  </main>
+
+  <footer class="help-footer">
+    <p>Created by Brian Kardon and Claude (Anthropic)</p>
+    <p>
+      <a href="https://github.com/GoldbergLab/klaar" target="_blank" rel="noopener">
+        View on GitHub
+        <img class="github-icon" src="/static/github-mark.svg" alt="GitHub">
+      </a>
+    </p>
+  </footer>
+
+  <script>
+    (function initTheme() {
+      const saved = localStorage.getItem("klaar-theme");
+      if (saved) {
+        document.documentElement.setAttribute("data-theme", saved);
+      }
+      const btn = document.getElementById("btn-theme-toggle");
+      function updateIcon() {
+        const dark = document.documentElement.getAttribute("data-theme") === "dark" ||
+          (!document.documentElement.getAttribute("data-theme") && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        btn.textContent = dark ? "\u2600" : "\u263E";
+        btn.title = dark ? "Switch to light mode" : "Switch to dark mode";
+      }
+      btn.addEventListener("click", () => {
+        const current = document.documentElement.getAttribute("data-theme");
+        const isDark = current === "dark" ||
+          (!current && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        const next = isDark ? "light" : "dark";
+        document.documentElement.setAttribute("data-theme", next);
+        localStorage.setItem("klaar-theme", next);
+        updateIcon();
+      });
+      updateIcon();
+      window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", updateIcon);
+    })();
+  </script>
+</body>
+</html>
