@@ -2387,9 +2387,10 @@ function showContextMenu(e, itemId, hierarchy) {
   // Position menu
   ctxMenu.classList.remove("hidden");
   if (mobileQuery.matches) {
-    // Bottom sheet — CSS handles positioning, show backdrop
+    // Bottom sheet — CSS handles positioning, show visual backdrop only
     ctxMenu.style.left = "";
     ctxMenu.style.top = "";
+    panelBackdrop.style.pointerEvents = "none";
     panelBackdrop.classList.add("active");
     // Scroll item above the bottom sheet
     const itemEl = itemsEl.querySelector(`.item[data-id="${itemId}"]`);
@@ -2414,7 +2415,10 @@ function showContextMenu(e, itemId, hierarchy) {
 function hideContextMenu() {
   if (ctxItemId) dbg(`hideContextMenu (was ${ctxItemId}) from: ${new Error().stack.split("\n")[2]?.trim()}`);
   ctxMenu.classList.add("hidden");
-  if (mobileQuery.matches) panelBackdrop.classList.remove("active");
+  if (mobileQuery.matches) {
+    panelBackdrop.classList.remove("active");
+    panelBackdrop.style.pointerEvents = "";
+  }
   ctxItemId = null;
 }
 
@@ -2756,6 +2760,7 @@ function showListContextMenu(e, listId, listName, ownerId) {
     listCtxMenu.style.right = "0";
     listCtxMenu.style.borderRadius = "12px 12px 0 0";
     listCtxMenu.style.width = "100%";
+    panelBackdrop.style.pointerEvents = "none";
     panelBackdrop.classList.add("active");
   } else {
     listCtxMenu.style.bottom = "";
@@ -2770,7 +2775,10 @@ function showListContextMenu(e, listId, listName, ownerId) {
 
 function hideListContextMenu() {
   listCtxMenu.classList.add("hidden");
-  if (mobileQuery.matches) panelBackdrop.classList.remove("active");
+  if (mobileQuery.matches) {
+    panelBackdrop.classList.remove("active");
+    panelBackdrop.style.pointerEvents = "";
+  }
 }
 
 document.getElementById("list-ctx-rename").addEventListener("click", () => {
