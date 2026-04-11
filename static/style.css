@@ -1286,35 +1286,27 @@ main {
   flex-shrink: 0;
 }
 
-#reorder-cursor {
-  position: fixed;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: var(--accent-primary);
-  z-index: 500;
-  pointer-events: none;
-  box-shadow: 0 0 6px var(--reorder-cursor-shadow);
+.reorder-dropzone {
+  cursor: pointer;
 }
 
-#reorder-cursor::before,
-#reorder-cursor::after {
+.reorder-dropzone::after {
   content: "";
   position: absolute;
-  top: -4px;
-  width: 0;
-  height: 0;
-  border: 5px solid transparent;
+  left: 16px;
+  right: 8px;
+  top: 50%;
+  height: 2px;
+  background: var(--accent-primary);
+  opacity: 0.3;
+  border-radius: 1px;
 }
 
-#reorder-cursor::before {
-  left: 0;
-  border-left-color: var(--accent-primary);
-}
-
-#reorder-cursor::after {
-  right: 0;
-  border-right-color: var(--accent-primary);
+.reorder-dropzone:hover::after,
+.reorder-dropzone:active::after {
+  opacity: 1;
+  height: 3px;
+  box-shadow: 0 0 6px var(--reorder-cursor-shadow);
 }
 
 /* ---- Panel backdrop (mobile) ---- */

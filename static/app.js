@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.18";
+const KLAAR_VERSION = "0.9.19";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 (function initTheme() {
@@ -1183,7 +1183,25 @@ function renderViewport() {
     if (item.depth > 0) leftGroup.style.paddingLeft = (item.depth * 1.5) + "rem";
     leftGroup.append(cb, txt);
     li.append(leftGroup, btnDel, tagsContainer, badge);
+    if (reorderItemId) li.classList.toggle("drag-source", reorderBlockIds.has(item.id));
     itemsEl.appendChild(li);
+  }
+
+  // Render drop zones between items during reorder mode
+  if (reorderItemId) {
+    for (let row = startRow; row <= endRow && row <= visibleList.length; row++) {
+      const dz = document.createElement("div");
+      dz.className = "reorder-dropzone";
+      dz.style.position = "absolute";
+      dz.style.top = (row * ITEM_HEIGHT - 10) + "px";
+      dz.style.left = "0";
+      dz.style.right = "0";
+      dz.style.height = "20px";
+      dz.style.zIndex = "50";
+      const targetDataIdx = row < visibleList.length ? visibleList[row].dataIdx : currentItems.length;
+      dz.addEventListener("click", () => commitReorderAt(targetDataIdx));
+      itemsEl.appendChild(dz);
+    }
   }
 }
 
@@ -3387,7 +3405,6 @@ function setupItemTouch(li, itemId) {
 
 const reorderBanner = document.getElementById("reorder-banner");
 const reorderLabel = document.getElementById("reorder-label");
-const reorderCursor = document.getElementById("reorder-cursor");
 let reorderItemId = null;   // the item being moved
 let reorderBlockIds = null; // Set of ids (item + children if hierarchy)
 
@@ -3411,53 +3428,22 @@ function enterReorderMode(itemId, hierarchy) {
     ? `Moving: ${label} (+${count - 1})`
     : `Moving: ${label}`;
 
-  // Mark source items
-  for (const id of reorderBlockIds) {
-    const el = itemsEl.querySelector(`.item[data-id="${id}"]`);
-    if (el) el.classList.add("drag-source");
-  }
-
   reorderBanner.classList.remove("hidden");
-  reorderCursor.classList.remove("hidden");
-  updateReorderCursor();
-  itemsContainer.addEventListener("scroll", updateReorderCursor);
+  renderItems();  // re-render with drop zones
 }
 
-function updateReorderCursor() {
+function commitReorderAt(destIdx) {
   if (!reorderItemId) return;
-  const containerRect = itemsContainer.getBoundingClientRect();
-  // Cursor sits at vertical center of the items container
-  const cursorY = containerRect.top + containerRect.height / 2;
-  reorderCursor.style.top = cursorY + "px";
-}
-
-function getReorderInsertIndex() {
-  const containerRect = itemsContainer.getBoundingClientRect();
-  const centerY = containerRect.height / 2;
-  const scrollTop = itemsContainer.scrollTop;
-  // Which visible row is at the center?
-  const row = Math.round((scrollTop + centerY) / ITEM_HEIGHT);
-  // Convert visible row to data index
-  const dataIdx = getDataIndexOfVisibleRow(Math.max(0, row));
-  return dataIdx;
-}
-
-function commitReorder() {
-  if (!reorderItemId) return;
-
-  const destIdx = getReorderInsertIndex();
 
   // Remove the block from current position
   const block = currentItems.filter((it) => reorderBlockIds.has(it.id));
   currentItems = currentItems.filter((it) => !reorderBlockIds.has(it.id));
 
-  // Insert at destination (adjust for removal shift)
-  const clampedIdx = Math.min(destIdx, currentItems.length);
-  // Find the right insert position — destIdx was computed before removal,
-  // so recalculate based on new array
-  const insertAt = Math.min(clampedIdx, currentItems.length);
+  // Insert at destination (adjust index for removal shift)
+  const insertAt = Math.min(destIdx, currentItems.length);
   currentItems.splice(insertAt, 0, ...block);
 
+  exitReorderMode();
   renderItems();
 
   // Send reorder to server
@@ -3466,8 +3452,6 @@ function commitReorder() {
     body: { order: currentItems.map((it) => it.id) },
   }).then(() => scheduleSyncFromServer())
     .catch(() => refreshItems());
-
-  exitReorderMode();
 }
 
 function exitReorderMode() {
@@ -3480,11 +3464,8 @@ function exitReorderMode() {
   reorderItemId = null;
   reorderBlockIds = null;
   reorderBanner.classList.add("hidden");
-  reorderCursor.classList.add("hidden");
-  itemsContainer.removeEventListener("scroll", updateReorderCursor);
+  renderItems();  // re-render without drop zones
 }
-
-document.getElementById("reorder-place").addEventListener("click", commitReorder);
 document.getElementById("reorder-cancel").addEventListener("click", exitReorderMode);
 document.getElementById("ctx-move").addEventListener("click", () => {
   const itemId = ctxItemId;
