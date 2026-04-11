@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.8";
+const KLAAR_VERSION = "0.9.9";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 (function initTheme() {
@@ -1140,7 +1140,21 @@ function renderViewport() {
     btnDel.className = "btn-icon";
     btnDel.textContent = "\u00d7";
     btnDel.title = "Delete";
-    btnDel.addEventListener("click", () => deleteItem(item.id));
+    btnDel.addEventListener("click", (e) => {
+      if (e.ctrlKey) {
+        const dataIdx = currentItems.indexOf(item);
+        const [start, end] = getChildRange(dataIdx);
+        const ids = new Set([item.id, ...currentItems.slice(start, end).map(it => it.id)]);
+        currentItems = currentItems.filter(it => !ids.has(it.id));
+        renderItems();
+        api(`/lists/${currentListId}/items/bulk-delete`, {
+          method: "POST",
+          body: { item_ids: [...ids] },
+        }).then(() => scheduleSyncFromServer()).catch(() => refreshItems());
+      } else {
+        deleteItem(item.id);
+      }
+    });
 
     const leftGroup = document.createElement("div");
     leftGroup.className = "item-left";
