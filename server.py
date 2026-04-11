@@ -208,6 +208,16 @@ def _ensure_owner(data: dict) -> None:
         data["views"] = []
 
 
+def _ensure_contacts(user: dict) -> None:
+    """Ensure user has contacts and contact request fields (migration)."""
+    if "contacts" not in user:
+        user["contacts"] = []
+    if "contact_requests_in" not in user:
+        user["contact_requests_in"] = []
+    if "contact_requests_out" not in user:
+        user["contact_requests_out"] = []
+
+
 def _next_tag_color(data: dict) -> str:
     used = {t["color"] for t in data["tags"]}
     for c in TAG_COLORS:
@@ -382,11 +392,13 @@ def logout():
 @_require_auth
 def me():
     user = _current_user()
+    _ensure_contacts(user)
     return jsonify({
         "id": user["id"],
         "username": user["username"],
         "display_name": user["display_name"],
         "admin": user.get("admin", False),
+        "pending_contacts": len(user["contact_requests_in"]),
     })
 
 
@@ -466,7 +478,17 @@ def delete_me():
         except (json.JSONDecodeError, KeyError):
             pass
 
-    users = [x for x in users if x["id"] != user["id"]]
+    # Clean up contacts/requests references from all other users
+    uid = user["id"]
+    for other in users:
+        if other["id"] == uid:
+            continue
+        _ensure_contacts(other)
+        other["contacts"] = [c for c in other["contacts"] if c != uid]
+        other["contact_requests_in"] = [c for c in other["contact_requests_in"] if c != uid]
+        other["contact_requests_out"] = [c for c in other["contact_requests_out"] if c != uid]
+
+    users = [x for x in users if x["id"] != uid]
     _save_users(users)
     session.clear()
     return "", 204
@@ -497,6 +519,15 @@ def delete_user(user_id: str):
                 path.unlink()
         except (json.JSONDecodeError, KeyError):
             pass
+
+    # Clean up contacts/requests references from all other users
+    for other in users:
+        if other["id"] == user_id:
+            continue
+        _ensure_contacts(other)
+        other["contacts"] = [c for c in other["contacts"] if c != user_id]
+        other["contact_requests_in"] = [c for c in other["contact_requests_in"] if c != user_id]
+        other["contact_requests_out"] = [c for c in other["contact_requests_out"] if c != user_id]
 
     users = [x for x in users if x["id"] != user_id]
     _save_users(users)
@@ -566,6 +597,182 @@ def create_user():
     users.append(new_user)
     _save_users(users)
     return jsonify({"id": new_user["id"], "username": username, "display_name": display}), 201
+
+
+# ---------------------------------------------------------------------------
+# Contact endpoints
+# ---------------------------------------------------------------------------
+
+def _resolve_contact_users(user_ids: list[str], users: list[dict]) -> list[dict]:
+    """Resolve a list of user IDs to {id, username, display_name} dicts."""
+    by_id = {u["id"]: u for u in users}
+    result = []
+    for uid in user_ids:
+        u = by_id.get(uid)
+        if u:
+            result.append({
+                "id": u["id"],
+                "username": u["username"],
+                "display_name": u["display_name"],
+            })
+    return result
+
+
+@app.get("/api/contacts")
+@_require_auth
+def get_contacts():
+    """Return my contacts, incoming requests, and outgoing requests."""
+    user = _current_user()
+    users = _load_users()
+    me = next((u for u in users if u["id"] == user["id"]), None)
+    if me is None:
+        return jsonify({"error": "user not found"}), 404
+    _ensure_contacts(me)
+    return jsonify({
+        "contacts": _resolve_contact_users(me["contacts"], users),
+        "incoming": _resolve_contact_users(me["contact_requests_in"], users),
+        "outgoing": _resolve_contact_users(me["contact_requests_out"], users),
+    })
+
+
+@app.post("/api/contacts/request")
+@_require_auth
+def send_contact_request():
+    """Send a contact request by username."""
+    user = _current_user()
+    body = request.get_json(force=True)
+    username = body.get("username", "").strip()
+    if not username:
+        return jsonify({"error": "username is required"}), 400
+
+    users = _load_users()
+    me = next((u for u in users if u["id"] == user["id"]), None)
+    target = next((u for u in users if u["username"] == username), None)
+
+    if target is None:
+        return jsonify({"error": "user not found"}), 404
+    if target["id"] == user["id"]:
+        return jsonify({"error": "cannot send a request to yourself"}), 400
+
+    _ensure_contacts(me)
+    _ensure_contacts(target)
+
+    if target["id"] in me["contacts"]:
+        return jsonify({"error": "already in your contacts"}), 400
+    if target["id"] in me["contact_requests_out"]:
+        return jsonify({"error": "request already sent"}), 400
+
+    # If they already sent us a request, auto-accept
+    if target["id"] in me["contact_requests_in"]:
+        me["contact_requests_in"] = [c for c in me["contact_requests_in"] if c != target["id"]]
+        target["contact_requests_out"] = [c for c in target["contact_requests_out"] if c != me["id"]]
+        me["contacts"].append(target["id"])
+        target["contacts"].append(me["id"])
+        _save_users(users)
+        return jsonify({"ok": True, "auto_accepted": True})
+
+    me["contact_requests_out"].append(target["id"])
+    target["contact_requests_in"].append(me["id"])
+    _save_users(users)
+    return jsonify({"ok": True})
+
+
+@app.post("/api/contacts/accept")
+@_require_auth
+def accept_contact_request():
+    """Accept an incoming contact request."""
+    user = _current_user()
+    body = request.get_json(force=True)
+    target_id = body.get("user_id", "")
+
+    users = _load_users()
+    me = next((u for u in users if u["id"] == user["id"]), None)
+    target = next((u for u in users if u["id"] == target_id), None)
+
+    if target is None:
+        return jsonify({"error": "user not found"}), 404
+
+    _ensure_contacts(me)
+    _ensure_contacts(target)
+
+    if target_id not in me["contact_requests_in"]:
+        return jsonify({"error": "no pending request from this user"}), 400
+
+    me["contact_requests_in"] = [c for c in me["contact_requests_in"] if c != target_id]
+    target["contact_requests_out"] = [c for c in target["contact_requests_out"] if c != me["id"]]
+    me["contacts"].append(target_id)
+    target["contacts"].append(me["id"])
+    _save_users(users)
+    return jsonify({"ok": True})
+
+
+@app.post("/api/contacts/decline")
+@_require_auth
+def decline_contact_request():
+    """Decline an incoming contact request."""
+    user = _current_user()
+    body = request.get_json(force=True)
+    target_id = body.get("user_id", "")
+
+    users = _load_users()
+    me = next((u for u in users if u["id"] == user["id"]), None)
+    target = next((u for u in users if u["id"] == target_id), None)
+
+    if target is None:
+        return jsonify({"error": "user not found"}), 404
+
+    _ensure_contacts(me)
+    _ensure_contacts(target)
+
+    me["contact_requests_in"] = [c for c in me["contact_requests_in"] if c != target_id]
+    target["contact_requests_out"] = [c for c in target["contact_requests_out"] if c != me["id"]]
+    _save_users(users)
+    return jsonify({"ok": True})
+
+
+@app.post("/api/contacts/cancel")
+@_require_auth
+def cancel_contact_request():
+    """Cancel my outgoing contact request."""
+    user = _current_user()
+    body = request.get_json(force=True)
+    target_id = body.get("user_id", "")
+
+    users = _load_users()
+    me = next((u for u in users if u["id"] == user["id"]), None)
+    target = next((u for u in users if u["id"] == target_id), None)
+
+    if target is None:
+        return jsonify({"error": "user not found"}), 404
+
+    _ensure_contacts(me)
+    _ensure_contacts(target)
+
+    me["contact_requests_out"] = [c for c in me["contact_requests_out"] if c != target_id]
+    target["contact_requests_in"] = [c for c in target["contact_requests_in"] if c != me["id"]]
+    _save_users(users)
+    return jsonify({"ok": True})
+
+
+@app.delete("/api/contacts/<user_id>")
+@_require_auth
+def remove_contact(user_id: str):
+    """Remove a contact from both users."""
+    user = _current_user()
+    users = _load_users()
+    me = next((u for u in users if u["id"] == user["id"]), None)
+    target = next((u for u in users if u["id"] == user_id), None)
+
+    if target is None:
+        return jsonify({"error": "user not found"}), 404
+
+    _ensure_contacts(me)
+    _ensure_contacts(target)
+
+    me["contacts"] = [c for c in me["contacts"] if c != user_id]
+    target["contacts"] = [c for c in target["contacts"] if c != me["id"]]
+    _save_users(users)
+    return jsonify({"ok": True})
 
 
 # ---------------------------------------------------------------------------

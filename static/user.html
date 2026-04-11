@@ -186,6 +186,52 @@
       cursor: pointer;
     }
 
+    /* Contact items */
+    .contact-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.4rem 0;
+      border-bottom: 1px solid var(--border-lighter);
+      font-size: 0.9rem;
+    }
+
+    .contact-item:last-child {
+      border-bottom: none;
+    }
+
+    .contact-item .contact-name {
+      color: var(--text-primary);
+    }
+
+    .contact-item .contact-username {
+      color: var(--text-secondary);
+      font-size: 0.8rem;
+    }
+
+    .contact-item .contact-actions {
+      display: flex;
+      gap: 0.3rem;
+      flex-shrink: 0;
+    }
+
+    .contact-empty {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      padding: 0.4rem 0;
+    }
+
+    .contact-subsection {
+      margin-bottom: 0.8rem;
+    }
+
+    .contact-subsection h3 {
+      font-size: 0.9rem;
+      font-weight: 600;
+      margin-bottom: 0.4rem;
+      color: var(--text-secondary);
+    }
+
     .hidden { display: none !important; }
 
     /* Confirm dialog overlay */
@@ -312,6 +358,31 @@
         <button class="btn btn-primary" id="btn-change-pw">Change password</button>
       </div>
       <div id="pw-msg" class="msg hidden"></div>
+    </div>
+
+    <!-- Contacts section -->
+    <div class="section">
+      <h2>Contacts</h2>
+      <div class="field-row">
+        <input class="field-input" type="text" id="contact-username" placeholder="Username">
+        <button class="btn btn-primary btn-small" id="btn-send-request">Send request</button>
+      </div>
+      <div id="contact-msg" class="msg hidden"></div>
+
+      <div id="contacts-incoming" class="contact-subsection hidden">
+        <h3>Incoming Requests</h3>
+        <div id="contacts-incoming-list"></div>
+      </div>
+
+      <div id="contacts-outgoing" class="contact-subsection hidden">
+        <h3>Outgoing Requests</h3>
+        <div id="contacts-outgoing-list"></div>
+      </div>
+
+      <div id="contacts-list-section" class="contact-subsection">
+        <h3>Your Contacts</h3>
+        <div id="contacts-list"></div>
+      </div>
     </div>
 
     <!-- Delete account section -->

@@ -107,6 +107,8 @@ async function loadCurrentUser() {
     document.getElementById("admin-section").classList.remove("hidden");
     loadUsers();
   }
+
+  loadContacts();
 }
 
 // --- Save display name ---
@@ -375,6 +377,174 @@ document.getElementById("btn-create-user").addEventListener("click", async () =>
   document.getElementById("new-password").value = "";
   document.getElementById("new-admin").checked = false;
   loadUsers();
+});
+
+// --- Contacts ---
+async function loadContacts() {
+  const data = await api("/contacts");
+  if (!data || data.error) return;
+
+  // Incoming requests
+  const inSection = document.getElementById("contacts-incoming");
+  const inList = document.getElementById("contacts-incoming-list");
+  inList.innerHTML = "";
+  if (data.incoming.length > 0) {
+    inSection.classList.remove("hidden");
+    for (const u of data.incoming) {
+      const row = document.createElement("div");
+      row.className = "contact-item";
+
+      const info = document.createElement("span");
+      const name = document.createElement("span");
+      name.className = "contact-name";
+      name.textContent = u.display_name;
+      const uname = document.createElement("span");
+      uname.className = "contact-username";
+      uname.textContent = " (" + u.username + ")";
+      info.appendChild(name);
+      info.appendChild(uname);
+      row.appendChild(info);
+
+      const actions = document.createElement("span");
+      actions.className = "contact-actions";
+
+      const acceptBtn = document.createElement("button");
+      acceptBtn.className = "btn btn-primary btn-small";
+      acceptBtn.textContent = "Accept";
+      acceptBtn.addEventListener("click", async () => {
+        await api("/contacts/accept", { method: "POST", body: { user_id: u.id } });
+        loadContacts();
+      });
+      actions.appendChild(acceptBtn);
+
+      const declineBtn = document.createElement("button");
+      declineBtn.className = "btn btn-danger btn-small";
+      declineBtn.textContent = "Decline";
+      declineBtn.addEventListener("click", async () => {
+        await api("/contacts/decline", { method: "POST", body: { user_id: u.id } });
+        loadContacts();
+      });
+      actions.appendChild(declineBtn);
+
+      row.appendChild(actions);
+      inList.appendChild(row);
+    }
+  } else {
+    inSection.classList.add("hidden");
+  }
+
+  // Outgoing requests
+  const outSection = document.getElementById("contacts-outgoing");
+  const outList = document.getElementById("contacts-outgoing-list");
+  outList.innerHTML = "";
+  if (data.outgoing.length > 0) {
+    outSection.classList.remove("hidden");
+    for (const u of data.outgoing) {
+      const row = document.createElement("div");
+      row.className = "contact-item";
+
+      const info = document.createElement("span");
+      const name = document.createElement("span");
+      name.className = "contact-name";
+      name.textContent = u.display_name;
+      const uname = document.createElement("span");
+      uname.className = "contact-username";
+      uname.textContent = " (" + u.username + ")";
+      info.appendChild(name);
+      info.appendChild(uname);
+      row.appendChild(info);
+
+      const actions = document.createElement("span");
+      actions.className = "contact-actions";
+
+      const cancelBtn = document.createElement("button");
+      cancelBtn.className = "btn btn-cancel btn-small";
+      cancelBtn.textContent = "Cancel";
+      cancelBtn.addEventListener("click", async () => {
+        await api("/contacts/cancel", { method: "POST", body: { user_id: u.id } });
+        loadContacts();
+      });
+      actions.appendChild(cancelBtn);
+
+      row.appendChild(actions);
+      outList.appendChild(row);
+    }
+  } else {
+    outSection.classList.add("hidden");
+  }
+
+  // Contacts list
+  const contactsList = document.getElementById("contacts-list");
+  contactsList.innerHTML = "";
+  if (data.contacts.length > 0) {
+    for (const u of data.contacts) {
+      const row = document.createElement("div");
+      row.className = "contact-item";
+
+      const info = document.createElement("span");
+      const name = document.createElement("span");
+      name.className = "contact-name";
+      name.textContent = u.display_name;
+      const uname = document.createElement("span");
+      uname.className = "contact-username";
+      uname.textContent = " (" + u.username + ")";
+      info.appendChild(name);
+      info.appendChild(uname);
+      row.appendChild(info);
+
+      const actions = document.createElement("span");
+      actions.className = "contact-actions";
+
+      const removeBtn = document.createElement("button");
+      removeBtn.className = "btn btn-danger btn-small";
+      removeBtn.textContent = "Remove";
+      removeBtn.addEventListener("click", async () => {
+        const ok = await confirmDialog(
+          "Remove contact",
+          "Remove " + u.display_name + " from your contacts?",
+          ""
+        );
+        if (!ok) return;
+        await api("/contacts/" + u.id, { method: "DELETE" });
+        loadContacts();
+      });
+      actions.appendChild(removeBtn);
+
+      row.appendChild(actions);
+      contactsList.appendChild(row);
+    }
+  } else {
+    const empty = document.createElement("div");
+    empty.className = "contact-empty";
+    empty.textContent = "No contacts yet";
+    contactsList.appendChild(empty);
+  }
+}
+
+// --- Send contact request ---
+document.getElementById("btn-send-request").addEventListener("click", async () => {
+  const msgEl = document.getElementById("contact-msg");
+  hideMsg(msgEl);
+  const username = document.getElementById("contact-username").value.trim();
+  if (!username) {
+    showMsg(msgEl, "Enter a username.", false);
+    return;
+  }
+  const data = await api("/contacts/request", {
+    method: "POST",
+    body: { username },
+  });
+  if (!data || data.error) {
+    showMsg(msgEl, data?.error || "Failed to send request.", false);
+    return;
+  }
+  if (data.auto_accepted) {
+    showMsg(msgEl, "They had already requested you -- contact added!", true);
+  } else {
+    showMsg(msgEl, "Request sent.", true);
+  }
+  document.getElementById("contact-username").value = "";
+  loadContacts();
 });
 
 // --- Init ---
