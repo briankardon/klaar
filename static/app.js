@@ -1399,9 +1399,10 @@ function scheduleSyncFromServer() {
 function updateItem(itemId, fields, {refocusId} = {}) {
   // Optimistic: update local data and re-render immediately
   const item = currentItems.find((it) => it.id === itemId);
+  dbg(`updateItem: id=${itemId}, found=${!!item}, fields=${JSON.stringify(fields)}`);
   if (item) {
     if ("text" in fields) item.text = fields.text;
-    if ("depth" in fields) item.depth = fields.depth;
+    if ("depth" in fields) { dbg(`depth ${item.depth} -> ${fields.depth}`); item.depth = fields.depth; }
     if ("done" in fields) {
       const wasDone = item.done;
       item.done = fields.done;
