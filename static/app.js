@@ -2345,7 +2345,9 @@ function showContextMenu(e, itemId, hierarchy) {
 
   // Select to here (only when there's already a selection to extend from)
   const ctxSelectTo = document.getElementById("ctx-select-to");
-  ctxSelectTo.style.display = (lastSelectedId && lastSelectedId !== itemId) ? "" : "none";
+  const showSelectTo = lastSelectedId && lastSelectedId !== itemId;
+  ctxSelectTo.style.display = showSelectTo ? "" : "none";
+  dbg(`showContextMenu: lastSelectedId=${lastSelectedId}, itemId=${itemId}, showSelectTo=${showSelectTo}`);
 
   // Build tag list
   ctxTags.innerHTML = "";
@@ -2637,7 +2639,8 @@ document.getElementById("ctx-outdent").addEventListener("click", () => {
 });
 
 document.getElementById("ctx-select-to").addEventListener("click", () => {
-  if (!ctxItemId || !lastSelectedId) return;
+  dbg(`ctx-select-to click, ctxItemId=${ctxItemId}, lastSelectedId=${lastSelectedId}`);
+  if (!ctxItemId || !lastSelectedId) { dbg("bail: missing ids"); return; }
   hideContextMenu();
   const visibleIds = getVisibleItemIds();
   const anchorIdx = visibleIds.indexOf(lastSelectedId);
