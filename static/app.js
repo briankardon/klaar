@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.11";
+const KLAAR_VERSION = "0.9.12";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 (function initTheme() {
@@ -740,12 +740,7 @@ function handleSelectionClick(itemId, shiftKey, ctrlKey) {
 }
 
 function getVisibleItemIds() {
-  const hidden = computeCollapseHidden();
-  const ids = [];
-  for (let i = 0; i < currentItems.length; i++) {
-    if (!hidden.has(i)) ids.push(currentItems[i].id);
-  }
-  return ids;
+  return visibleList.map(v => v.item.id);
 }
 
 function clearSelection() {
