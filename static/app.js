@@ -2641,10 +2641,11 @@ document.getElementById("ctx-outdent").addEventListener("click", () => {
 document.getElementById("ctx-select-to").addEventListener("click", () => {
   dbg(`ctx-select-to click, ctxItemId=${ctxItemId}, lastSelectedId=${lastSelectedId}`);
   if (!ctxItemId || !lastSelectedId) { dbg("bail: missing ids"); return; }
+  const targetId = ctxItemId;
   hideContextMenu();
   const visibleIds = getVisibleItemIds();
   const anchorIdx = visibleIds.indexOf(lastSelectedId);
-  const targetIdx = visibleIds.indexOf(ctxItemId);
+  const targetIdx = visibleIds.indexOf(targetId);
   if (anchorIdx === -1 || targetIdx === -1) return;
   const from = Math.min(anchorIdx, targetIdx);
   const to = Math.max(anchorIdx, targetIdx);
