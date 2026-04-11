@@ -1434,6 +1434,11 @@ main {
     font-size: 1rem;
   }
 
+  /* Prevent iOS auto-zoom on input focus */
+  .item .item-text {
+    font-size: 16px;
+  }
+
   /* Suppress iOS native callout/selection on long-press */
   .item, .item .item-text {
     -webkit-touch-callout: none;
