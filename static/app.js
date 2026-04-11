@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.15-debug";
+const KLAAR_VERSION = "0.9.16";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 (function initTheme() {
@@ -858,6 +858,7 @@ function renderViewport() {
     li.style.right = "0";
 
     li.addEventListener("mousedown", (e) => {
+      if (e.button === 2) return;  // right-click handled by contextmenu
       if (e.target.type === "checkbox") return;
       if (e.target.closest(".tag-bubble")) return;
       if (e.target.closest(".btn-icon")) return;
@@ -1399,10 +1400,9 @@ function scheduleSyncFromServer() {
 function updateItem(itemId, fields, {refocusId} = {}) {
   // Optimistic: update local data and re-render immediately
   const item = currentItems.find((it) => it.id === itemId);
-  dbg(`updateItem: id=${itemId}, found=${!!item}, fields=${JSON.stringify(fields)}`);
   if (item) {
     if ("text" in fields) item.text = fields.text;
-    if ("depth" in fields) { dbg(`depth ${item.depth} -> ${fields.depth}`); item.depth = fields.depth; }
+    if ("depth" in fields) item.depth = fields.depth;
     if ("done" in fields) {
       const wasDone = item.done;
       item.done = fields.done;
@@ -2347,7 +2347,6 @@ function showContextMenu(e, itemId, hierarchy) {
   const ctxSelectTo = document.getElementById("ctx-select-to");
   const showSelectTo = lastSelectedId && lastSelectedId !== itemId;
   ctxSelectTo.style.display = showSelectTo ? "" : "none";
-  dbg(`showContextMenu: lastSelectedId=${lastSelectedId}, itemId=${itemId}, showSelectTo=${showSelectTo}`);
 
   // Build tag list
   ctxTags.innerHTML = "";
@@ -2416,7 +2415,6 @@ function showContextMenu(e, itemId, hierarchy) {
 }
 
 function hideContextMenu() {
-  if (ctxItemId) dbg(`hideContextMenu (was ${ctxItemId}) from: ${new Error().stack.split("\n")[2]?.trim()}`);
   ctxMenu.classList.add("hidden");
   if (mobileQuery.matches) {
     panelBackdrop.classList.remove("active");
@@ -2615,32 +2613,47 @@ ctxGather.addEventListener("click", () => {
 });
 
 document.getElementById("ctx-indent").addEventListener("click", () => {
-  dbg(`ctx-indent click, ctxItemId=${ctxItemId}`);
-  if (!ctxItemId) { dbg("bail: no ctxItemId"); return; }
-  const item = currentItems.find(it => it.id === ctxItemId);
-  dbg(`item found: ${!!item}, depth: ${item?.depth}`);
-  if (!item || item.depth >= 20) { dbg("bail: no item or depth>=20"); return; }
-  const id = ctxItemId;
+  if (!ctxItemId) return;
   hideContextMenu();
-  dbg(`calling updateItem(${id}, depth=${item.depth + 1})`);
-  updateItem(id, { depth: item.depth + 1 });
+  const ids = selectedIds.size > 1 ? [...selectedIds] : [ctxItemId];
+  const updates = [];
+  for (const id of ids) {
+    const item = currentItems.find(it => it.id === id);
+    if (item && item.depth < 20) {
+      item.depth += 1;
+      updates.push({ id, depth: item.depth });
+    }
+  }
+  if (updates.length === 0) return;
+  renderItems();
+  api(`/lists/${currentListId}/items`, {
+    method: "PATCH",
+    body: { updates },
+  }).then(() => scheduleSyncFromServer()).catch(() => refreshItems());
 });
 
 document.getElementById("ctx-outdent").addEventListener("click", () => {
-  dbg(`ctx-outdent click, ctxItemId=${ctxItemId}`);
-  if (!ctxItemId) { dbg("bail: no ctxItemId"); return; }
-  const item = currentItems.find(it => it.id === ctxItemId);
-  dbg(`item found: ${!!item}, depth: ${item?.depth}`);
-  if (!item || item.depth <= 0) { dbg("bail: no item or depth<=0"); return; }
-  const id = ctxItemId;
+  if (!ctxItemId) return;
   hideContextMenu();
-  dbg(`calling updateItem(${id}, depth=${item.depth - 1})`);
-  updateItem(id, { depth: item.depth - 1 });
+  const ids = selectedIds.size > 1 ? [...selectedIds] : [ctxItemId];
+  const updates = [];
+  for (const id of ids) {
+    const item = currentItems.find(it => it.id === id);
+    if (item && item.depth > 0) {
+      item.depth -= 1;
+      updates.push({ id, depth: item.depth });
+    }
+  }
+  if (updates.length === 0) return;
+  renderItems();
+  api(`/lists/${currentListId}/items`, {
+    method: "PATCH",
+    body: { updates },
+  }).then(() => scheduleSyncFromServer()).catch(() => refreshItems());
 });
 
 document.getElementById("ctx-select-to").addEventListener("click", () => {
-  dbg(`ctx-select-to click, ctxItemId=${ctxItemId}, lastSelectedId=${lastSelectedId}`);
-  if (!ctxItemId || !lastSelectedId) { dbg("bail: missing ids"); return; }
+  if (!ctxItemId || !lastSelectedId) return;
   const targetId = ctxItemId;
   hideContextMenu();
   const visibleIds = getVisibleItemIds();
@@ -2659,7 +2672,6 @@ document.getElementById("ctx-select-to").addEventListener("click", () => {
 // Close context menu on click elsewhere
 document.addEventListener("click", (e) => {
   if (!ctxMenu.contains(e.target)) {
-    dbg(`doc click closing ctx menu, target: ${e.target.tagName}.${e.target.className}, contains=${ctxMenu.contains(e.target)}`);
     hideContextMenu();
   }
 });
