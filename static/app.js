@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.3";
+const KLAAR_VERSION = "0.9.4";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 (function initTheme() {
@@ -185,10 +185,15 @@ async function loadLists() {
     const delBtn = document.createElement("button");
     delBtn.className = "list-delete-btn";
     delBtn.textContent = "\u00d7";
-    delBtn.title = "Delete list";
+    const isShared = l.owner && l.owner !== currentUserId;
+    delBtn.title = isShared ? "Leave list" : "Delete list";
     delBtn.addEventListener("click", (e) => {
       e.stopPropagation();
-      deleteListById(l.id, l.name);
+      if (isShared) {
+        leaveList(l.id, l.name);
+      } else {
+        deleteListById(l.id, l.name);
+      }
     });
 
     if (l.owner && l.owner !== currentUserId) {
@@ -2641,17 +2646,21 @@ document.getElementById("list-ctx-delete").addEventListener("click", () => {
   deleteListById(listCtxId, listCtxName);
 });
 
-document.getElementById("list-ctx-leave").addEventListener("click", async () => {
-  hideListContextMenu();
-  if (!confirm(`Leave "${listCtxName}"? You will lose access unless re-shared.`)) return;
-  await api(`/lists/${listCtxId}/leave`, { method: "POST" });
-  if (listCtxId === currentListId) {
+async function leaveList(listId, listName) {
+  if (!confirm(`Leave "${listName}"? You will lose access unless re-shared.`)) return;
+  await api(`/lists/${listId}/leave`, { method: "POST" });
+  if (listId === currentListId) {
     currentListId = null;
     listView.classList.add("hidden");
     tagPane.classList.add("hidden");
     emptyState.classList.remove("hidden");
   }
   await loadLists();
+}
+
+document.getElementById("list-ctx-leave").addEventListener("click", () => {
+  hideListContextMenu();
+  leaveList(listCtxId, listCtxName);
 });
 
 document.getElementById("list-ctx-sharing").addEventListener("click", () => {
