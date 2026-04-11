@@ -1302,11 +1302,12 @@ main {
   border-radius: 1px;
 }
 
-.reorder-dropzone:hover::after,
-.reorder-dropzone:active::after {
-  opacity: 1;
-  height: 3px;
-  box-shadow: 0 0 6px var(--reorder-cursor-shadow);
+@media (hover: hover) {
+  .reorder-dropzone:hover::after {
+    opacity: 1;
+    height: 3px;
+    box-shadow: 0 0 6px var(--reorder-cursor-shadow);
+  }
 }
 
 /* ---- Panel backdrop (mobile) ---- */
