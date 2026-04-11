@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.4";
+const KLAAR_VERSION = "0.9.5";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 (function initTheme() {
@@ -3468,5 +3468,4 @@ if (_isMobile && _dbgEl) {
   _h1.addEventListener("touchend", () => { if (_dbgTimer) { clearTimeout(_dbgTimer); _dbgTimer = null; } });
   _h1.addEventListener("touchmove", () => { if (_dbgTimer) { clearTimeout(_dbgTimer); _dbgTimer = null; } });
 }
-loadCurrentUser();
-loadLists();
+loadCurrentUser().then(() => loadLists());
