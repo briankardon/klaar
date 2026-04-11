@@ -101,6 +101,27 @@
     <div id="ctx-tags"></div>
   </div>
 
+  <!-- List context menu -->
+  <div id="list-context-menu" class="hidden">
+    <div class="context-menu-header" id="list-ctx-header"></div>
+    <div class="context-menu-item" id="list-ctx-rename">Rename</div>
+    <div class="context-menu-item" id="list-ctx-sharing">Sharing</div>
+    <div class="context-menu-item" id="list-ctx-delete">Delete</div>
+  </div>
+
+  <!-- Sharing modal -->
+  <div id="sharing-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <h3 id="sharing-modal-title">Sharing</h3>
+      <div id="sharing-owner" style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:0.8rem;"></div>
+      <div id="sharing-list"></div>
+      <div id="sharing-no-contacts" style="font-size:0.85rem; color:var(--text-muted); margin:0.5rem 0;"></div>
+      <div class="modal-buttons">
+        <button id="sharing-close">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Import modal -->
   <div id="import-modal" class="modal-overlay hidden">
     <div class="modal">

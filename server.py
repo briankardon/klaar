@@ -870,6 +870,39 @@ def update_list(list_id: str):
     return jsonify(data)
 
 
+@app.get("/api/lists/<list_id>/sharing")
+@_require_auth
+def get_list_sharing(list_id: str):
+    data = _load_list(list_id)
+    if data is None:
+        return jsonify({"error": "not found"}), 404
+    user = _current_user()
+    if not _can_access(data, user):
+        return jsonify({"error": "not found"}), 404
+    users = _load_users()
+    by_id = {u["id"]: u for u in users}
+    owner = by_id.get(data.get("owner"))
+    shared = []
+    for s in data.get("shared_with", []):
+        u = by_id.get(s["user_id"])
+        if u:
+            shared.append({
+                "user_id": u["id"],
+                "username": u["username"],
+                "display_name": u["display_name"],
+                "permission": s.get("permission", "read"),
+            })
+    return jsonify({
+        "owner": {
+            "id": owner["id"],
+            "username": owner["username"],
+            "display_name": owner["display_name"],
+        } if owner else None,
+        "is_owner": data.get("owner") == user["id"],
+        "shared_with": shared,
+    })
+
+
 @app.delete("/api/lists/<list_id>")
 @_require_auth
 def delete_list(list_id: str):

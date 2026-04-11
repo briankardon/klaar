@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.1";
+const KLAAR_VERSION = "0.9.2";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 (function initTheme() {
@@ -197,6 +197,24 @@ async function loadLists() {
       e.stopPropagation();
       startListRename(li, l.id, l.name);
     });
+    li.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      showListContextMenu(e, l.id, l.name);
+    });
+    if (mobileQuery.matches) {
+      let lpTimer = null;
+      li.addEventListener("touchstart", (te) => {
+        lpTimer = setTimeout(() => {
+          lpTimer = null;
+          showListContextMenu(
+            { preventDefault() {}, clientX: te.touches[0].clientX, clientY: te.touches[0].clientY },
+            l.id, l.name
+          );
+        }, 500);
+      }, { passive: true });
+      li.addEventListener("touchmove", () => { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } });
+      li.addEventListener("touchend", () => { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } });
+    }
     listIndex.appendChild(li);
   }
 }
@@ -2208,6 +2226,7 @@ let ctxHierarchy = false;
 
 function showContextMenu(e, itemId, hierarchy) {
   e.preventDefault();
+  hideListContextMenu();
   ctxItemId = itemId;
   ctxHierarchy = hierarchy;
 
@@ -2558,6 +2577,172 @@ document.addEventListener("keydown", (e) => {
     return;
   }
 });
+
+// -------------------------------------------------------------------
+// List context menu
+// -------------------------------------------------------------------
+
+const listCtxMenu = document.getElementById("list-context-menu");
+const listCtxHeader = document.getElementById("list-ctx-header");
+let listCtxId = null;
+let listCtxName = null;
+
+function showListContextMenu(e, listId, listName) {
+  e.preventDefault();
+  listCtxId = listId;
+  listCtxName = listName;
+  listCtxHeader.textContent = listName;
+  hideContextMenu();
+
+  if (mobileQuery.matches) {
+    listCtxMenu.style.left = "0";
+    listCtxMenu.style.top = "";
+    listCtxMenu.style.bottom = "0";
+    listCtxMenu.style.right = "0";
+    listCtxMenu.style.borderRadius = "12px 12px 0 0";
+    listCtxMenu.style.width = "100%";
+    panelBackdrop.classList.add("active");
+  } else {
+    listCtxMenu.style.bottom = "";
+    listCtxMenu.style.right = "";
+    listCtxMenu.style.borderRadius = "";
+    listCtxMenu.style.width = "";
+    listCtxMenu.style.left = e.clientX + "px";
+    listCtxMenu.style.top = e.clientY + "px";
+  }
+  listCtxMenu.classList.remove("hidden");
+}
+
+function hideListContextMenu() {
+  listCtxMenu.classList.add("hidden");
+  if (mobileQuery.matches) panelBackdrop.classList.remove("active");
+}
+
+document.getElementById("list-ctx-rename").addEventListener("click", () => {
+  hideListContextMenu();
+  const li = listIndex.querySelector(`li[data-id="${listCtxId}"]`);
+  if (li) startListRename(li, listCtxId, listCtxName);
+});
+
+document.getElementById("list-ctx-delete").addEventListener("click", () => {
+  hideListContextMenu();
+  deleteListById(listCtxId, listCtxName);
+});
+
+document.getElementById("list-ctx-sharing").addEventListener("click", () => {
+  hideListContextMenu();
+  showSharingModal(listCtxId);
+});
+
+// Close list context menu on outside click
+document.addEventListener("click", (e) => {
+  if (!listCtxMenu.contains(e.target)) hideListContextMenu();
+});
+
+// -------------------------------------------------------------------
+// Sharing modal
+// -------------------------------------------------------------------
+
+const sharingModal = document.getElementById("sharing-modal");
+
+document.getElementById("sharing-close").addEventListener("click", () => {
+  sharingModal.classList.add("hidden");
+});
+sharingModal.addEventListener("click", (e) => {
+  if (e.target === sharingModal) sharingModal.classList.add("hidden");
+});
+
+async function showSharingModal(listId) {
+  const [sharing, contacts] = await Promise.all([
+    api(`/lists/${listId}/sharing`),
+    api("/contacts"),
+  ]);
+  if (!sharing || sharing.error) return;
+
+  document.getElementById("sharing-modal-title").textContent = "Sharing";
+  const ownerEl = document.getElementById("sharing-owner");
+  if (sharing.owner) {
+    ownerEl.textContent = `Owner: ${sharing.owner.display_name} (${sharing.owner.username})`;
+  } else {
+    ownerEl.textContent = "Owner: unset";
+  }
+
+  const listEl = document.getElementById("sharing-list");
+  const noContactsEl = document.getElementById("sharing-no-contacts");
+  listEl.innerHTML = "";
+
+  const contactList = contacts?.contacts || [];
+  const sharedMap = {};
+  for (const s of sharing.shared_with) {
+    sharedMap[s.user_id] = s.permission;
+  }
+
+  if (!sharing.is_owner) {
+    // Non-owners can only view sharing info
+    if (sharing.shared_with.length === 0) {
+      noContactsEl.textContent = "This list is not shared with anyone.";
+    } else {
+      noContactsEl.textContent = "";
+      for (const s of sharing.shared_with) {
+        const row = document.createElement("div");
+        row.className = "sharing-row";
+        row.innerHTML = `<span class="sharing-name">${s.display_name} (${s.username})</span>
+          <span style="font-size:0.75rem; color:var(--text-muted)">${s.permission}</span>`;
+        listEl.appendChild(row);
+      }
+    }
+  } else if (contactList.length === 0) {
+    noContactsEl.textContent = "Add contacts on the User page to share lists.";
+  } else {
+    noContactsEl.textContent = "";
+    for (const c of contactList) {
+      const perm = sharedMap[c.id] || null;
+      const row = document.createElement("div");
+      row.className = "sharing-row";
+
+      const name = document.createElement("span");
+      name.className = "sharing-name";
+      name.textContent = `${c.display_name} (${c.username})`;
+
+      const controls = document.createElement("span");
+      controls.className = "sharing-controls";
+
+      const btnRead = document.createElement("button");
+      btnRead.className = "sharing-btn" + (perm === "read" ? " active" : "");
+      btnRead.textContent = "Read";
+
+      const btnWrite = document.createElement("button");
+      btnWrite.className = "sharing-btn" + (perm === "write" ? " active" : "");
+      btnWrite.textContent = "Write";
+
+      const btnNone = document.createElement("button");
+      btnNone.className = "sharing-btn" + (!perm ? " active" : "");
+      btnNone.textContent = "None";
+
+      async function setPermission(newPerm) {
+        const current = await api(`/lists/${listId}`);
+        if (!current || current.error) return;
+        let sw = current.shared_with || [];
+        sw = sw.filter(s => s.user_id !== c.id);
+        if (newPerm) {
+          sw.push({ user_id: c.id, permission: newPerm });
+        }
+        await api(`/lists/${listId}`, { method: "PATCH", body: { shared_with: sw } });
+        showSharingModal(listId);
+      }
+
+      btnRead.addEventListener("click", () => setPermission(perm === "read" ? null : "read"));
+      btnWrite.addEventListener("click", () => setPermission(perm === "write" ? null : "write"));
+      btnNone.addEventListener("click", () => setPermission(null));
+
+      controls.append(btnNone, btnRead, btnWrite);
+      row.append(name, controls);
+      listEl.appendChild(row);
+    }
+  }
+
+  sharingModal.classList.remove("hidden");
+}
 
 // -------------------------------------------------------------------
 // Undo / Redo

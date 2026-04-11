@@ -1116,7 +1116,8 @@ main {
 
 /* ---- Context menu ---- */
 
-#context-menu {
+#context-menu,
+#list-context-menu {
   position: fixed;
   background: var(--bg-context-menu);
   border: 1px solid var(--border-context-menu);
@@ -1127,6 +1128,49 @@ main {
   padding: 4px 0;
   font-size: 0.85rem;
   color: var(--text-primary);
+}
+
+.sharing-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--border-lighter);
+  font-size: 0.85rem;
+}
+
+.sharing-row:last-child {
+  border-bottom: none;
+}
+
+.sharing-name {
+  flex: 1;
+}
+
+.sharing-controls {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.sharing-btn {
+  background: var(--bg-comp-btn);
+  border: 1px solid var(--border-comp-btn);
+  border-radius: 3px;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  color: var(--text-primary);
+}
+
+.sharing-btn.active {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: #fff;
+}
+
+.sharing-btn:hover {
+  opacity: 0.8;
 }
 
 .context-menu-header {
