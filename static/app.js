@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.17";
+const KLAAR_VERSION = "0.9.18";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 (function initTheme() {
@@ -918,11 +918,12 @@ function renderViewport() {
       txt = document.createElement("span");
       txt.className = "item-text";
       txt.textContent = item.text;
-      txt.addEventListener("click", (e) => {
-        e.stopPropagation();
+      let tapTimer = null;
+      function openMobileEditor() {
         const inp = document.createElement("input");
         inp.type = "text";
         inp.className = "item-text";
+        inp.style.fontSize = "16px";
         inp.value = item.text;
         let mobileDeleted = false;
         inp.addEventListener("blur", () => {
@@ -947,6 +948,22 @@ function renderViewport() {
         });
         txt.replaceWith(inp);
         inp.focus();
+      }
+      txt.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (tapTimer) {
+          // Double tap — open editor
+          clearTimeout(tapTimer);
+          tapTimer = null;
+          openMobileEditor();
+        } else {
+          // First tap — select, wait for possible second tap
+          selectedIds.clear();
+          selectedIds.add(item.id);
+          lastSelectedId = item.id;
+          applySelectionStyles();
+          tapTimer = setTimeout(() => { tapTimer = null; }, 300);
+        }
       });
     } else {
       txt = document.createElement("input");
