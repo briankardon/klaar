@@ -968,6 +968,8 @@ def add_item(list_id: str):
     text = str(body.get("text", "")).strip()[:1000]
     depth = max(0, min(20, int(body.get("depth", 0))))
     item = _new_item(text, depth)
+    if "tags" in body and isinstance(body["tags"], list):
+        item["tags"] = body["tags"]
     after_id = body.get("after_id")
     before_id = body.get("before_id")
     if before_id and _valid_id(before_id):

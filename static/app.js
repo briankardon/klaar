@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.9";
+const KLAAR_VERSION = "0.9.10";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 (function initTheme() {
@@ -892,15 +892,16 @@ function renderViewport() {
     });
 
     // Shared keydown logic for both mobile and desktop inputs
-    function handleItemEnter(inp) {
+    function handleItemEnter(inp, shiftKey) {
+      const copyTags = shiftKey ? item.tags.map(t => ({ id: t.id, value: null })) : null;
       if (inp.selectionStart === 0 && inp.value !== "") {
-        addItemBefore(item.id, item.depth);
+        addItemBefore(item.id, item.depth, copyTags);
       } else {
         const val = inp.value.trim();
         if (val !== item.text) {
           updateItem(item.id, { text: val });
         }
-        addItemAfter(item.id, item.depth);
+        addItemAfter(item.id, item.depth, copyTags);
       }
     }
 
@@ -932,7 +933,7 @@ function renderViewport() {
         inp.addEventListener("keydown", (ke) => {
           if (ke.key === "Enter") {
             ke.preventDefault();
-            handleItemEnter(inp);
+            handleItemEnter(inp, ke.shiftKey);
           }
           if (ke.key === "Backspace" && inp.value === "") {
             ke.preventDefault();
@@ -959,7 +960,7 @@ function renderViewport() {
       txt.addEventListener("keydown", (e) => {
         if (e.key === "Enter") {
           e.preventDefault();
-          handleItemEnter(txt);
+          handleItemEnter(txt, e.shiftKey);
           return;
         }
         if (e.key === "Backspace" && txt.value === "") {
@@ -1259,9 +1260,10 @@ function updateCollapseBar(maxDepth) {
 // Data mutations (optimistic update + background server sync)
 // -------------------------------------------------------------------
 
-async function addItemAfter(afterId, depth) {
+async function addItemAfter(afterId, depth, tags) {
   const body = { text: "", depth };
   if (afterId) body.after_id = afterId;
+  if (tags) body.tags = tags;
   const result = await api(`/lists/${currentListId}/items`, {
     method: "POST",
     body,
@@ -1281,8 +1283,9 @@ async function addItemAfter(afterId, depth) {
   }
 }
 
-async function addItemBefore(beforeId, depth) {
+async function addItemBefore(beforeId, depth, tags) {
   const body = { text: "", depth, before_id: beforeId };
+  if (tags) body.tags = tags;
   const result = await api(`/lists/${currentListId}/items`, {
     method: "POST",
     body,
