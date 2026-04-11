@@ -809,11 +809,19 @@ def get_lists():
             })
         except (json.JSONDecodeError, KeyError):
             continue
-    # Sort by user's saved list order
+    # Sort by user's saved list order, pruning stale IDs
     order = user.get("list_order", [])
     if order:
-        order_map = {lid: i for i, lid in enumerate(order)}
-        lists.sort(key=lambda l: order_map.get(l["id"], len(order)))
+        valid_ids = {l["id"] for l in lists}
+        pruned = [lid for lid in order if lid in valid_ids]
+        if len(pruned) != len(order):
+            users = _load_users()
+            u = next((u for u in users if u["id"] == user["id"]), None)
+            if u:
+                u["list_order"] = pruned
+                _save_users(users)
+        order_map = {lid: i for i, lid in enumerate(pruned)}
+        lists.sort(key=lambda l: order_map.get(l["id"], len(pruned)))
     return jsonify(lists)
 
 
