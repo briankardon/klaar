@@ -658,8 +658,6 @@ main {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  will-change: transform;
 }
 
 #fold-gutter {
@@ -715,8 +713,13 @@ main {
   max-width: 400px;
 }
 
-.item:hover {
-  background: var(--bg-list-hover);
+@media (hover: hover) {
+  .item:hover {
+    background: var(--bg-list-hover);
+  }
+  .item.selected:hover {
+    background: var(--bg-item-selected-hover);
+  }
 }
 
 /* Tooltip for truncated item text (desktop hover) */
@@ -738,10 +741,6 @@ main {
 
 .item.selected {
   background: var(--bg-item-selected);
-}
-
-.item.selected:hover {
-  background: var(--bg-item-selected-hover);
 }
 
 .item.drag-source {

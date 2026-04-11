@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.16";
+const KLAAR_VERSION = "0.9.17";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 (function initTheme() {
@@ -30,6 +30,14 @@ console.log(`Klaar v${KLAAR_VERSION}`);
 // On-screen debug log (mobile only — long-press title to toggle)
 const _dbgEl = document.getElementById("debug-log");
 const _isMobile = window.matchMedia("(max-width: 768px)").matches;
+document.getElementById("debug-copy")?.addEventListener("click", () => {
+  const lines = _dbgEl.querySelectorAll("div");
+  const text = Array.from(lines).map(l => l.textContent).join("\n");
+  navigator.clipboard.writeText(text).then(() => {
+    document.getElementById("debug-copy").textContent = "Copied!";
+    setTimeout(() => { document.getElementById("debug-copy").textContent = "Copy"; }, 1500);
+  });
+});
 function dbg(msg) {
   console.log(msg);
   if (!_isMobile || !_dbgEl) return;
