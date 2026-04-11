@@ -1435,9 +1435,10 @@ main {
     font-size: 1rem;
   }
 
-  /* Prevent iOS auto-zoom on input focus */
+  /* Prevent iOS auto-zoom on input focus and double-tap zoom */
   .item .item-text {
     font-size: 16px;
+    touch-action: manipulation;
   }
 
   /* Suppress iOS native callout/selection on long-press */
