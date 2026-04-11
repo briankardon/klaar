@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.13";
+const KLAAR_VERSION = "0.9.14";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 (function initTheme() {
@@ -2332,6 +2332,20 @@ function showContextMenu(e, itemId, hierarchy) {
     ctxLink.dataset.url = "";
   }
 
+  // Indent/Outdent
+  const ctxIndent = document.getElementById("ctx-indent");
+  const ctxOutdent = document.getElementById("ctx-outdent");
+  ctxIndent.style.display = hierarchy ? "none" : "";
+  ctxOutdent.style.display = hierarchy ? "none" : "";
+  if (!hierarchy) {
+    ctxIndent.classList.toggle("disabled", item.depth >= 20);
+    ctxOutdent.classList.toggle("disabled", item.depth <= 0);
+  }
+
+  // Select to here (only when there's already a selection to extend from)
+  const ctxSelectTo = document.getElementById("ctx-select-to");
+  ctxSelectTo.style.display = (lastSelectedId && lastSelectedId !== itemId) ? "" : "none";
+
   // Build tag list
   ctxTags.innerHTML = "";
   for (const tagDef of currentTags) {
@@ -2590,6 +2604,38 @@ ctxGather.addEventListener("click", () => {
     body: { item_id: ctxItemId },
   }).then(() => scheduleSyncFromServer())
     .catch(() => refreshItems());
+});
+
+document.getElementById("ctx-indent").addEventListener("click", () => {
+  if (!ctxItemId) return;
+  const item = currentItems.find(it => it.id === ctxItemId);
+  if (!item || item.depth >= 20) return;
+  hideContextMenu();
+  updateItem(ctxItemId, { depth: item.depth + 1 });
+});
+
+document.getElementById("ctx-outdent").addEventListener("click", () => {
+  if (!ctxItemId) return;
+  const item = currentItems.find(it => it.id === ctxItemId);
+  if (!item || item.depth <= 0) return;
+  hideContextMenu();
+  updateItem(ctxItemId, { depth: item.depth - 1 });
+});
+
+document.getElementById("ctx-select-to").addEventListener("click", () => {
+  if (!ctxItemId || !lastSelectedId) return;
+  hideContextMenu();
+  const visibleIds = getVisibleItemIds();
+  const anchorIdx = visibleIds.indexOf(lastSelectedId);
+  const targetIdx = visibleIds.indexOf(ctxItemId);
+  if (anchorIdx === -1 || targetIdx === -1) return;
+  const from = Math.min(anchorIdx, targetIdx);
+  const to = Math.max(anchorIdx, targetIdx);
+  selectedIds.clear();
+  for (let i = from; i <= to; i++) {
+    selectedIds.add(visibleIds[i]);
+  }
+  applySelectionStyles();
 });
 
 // Close context menu on click elsewhere
