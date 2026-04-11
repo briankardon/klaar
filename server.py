@@ -447,6 +447,9 @@ def update_me():
             return jsonify({"error": "password must be at least 6 characters"}), 400
         u["password_hash"] = generate_password_hash(new_pw)
 
+    if "list_order" in body:
+        u["list_order"] = body["list_order"]
+
     _save_users(users)
     return jsonify({
         "id": u["id"],
@@ -806,6 +809,11 @@ def get_lists():
             })
         except (json.JSONDecodeError, KeyError):
             continue
+    # Sort by user's saved list order
+    order = user.get("list_order", [])
+    if order:
+        order_map = {lid: i for i, lid in enumerate(order)}
+        lists.sort(key=lambda l: order_map.get(l["id"], len(order)))
     return jsonify(lists)
 
 

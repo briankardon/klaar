@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.6";
+const KLAAR_VERSION = "0.9.7";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 (function initTheme() {
@@ -209,6 +209,10 @@ async function loadLists() {
       e.stopPropagation();
       startListRename(li, l.id, l.name);
     });
+    li.addEventListener("mousedown", (e) => {
+      if (e.target.closest(".list-delete-btn")) return;
+      onListMouseDown(e, li);
+    });
     li.addEventListener("contextmenu", (e) => {
       e.preventDefault();
       showListContextMenu(e, l.id, l.name, l.owner);
@@ -268,6 +272,61 @@ async function deleteListById(listId, name) {
     emptyState.classList.remove("hidden");
   }
   await loadLists();
+}
+
+// List drag-and-drop reordering
+function onListMouseDown(e, dragLi) {
+  const startY = e.clientY;
+  let started = false;
+  let ghost = null;
+  const items = Array.from(listIndex.children);
+  const itemHeight = dragLi.getBoundingClientRect().height;
+  const listRect = listIndex.getBoundingClientRect();
+
+  function onMove(me) {
+    const dy = Math.abs(me.clientY - startY);
+    if (!started && dy >= 5) {
+      started = true;
+      document.body.style.userSelect = "none";
+      ghost = document.createElement("div");
+      ghost.className = "drag-ghost";
+      ghost.style.width = dragLi.getBoundingClientRect().width + "px";
+      ghost.textContent = dragLi.querySelector(".list-name")?.textContent || "";
+      ghost.style.left = dragLi.getBoundingClientRect().left + "px";
+      ghost.style.top = dragLi.getBoundingClientRect().top + "px";
+      document.body.appendChild(ghost);
+      dragLi.classList.add("drag-source");
+    }
+    if (!started) return;
+    ghost.style.top = (me.clientY - (itemHeight / 2)) + "px";
+    // Determine target position
+    const relY = me.clientY - listRect.top + listIndex.scrollTop;
+    let targetIdx = Math.round(relY / itemHeight);
+    targetIdx = Math.max(0, Math.min(targetIdx, items.length - 1));
+    const currentIdx = items.indexOf(dragLi);
+    if (targetIdx !== currentIdx) {
+      items.splice(currentIdx, 1);
+      items.splice(targetIdx, 0, dragLi);
+      listIndex.innerHTML = "";
+      items.forEach(li => listIndex.appendChild(li));
+    }
+  }
+
+  function onUp() {
+    document.removeEventListener("mousemove", onMove);
+    document.removeEventListener("mouseup", onUp);
+    if (started) {
+      document.body.style.userSelect = "";
+      if (ghost) ghost.remove();
+      dragLi.classList.remove("drag-source");
+      // Save new order
+      const order = Array.from(listIndex.children).map(li => li.dataset.id);
+      api("/me", { method: "PATCH", body: { list_order: order } });
+    }
+  }
+
+  document.addEventListener("mousemove", onMove);
+  document.addEventListener("mouseup", onUp);
 }
 
 async function selectList(id) {
