@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.29";
+const KLAAR_VERSION = "0.9.30";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -106,6 +106,39 @@ function hidePaneDivider() {
 // -------------------------------------------------------------------
 // API helpers
 // -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+// Caret position helpers (for arrow-key navigation between items)
+// -------------------------------------------------------------------
+
+const _measureCanvas = document.createElement("canvas");
+function _measureCtx() { return _measureCanvas.getContext("2d"); }
+
+function getCaretPixelX(input) {
+  const ctx = _measureCtx();
+  ctx.font = getComputedStyle(input).font;
+  const textWidth = ctx.measureText(input.value.substring(0, input.selectionStart)).width;
+  const rect = input.getBoundingClientRect();
+  const padLeft = parseFloat(getComputedStyle(input).paddingLeft) || 0;
+  return rect.left + padLeft + textWidth - input.scrollLeft;
+}
+
+function setCaretFromPixelX(input, targetX) {
+  const ctx = _measureCtx();
+  ctx.font = getComputedStyle(input).font;
+  const rect = input.getBoundingClientRect();
+  const padLeft = parseFloat(getComputedStyle(input).paddingLeft) || 0;
+  const relX = targetX - rect.left - padLeft + input.scrollLeft;
+  let best = 0;
+  let bestDist = Math.abs(relX);
+  for (let i = 1; i <= input.value.length; i++) {
+    const w = ctx.measureText(input.value.substring(0, i)).width;
+    const dist = Math.abs(w - relX);
+    if (dist < bestDist) { best = i; bestDist = dist; }
+    else break;
+  }
+  input.setSelectionRange(best, best);
+}
 
 // -------------------------------------------------------------------
 // Item tag helpers (tags are [{id, value}, ...])
@@ -977,7 +1010,10 @@ function createItemTextElement(item) {
         (e.key === "ArrowLeft" && txt.selectionStart === 0 && txt.selectionEnd === 0) ||
         (e.key === "ArrowRight" && txt.selectionStart === txt.value.length && txt.selectionEnd === txt.value.length)) {
       const direction = (e.key === "ArrowUp" || e.key === "ArrowLeft") ? -1 : 1;
+      const isVertical = e.key === "ArrowUp" || e.key === "ArrowDown";
       const cursorAtEnd = e.key === "ArrowUp" || e.key === "ArrowLeft";
+      // For up/down, remember the viewport x to maintain column position
+      const caretX = isVertical ? getCaretPixelX(txt) : null;
       e.preventDefault();
       const val = txt.value.trim();
       if (val !== item.text) {
@@ -1003,7 +1039,8 @@ function createItemTextElement(item) {
         const el = itemsEl.querySelector(`.item[data-id="${targetId}"] .item-text`);
         if (el) {
           el.focus();
-          if (cursorAtEnd) el.setSelectionRange(el.value.length, el.value.length);
+          if (caretX != null) setCaretFromPixelX(el, caretX);
+          else if (cursorAtEnd) el.setSelectionRange(el.value.length, el.value.length);
         }
       }
       return;
