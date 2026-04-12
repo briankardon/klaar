@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.23";
+const KLAAR_VERSION = "0.9.24";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -803,6 +803,322 @@ function scrollToItem(itemId) {
   }
 }
 
+// --- Item rendering helpers (used by renderViewport) ---
+
+function createItemCheckbox(item, displayIdx) {
+  const cb = document.createElement("input");
+  cb.type = "checkbox";
+  cb.checked = item.done;
+  cb.addEventListener("click", (e) => {
+    if (e.ctrlKey) {
+      e.preventDefault();
+      toggleDoneHierarchy(displayIdx);
+    } else if (selectedIds.size > 1 && selectedIds.has(item.id)) {
+      e.preventDefault();
+      toggleDoneSelected();
+    } else {
+      toggleDone(item);
+    }
+  });
+  return cb;
+}
+
+function createItemTextElement(item) {
+  function handleItemEnter(inp, shiftKey) {
+    const copyTags = shiftKey ? item.tags.map(t => ({ id: t.id, value: null })) : null;
+    if (inp.selectionStart === 0 && inp.value !== "") {
+      addItemBefore(item.id, item.depth, copyTags);
+    } else {
+      const val = inp.value.trim();
+      if (val !== item.text) {
+        updateItem(item.id, { text: val });
+      }
+      addItemAfter(item.id, item.depth, copyTags);
+    }
+  }
+
+  if (mobileQuery.matches) {
+    const txt = document.createElement("span");
+    txt.className = "item-text";
+    txt.textContent = item.text;
+    let tapTimer = null;
+    function openMobileEditor() {
+      const inp = document.createElement("input");
+      inp.type = "text";
+      inp.className = "item-text";
+      inp.style.fontSize = "16px";
+      inp.value = item.text;
+      let mobileDeleted = false;
+      inp.addEventListener("blur", () => {
+        if (mobileDeleted) return;
+        const val = inp.value.trim();
+        if (val !== item.text) {
+          updateItem(item.id, { text: val });
+        } else {
+          renderItems();
+        }
+      });
+      inp.addEventListener("keydown", (ke) => {
+        if (ke.key === "Enter") {
+          ke.preventDefault();
+          handleItemEnter(inp, ke.shiftKey);
+        }
+        if (ke.key === "Backspace" && inp.value === "") {
+          ke.preventDefault();
+          mobileDeleted = true;
+          deleteItem(item.id);
+        }
+      });
+      txt.replaceWith(inp);
+      inp.focus();
+    }
+    txt.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (tapTimer) {
+        clearTimeout(tapTimer);
+        tapTimer = null;
+        openMobileEditor();
+      } else {
+        selectedIds.clear();
+        selectedIds.add(item.id);
+        lastSelectedId = item.id;
+        applySelectionStyles();
+        tapTimer = setTimeout(() => { tapTimer = null; }, 300);
+      }
+    });
+    return txt;
+  }
+
+  // Desktop: editable input
+  const txt = document.createElement("input");
+  txt.type = "text";
+  txt.value = item.text;
+  txt.draggable = false;
+  txt.className = "item-text";
+  let deleted = false;
+  let skipBlur = false;
+  txt.addEventListener("blur", () => {
+    if (deleted || skipBlur) return;
+    const val = txt.value.trim();
+    if (val !== item.text) {
+      updateItem(item.id, { text: val });
+    }
+  });
+  txt.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleItemEnter(txt, e.shiftKey);
+      return;
+    }
+    if (e.key === "Backspace" && txt.value === "") {
+      e.preventDefault();
+      deleted = true;
+      const allItems = Array.from(itemsEl.querySelectorAll(".item"));
+      const idx = allItems.findIndex((el) => el.dataset.id === item.id);
+      const prevId = idx > 0 ? allItems[idx - 1].dataset.id : null;
+      deleteItem(item.id);
+      if (prevId) {
+        const el = itemsEl.querySelector(`.item[data-id="${prevId}"] .item-text`);
+        if (el) el.focus();
+      }
+      return;
+    }
+    if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+      e.preventDefault();
+      const val = txt.value.trim();
+      if (val !== item.text) {
+        skipBlur = true;
+        item.text = val;
+        api(`/lists/${currentListId}/items/${item.id}`, {
+          method: "PATCH",
+          body: { text: val },
+        }).then(() => scheduleSyncFromServer())
+          .catch(() => refreshItems());
+      }
+      const visRow = visibleList.findIndex((v) => v.item.id === item.id);
+      const targetRow = visRow + (e.key === "ArrowUp" ? -1 : 1);
+      if (targetRow >= 0 && targetRow < visibleList.length) {
+        const targetTop = targetRow * ITEM_HEIGHT;
+        const container = document.getElementById("items-container");
+        if (targetTop < container.scrollTop) container.scrollTop = targetTop;
+        if (targetTop + ITEM_HEIGHT > container.scrollTop + container.clientHeight) {
+          container.scrollTop = targetTop + ITEM_HEIGHT - container.clientHeight;
+        }
+        renderViewport();
+        const targetId = visibleList[targetRow].item.id;
+        const el = itemsEl.querySelector(`.item[data-id="${targetId}"] .item-text`);
+        if (el) el.focus();
+      }
+      return;
+    }
+    if (e.key === "Tab") {
+      e.preventDefault();
+      if (selectedIds.size > 1 && selectedIds.has(item.id)) {
+        changeDepthSelected(e.shiftKey ? -1 : 1, item.id);
+      } else {
+        const newDepth = item.depth + (e.shiftKey ? -1 : 1);
+        updateItem(item.id, { depth: Math.max(0, newDepth) }, { refocusId: item.id });
+      }
+    }
+  });
+  return txt;
+}
+
+function createTagBubbles(item, displayIdx) {
+  const tagsContainer = document.createElement("span");
+  tagsContainer.className = "item-tags";
+  for (const tagDef of currentTags) {
+    if (!itemHasTag(item, tagDef.id)) continue;
+    if (hiddenTagIds.has(tagDef.id)) continue;
+    const tagId = tagDef.id;
+    const tagVal = itemTagValue(item, tagId);
+    const bubble = document.createElement("span");
+    bubble.className = "tag-bubble";
+    const friendly = friendlyDate(tagVal);
+    const displayVal = friendly ?? tagVal;
+    if (mobileQuery.matches) {
+      bubble.textContent = tagDef.name.charAt(0).toUpperCase();
+      bubble.title = tagVal != null ? `${tagDef.name}: ${tagVal}` : tagDef.name;
+    } else {
+      bubble.textContent = displayVal != null ? `${tagDef.name}: ${displayVal}` : tagDef.name;
+      if (friendly) bubble.dataset.rawDate = tagVal;
+    }
+    bubble.style.background = tagDef.color;
+    let clickTimer = null;
+    let editing = false;
+    bubble.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (editing) return;
+      if (e.ctrlKey) {
+        removeTagFromHierarchy(displayIdx, tagId);
+        return;
+      }
+      if (clickTimer) clearTimeout(clickTimer);
+      clickTimer = setTimeout(() => {
+        clickTimer = null;
+        if (!editing) removeTagFromItemById(item.id, tagId);
+      }, 250);
+    });
+    bubble.addEventListener("dblclick", (e) => {
+      e.stopPropagation();
+      if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
+      editing = true;
+      const current = itemTagValue(item, tagId);
+      bubble.textContent = tagDef.name + ": ";
+      const inp = document.createElement("input");
+      inp.type = "text";
+      inp.className = "tag-value-input";
+      inp.value = current ?? "";
+      inp.size = Math.max(3, (current ?? "").length + 1);
+      bubble.appendChild(inp);
+      inp.focus();
+      inp.select();
+      inp.addEventListener("input", () => {
+        inp.size = Math.max(3, inp.value.length + 1);
+      });
+      let pickerActive = false;
+      function commit() {
+        if (pickerActive) return;
+        editing = false;
+        const newVal = inp.value.trim() === "" ? null : inp.value.trim();
+        setTagValue(item, tagId, newVal);
+        renderItems();
+        updateItem(item.id, { tags: [...item.tags] });
+      }
+      inp.addEventListener("blur", commit);
+      inp.addEventListener("keydown", (ke) => {
+        if (ke.key === "Enter") { ke.preventDefault(); inp.blur(); }
+        if (ke.key === "Escape") { inp.value = current ?? ""; inp.blur(); }
+        if (ke.ctrlKey && ke.key === "d") {
+          ke.preventDefault();
+          const picker = document.createElement("input");
+          picker.type = "date";
+          picker.className = "tag-date-picker";
+          const bubbleRect = bubble.getBoundingClientRect();
+          picker.style.position = "fixed";
+          picker.style.left = bubbleRect.left + "px";
+          picker.style.top = (bubbleRect.bottom + 2) + "px";
+          picker.style.zIndex = "2000";
+          if (current) {
+            try { picker.value = new Date(current).toISOString().slice(0, 10); } catch (e) {}
+          }
+          document.body.appendChild(picker);
+          pickerActive = true;
+          picker.focus();
+          try { picker.showPicker(); } catch (e) {}
+          let closed = false;
+          function closePicker(andCommit) {
+            if (closed) return;
+            closed = true;
+            pickerActive = false;
+            if (picker.value) {
+              inp.value = picker.value;
+              inp.size = Math.max(3, inp.value.length + 1);
+            }
+            if (document.body.contains(picker)) picker.remove();
+            if (andCommit) {
+              commit();
+            } else {
+              inp.focus();
+            }
+          }
+          picker.addEventListener("change", () => closePicker(true));
+          picker.addEventListener("keydown", (pke) => {
+            if (pke.key === "Enter") { pke.preventDefault(); closePicker(true); }
+            if (pke.key === "Escape") { closed = true; pickerActive = false; picker.remove(); inp.focus(); }
+            pke.stopPropagation();
+          });
+          picker.addEventListener("blur", () => setTimeout(() => closePicker(false), 150));
+        }
+        ke.stopPropagation();
+      });
+    });
+    tagsContainer.appendChild(bubble);
+  }
+  return tagsContainer;
+}
+
+function createDeleteButton(item) {
+  const btnDel = document.createElement("button");
+  btnDel.className = "btn-icon";
+  btnDel.textContent = "\u00d7";
+  btnDel.title = "Delete";
+  btnDel.addEventListener("click", (e) => {
+    if (e.ctrlKey) {
+      const idx = currentItems.indexOf(item);
+      const [start, end] = getChildRange(idx);
+      const ids = new Set([item.id, ...currentItems.slice(start, end).map(it => it.id)]);
+      currentItems = currentItems.filter(it => !ids.has(it.id));
+      renderItems();
+      api(`/lists/${currentListId}/items/bulk-delete`, {
+        method: "POST",
+        body: { item_ids: [...ids] },
+      }).then(() => scheduleSyncFromServer()).catch(() => refreshItems());
+    } else {
+      deleteItem(item.id);
+    }
+  });
+  return btnDel;
+}
+
+function renderReorderDropZones(startRow, endRow) {
+  for (let row = startRow; row <= endRow && row <= visibleList.length; row++) {
+    const dz = document.createElement("div");
+    dz.className = "reorder-dropzone";
+    dz.style.position = "absolute";
+    dz.style.top = (row * ITEM_HEIGHT - 10) + "px";
+    dz.style.left = "0";
+    dz.style.right = "0";
+    dz.style.height = "20px";
+    dz.style.zIndex = "50";
+    const targetDataIdx = row < visibleList.length ? visibleList[row].dataIdx : currentItems.length;
+    dz.addEventListener("click", () => commitReorderAt(targetDataIdx));
+    itemsEl.appendChild(dz);
+  }
+}
+
+// --- Main viewport renderer ---
+
 function renderViewport() {
   const container = document.getElementById("items-container");
   const scrollTop = container.scrollTop;
@@ -811,7 +1127,6 @@ function renderViewport() {
   const startRow = Math.max(0, Math.floor(scrollTop / ITEM_HEIGHT) - RENDER_OVERSCAN);
   const endRow = Math.min(visibleList.length, Math.ceil((scrollTop + viewHeight) / ITEM_HEIGHT) + RENDER_OVERSCAN);
 
-  // Clear and re-render only the visible window
   itemsEl.innerHTML = "";
   foldGutter.innerHTML = "";
 
@@ -841,7 +1156,7 @@ function renderViewport() {
     li.style.right = "0";
 
     li.addEventListener("mousedown", (e) => {
-      if (e.button === 2) return;  // right-click handled by contextmenu
+      if (e.button === 2) return;
       if (e.target.type === "checkbox") return;
       if (e.target.closest(".tag-bubble")) return;
       if (e.target.closest(".btn-icon")) return;
@@ -851,307 +1166,20 @@ function renderViewport() {
     li.addEventListener("contextmenu", (e) => {
       showContextMenu(e, item.id, e.ctrlKey);
     });
-    // Unified touch handler: long-press → context menu, drag threshold → drag
     setupItemTouch(li, item.id);
 
-    // checkbox
-    const cb = document.createElement("input");
-    cb.type = "checkbox";
-    cb.checked = item.done;
-    cb.addEventListener("click", (e) => {
-      if (e.ctrlKey) {
-        e.preventDefault();
-        toggleDoneHierarchy(displayIdx);
-      } else if (selectedIds.size > 1 && selectedIds.has(item.id)) {
-        e.preventDefault();
-        toggleDoneSelected();
-      } else {
-        toggleDone(item);
-      }
-    });
+    const cb = createItemCheckbox(item, displayIdx);
+    const txt = createItemTextElement(item);
+    const tagsContainer = createTagBubbles(item, displayIdx);
+    const btnDel = createDeleteButton(item);
 
-    // Shared keydown logic for both mobile and desktop inputs
-    function handleItemEnter(inp, shiftKey) {
-      const copyTags = shiftKey ? item.tags.map(t => ({ id: t.id, value: null })) : null;
-      if (inp.selectionStart === 0 && inp.value !== "") {
-        addItemBefore(item.id, item.depth, copyTags);
-      } else {
-        const val = inp.value.trim();
-        if (val !== item.text) {
-          updateItem(item.id, { text: val });
-        }
-        addItemAfter(item.id, item.depth, copyTags);
-      }
-    }
-
-    // text — input on desktop, span (tap-to-edit) on mobile
-    let txt;
-    let deleted = false;
-    let skipBlur = false;
-
-    if (mobileQuery.matches) {
-      txt = document.createElement("span");
-      txt.className = "item-text";
-      txt.textContent = item.text;
-      let tapTimer = null;
-      function openMobileEditor() {
-        const inp = document.createElement("input");
-        inp.type = "text";
-        inp.className = "item-text";
-        inp.style.fontSize = "16px";
-        inp.value = item.text;
-        let mobileDeleted = false;
-        inp.addEventListener("blur", () => {
-          if (mobileDeleted) return;
-          const val = inp.value.trim();
-          if (val !== item.text) {
-            updateItem(item.id, { text: val });
-          } else {
-            renderItems();
-          }
-        });
-        inp.addEventListener("keydown", (ke) => {
-          if (ke.key === "Enter") {
-            ke.preventDefault();
-            handleItemEnter(inp, ke.shiftKey);
-          }
-          if (ke.key === "Backspace" && inp.value === "") {
-            ke.preventDefault();
-            mobileDeleted = true;
-            deleteItem(item.id);
-          }
-        });
-        txt.replaceWith(inp);
-        inp.focus();
-      }
-      txt.addEventListener("click", (e) => {
-        e.stopPropagation();
-        if (tapTimer) {
-          // Double tap — open editor
-          clearTimeout(tapTimer);
-          tapTimer = null;
-          openMobileEditor();
-        } else {
-          // First tap — select, wait for possible second tap
-          selectedIds.clear();
-          selectedIds.add(item.id);
-          lastSelectedId = item.id;
-          applySelectionStyles();
-          tapTimer = setTimeout(() => { tapTimer = null; }, 300);
-        }
-      });
-    } else {
-      txt = document.createElement("input");
-      txt.type = "text";
-      txt.value = item.text;
-      txt.draggable = false;
-      txt.className = "item-text";
-      txt.addEventListener("blur", () => {
-        if (deleted || skipBlur) return;
-        const val = txt.value.trim();
-        if (val !== item.text) {
-          updateItem(item.id, { text: val });
-        }
-      });
-      txt.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          handleItemEnter(txt, e.shiftKey);
-          return;
-        }
-        if (e.key === "Backspace" && txt.value === "") {
-          e.preventDefault();
-          deleted = true;
-          const allItems = Array.from(itemsEl.querySelectorAll(".item"));
-          const idx = allItems.findIndex((el) => el.dataset.id === item.id);
-          const prevId = idx > 0 ? allItems[idx - 1].dataset.id : null;
-          deleteItem(item.id);
-          if (prevId) {
-            const el = itemsEl.querySelector(`.item[data-id="${prevId}"] .item-text`);
-            if (el) el.focus();
-          }
-          return;
-        }
-        if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-          e.preventDefault();
-          const val = txt.value.trim();
-          if (val !== item.text) {
-            skipBlur = true;
-            item.text = val;
-            api(`/lists/${currentListId}/items/${item.id}`, {
-              method: "PATCH",
-              body: { text: val },
-            }).then(() => scheduleSyncFromServer())
-              .catch(() => refreshItems());
-          }
-          const visRow = visibleList.findIndex((v) => v.item.id === item.id);
-          const targetRow = visRow + (e.key === "ArrowUp" ? -1 : 1);
-          if (targetRow >= 0 && targetRow < visibleList.length) {
-            const targetTop = targetRow * ITEM_HEIGHT;
-            const container = document.getElementById("items-container");
-            if (targetTop < container.scrollTop) container.scrollTop = targetTop;
-            if (targetTop + ITEM_HEIGHT > container.scrollTop + container.clientHeight) {
-              container.scrollTop = targetTop + ITEM_HEIGHT - container.clientHeight;
-            }
-            renderViewport();
-            const targetId = visibleList[targetRow].item.id;
-            const el = itemsEl.querySelector(`.item[data-id="${targetId}"] .item-text`);
-            if (el) el.focus();
-          }
-          return;
-        }
-        if (e.key === "Tab") {
-          e.preventDefault();
-          if (selectedIds.size > 1 && selectedIds.has(item.id)) {
-            changeDepthSelected(e.shiftKey ? -1 : 1, item.id);
-          } else {
-            const newDepth = item.depth + (e.shiftKey ? -1 : 1);
-            updateItem(item.id, { depth: Math.max(0, newDepth) }, { refocusId: item.id });
-          }
-        }
-      });
-    }
-
-    // tag bubbles
-    const tagsContainer = document.createElement("span");
-    tagsContainer.className = "item-tags";
-    for (const tagDef of currentTags) {
-      if (!itemHasTag(item, tagDef.id)) continue;
-      if (hiddenTagIds.has(tagDef.id)) continue;
-      const tagId = tagDef.id;
-      const tagVal = itemTagValue(item, tagId);
-      const bubble = document.createElement("span");
-      bubble.className = "tag-bubble";
-      const friendly = friendlyDate(tagVal);
-      const displayVal = friendly ?? tagVal;
-      if (mobileQuery.matches) {
-        bubble.textContent = tagDef.name.charAt(0).toUpperCase();
-        bubble.title = tagVal != null ? `${tagDef.name}: ${tagVal}` : tagDef.name;
-      } else {
-        bubble.textContent = displayVal != null ? `${tagDef.name}: ${displayVal}` : tagDef.name;
-        if (friendly) bubble.dataset.rawDate = tagVal;
-      }
-      bubble.style.background = tagDef.color;
-      let clickTimer = null;
-      let editing = false;
-      bubble.addEventListener("click", (e) => {
-        e.stopPropagation();
-        if (editing) return;
-        if (e.ctrlKey) {
-          removeTagFromHierarchy(displayIdx, tagId);
-          return;
-        }
-        if (clickTimer) clearTimeout(clickTimer);
-        clickTimer = setTimeout(() => {
-          clickTimer = null;
-          if (!editing) removeTagFromItemById(item.id, tagId);
-        }, 250);
-      });
-      bubble.addEventListener("dblclick", (e) => {
-        e.stopPropagation();
-        if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
-        editing = true;
-        const current = itemTagValue(item, tagId);
-        bubble.textContent = tagDef.name + ": ";
-        const inp = document.createElement("input");
-        inp.type = "text";
-        inp.className = "tag-value-input";
-        inp.value = current ?? "";
-        inp.size = Math.max(3, (current ?? "").length + 1);
-        bubble.appendChild(inp);
-        inp.focus();
-        inp.select();
-        inp.addEventListener("input", () => {
-          inp.size = Math.max(3, inp.value.length + 1);
-        });
-        let pickerActive = false;
-        function commit() {
-          if (pickerActive) return;
-          editing = false;
-          const newVal = inp.value.trim() === "" ? null : inp.value.trim();
-          setTagValue(item, tagId, newVal);
-          renderItems();
-          updateItem(item.id, { tags: [...item.tags] });
-        }
-        inp.addEventListener("blur", commit);
-        inp.addEventListener("keydown", (ke) => {
-          if (ke.key === "Enter") { ke.preventDefault(); inp.blur(); }
-          if (ke.key === "Escape") { inp.value = current ?? ""; inp.blur(); }
-          if (ke.ctrlKey && ke.key === "d") {
-            ke.preventDefault();
-            const picker = document.createElement("input");
-            picker.type = "date";
-            picker.className = "tag-date-picker";
-            const bubbleRect = bubble.getBoundingClientRect();
-            picker.style.position = "fixed";
-            picker.style.left = bubbleRect.left + "px";
-            picker.style.top = (bubbleRect.bottom + 2) + "px";
-            picker.style.zIndex = "2000";
-            if (current) {
-              try { picker.value = new Date(current).toISOString().slice(0, 10); } catch (e) {}
-            }
-            document.body.appendChild(picker);
-            pickerActive = true;
-            picker.focus();
-            try { picker.showPicker(); } catch (e) {}
-            let closed = false;
-            function closePicker(andCommit) {
-              if (closed) return;
-              closed = true;
-              pickerActive = false;
-              if (picker.value) {
-                inp.value = picker.value;  // stores as YYYY-MM-DD
-                inp.size = Math.max(3, inp.value.length + 1);
-              }
-              if (document.body.contains(picker)) picker.remove();
-              if (andCommit) {
-                commit();
-              } else {
-                inp.focus();
-              }
-            }
-            picker.addEventListener("change", () => closePicker(true));
-            picker.addEventListener("keydown", (pke) => {
-              if (pke.key === "Enter") { pke.preventDefault(); closePicker(true); }
-              if (pke.key === "Escape") { closed = true; pickerActive = false; picker.remove(); inp.focus(); }
-              pke.stopPropagation();
-            });
-            picker.addEventListener("blur", () => setTimeout(() => closePicker(false), 150));
-          }
-          ke.stopPropagation();
-        });
-      });
-      tagsContainer.appendChild(bubble);
-    }
-
-    // child count badge
+    // Child count badge
     const badge = document.createElement("span");
     badge.className = "child-count";
     if (isParent && isCollapsed) {
       const [start, end] = getChildRange(dataIdx);
       badge.textContent = `(${end - start})`;
     }
-
-    // delete button
-    const btnDel = document.createElement("button");
-    btnDel.className = "btn-icon";
-    btnDel.textContent = "\u00d7";
-    btnDel.title = "Delete";
-    btnDel.addEventListener("click", (e) => {
-      if (e.ctrlKey) {
-        const dataIdx = currentItems.indexOf(item);
-        const [start, end] = getChildRange(dataIdx);
-        const ids = new Set([item.id, ...currentItems.slice(start, end).map(it => it.id)]);
-        currentItems = currentItems.filter(it => !ids.has(it.id));
-        renderItems();
-        api(`/lists/${currentListId}/items/bulk-delete`, {
-          method: "POST",
-          body: { item_ids: [...ids] },
-        }).then(() => scheduleSyncFromServer()).catch(() => refreshItems());
-      } else {
-        deleteItem(item.id);
-      }
-    });
 
     const leftGroup = document.createElement("div");
     leftGroup.className = "item-left";
@@ -1162,22 +1190,7 @@ function renderViewport() {
     itemsEl.appendChild(li);
   }
 
-  // Render drop zones between items during reorder mode
-  if (reorderItemId) {
-    for (let row = startRow; row <= endRow && row <= visibleList.length; row++) {
-      const dz = document.createElement("div");
-      dz.className = "reorder-dropzone";
-      dz.style.position = "absolute";
-      dz.style.top = (row * ITEM_HEIGHT - 10) + "px";
-      dz.style.left = "0";
-      dz.style.right = "0";
-      dz.style.height = "20px";
-      dz.style.zIndex = "50";
-      const targetDataIdx = row < visibleList.length ? visibleList[row].dataIdx : currentItems.length;
-      dz.addEventListener("click", () => commitReorderAt(targetDataIdx));
-      itemsEl.appendChild(dz);
-    }
-  }
+  if (reorderItemId) renderReorderDropZones(startRow, endRow);
 }
 
 // Wire up scroll-based viewport rendering
