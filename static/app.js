@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.27";
+const KLAAR_VERSION = "0.9.28";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -37,6 +37,7 @@ const btnNewList = document.getElementById("btn-new-list");
 const collapseBar = document.getElementById("collapse-bar");
 const foldGutter = document.getElementById("fold-gutter");
 const tagPane = document.getElementById("tag-pane");
+const paneDivider = document.getElementById("pane-divider");
 const tagListEl = document.getElementById("tag-list");
 const btnNewTag = document.getElementById("btn-new-tag");
 const searchInput = document.getElementById("search-input");
@@ -56,6 +57,51 @@ let currentSort = null;          // {tagId, direction: "asc"|"desc"} or null
 let completionFilter = "all";    // "all" | "active" | "done"
 let currentViews = [];           // [{id, name, ...state}]
 let activeViewId = null;         // currently applied view
+
+// -------------------------------------------------------------------
+// Pane divider (resizable tag pane, desktop only)
+// -------------------------------------------------------------------
+
+const TAG_PANE_MIN = 120;
+const TAG_PANE_MAX = 500;
+
+(function initPaneDivider() {
+  const savedWidth = localStorage.getItem("klaar-tagpane-width");
+  if (savedWidth) tagPane.style.width = savedWidth + "px";
+
+  let dragging = false;
+
+  paneDivider.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    dragging = true;
+    paneDivider.classList.add("dragging");
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  });
+
+  document.addEventListener("mousemove", (e) => {
+    if (!dragging) return;
+    const newWidth = Math.max(TAG_PANE_MIN, Math.min(TAG_PANE_MAX, document.documentElement.clientWidth - e.clientX));
+    tagPane.style.width = newWidth + "px";
+  });
+
+  document.addEventListener("mouseup", () => {
+    if (!dragging) return;
+    dragging = false;
+    paneDivider.classList.remove("dragging");
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+    localStorage.setItem("klaar-tagpane-width", parseInt(tagPane.style.width));
+  });
+})();
+
+function showPaneDivider() {
+  if (!mobileQuery.matches) paneDivider.style.display = "block";
+}
+
+function hidePaneDivider() {
+  paneDivider.style.display = "none";
+}
 
 // -------------------------------------------------------------------
 // API helpers
@@ -252,6 +298,7 @@ async function deleteListById(listId, name) {
     currentListId = null;
     listView.classList.add("hidden");
     tagPane.classList.add("hidden");
+    hidePaneDivider();
     emptyState.classList.remove("hidden");
   }
   await loadLists();
@@ -321,6 +368,7 @@ async function selectList(id) {
     currentListId = null;
     listView.classList.add("hidden");
     tagPane.classList.add("hidden");
+    hidePaneDivider();
     emptyState.classList.remove("hidden");
     await loadLists();
     return;
@@ -352,6 +400,7 @@ async function selectList(id) {
   emptyState.classList.add("hidden");
   listView.classList.remove("hidden");
   tagPane.classList.remove("hidden");
+  showPaneDivider();
   renderFilterBar();
   renderItems();
   renderTagPane();
@@ -2940,6 +2989,7 @@ async function leaveList(listId, listName) {
     currentListId = null;
     listView.classList.add("hidden");
     tagPane.classList.add("hidden");
+    hidePaneDivider();
     emptyState.classList.remove("hidden");
   }
   await loadLists();

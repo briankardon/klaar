@@ -756,15 +756,30 @@ main {
 }
 
 
+/* ---- Pane divider (resizable) ---- */
+
+#pane-divider {
+  width: 5px;
+  cursor: col-resize;
+  background: var(--border-light);
+  flex-shrink: 0;
+  display: none;
+}
+
+#pane-divider:hover,
+#pane-divider.dragging {
+  background: var(--accent-primary);
+}
+
 /* ---- Tag pane (right sidebar) ---- */
 
 #tag-pane {
   width: 200px;
-  min-width: 200px;
   background: var(--bg-sidebar);
-  border-left: 1px solid var(--border-light);
+  border-left: none;
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
 }
 
 #tag-list {
