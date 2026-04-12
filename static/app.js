@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.40";
+const KLAAR_VERSION = "0.9.41";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -871,6 +871,7 @@ function renderItems() {
   const totalHeight = visibleList.length * ITEM_HEIGHT;
   itemsEl.style.height = totalHeight + "px";
   itemsEl.style.position = "relative";
+  foldGutter.style.minHeight = totalHeight + "px";
 
   renderViewport();
 }
