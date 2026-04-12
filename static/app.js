@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.24";
+const KLAAR_VERSION = "0.9.25";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -749,6 +749,7 @@ function rerenderVisible() {
 function getItemHeight() { return mobileQuery.matches ? 36 : 26; }
 let ITEM_HEIGHT = getItemHeight();
 const RENDER_OVERSCAN = 10; // extra items above/below viewport
+const MAX_DEPTH = 20;       // must match server-side limit
 let visibleList = [];        // computed list of visible items [{item, dataIdx, isParent, isCollapsed, isFilterAncestor}]
 
 function computeVisibleList() {
@@ -956,8 +957,8 @@ function createItemTextElement(item) {
       if (selectedIds.size > 1 && selectedIds.has(item.id)) {
         changeDepthSelected(e.shiftKey ? -1 : 1, item.id);
       } else {
-        const newDepth = item.depth + (e.shiftKey ? -1 : 1);
-        updateItem(item.id, { depth: Math.max(0, newDepth) }, { refocusId: item.id });
+        const newDepth = Math.max(0, Math.min(MAX_DEPTH, item.depth + (e.shiftKey ? -1 : 1)));
+        updateItem(item.id, { depth: newDepth }, { refocusId: item.id });
       }
     }
   });
@@ -1352,7 +1353,7 @@ function changeDepthSelected(delta, refocusId) {
   const updates = [];
   for (const it of currentItems) {
     if (!selectedIds.has(it.id)) continue;
-    const newDepth = Math.max(0, it.depth + delta);
+    const newDepth = Math.max(0, Math.min(MAX_DEPTH, it.depth + delta));
     if (newDepth !== it.depth) {
       it.depth = newDepth;
       updates.push({ id: it.id, depth: newDepth });

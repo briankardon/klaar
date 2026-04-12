@@ -31,6 +31,7 @@ else:
 
 UNDO_LIMIT = 50
 MIN_PASSWORD_LENGTH = 6
+MAX_DEPTH = 20
 _undo_stacks: dict[str, list] = defaultdict(list)
 _redo_stacks: dict[str, list] = defaultdict(list)
 
@@ -274,7 +275,7 @@ def _apply_item_fields(item: dict, fields: dict) -> None:
         elif not item["done"] and was_done:
             item["completed"] = None
     if "depth" in fields:
-        item["depth"] = max(0, min(20, int(fields["depth"])))
+        item["depth"] = max(0, min(MAX_DEPTH, int(fields["depth"])))
     if "tags" in fields:
         item["tags"] = fields["tags"]
 
@@ -937,7 +938,7 @@ def add_item(list_id: str):
         return jsonify({"error": "forbidden"}), 403
     body = request.get_json(force=True)
     text = str(body.get("text", "")).strip()[:1000]
-    depth = max(0, min(20, int(body.get("depth", 0))))
+    depth = max(0, min(MAX_DEPTH, int(body.get("depth", 0))))
     item = _new_item(text, depth)
     if "tags" in body and isinstance(body["tags"], list):
         item["tags"] = body["tags"]
@@ -1347,7 +1348,7 @@ def bulk_add_items(list_id: str):
     new_items = body.get("items", [])
     for ni in new_items:
         text = str(ni.get("text", "")).strip()[:1000]
-        depth = max(0, min(20, int(ni.get("depth", 0))))
+        depth = max(0, min(MAX_DEPTH, int(ni.get("depth", 0))))
         item = _new_item(text, depth)
         if ni.get("done"):
             item["done"] = True
