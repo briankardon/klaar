@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.30";
+const KLAAR_VERSION = "0.9.31";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -1038,7 +1038,7 @@ function createItemTextElement(item) {
         const targetId = visibleList[targetRow].item.id;
         const el = itemsEl.querySelector(`.item[data-id="${targetId}"] .item-text`);
         if (el) {
-          el.focus();
+          el.focus({ preventScroll: true });
           if (caretX != null) setCaretFromPixelX(el, caretX);
           else if (cursorAtEnd) el.setSelectionRange(el.value.length, el.value.length);
         }
