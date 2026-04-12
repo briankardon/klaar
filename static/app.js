@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.26";
+const KLAAR_VERSION = "0.9.27";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -1036,7 +1036,7 @@ function createTagBubbles(item, displayIdx) {
             updates.push({ id: selId, tags: [...selItem.tags] });
           }
           if (updates.length > 0) {
-            api(`/lists/${currentListId}/items/bulk-update`, {
+            api(`/lists/${currentListId}/items`, {
               method: "PATCH",
               body: { updates },
             }).then(() => scheduleSyncFromServer()).catch(() => refreshItems());
