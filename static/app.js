@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.28";
+const KLAAR_VERSION = "0.9.29";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -973,7 +973,11 @@ function createItemTextElement(item) {
       }
       return;
     }
-    if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+    if (e.key === "ArrowUp" || e.key === "ArrowDown" ||
+        (e.key === "ArrowLeft" && txt.selectionStart === 0 && txt.selectionEnd === 0) ||
+        (e.key === "ArrowRight" && txt.selectionStart === txt.value.length && txt.selectionEnd === txt.value.length)) {
+      const direction = (e.key === "ArrowUp" || e.key === "ArrowLeft") ? -1 : 1;
+      const cursorAtEnd = e.key === "ArrowUp" || e.key === "ArrowLeft";
       e.preventDefault();
       const val = txt.value.trim();
       if (val !== item.text) {
@@ -986,7 +990,7 @@ function createItemTextElement(item) {
           .catch(() => refreshItems());
       }
       const visRow = visibleList.findIndex((v) => v.item.id === item.id);
-      const targetRow = visRow + (e.key === "ArrowUp" ? -1 : 1);
+      const targetRow = visRow + direction;
       if (targetRow >= 0 && targetRow < visibleList.length) {
         const targetTop = targetRow * ITEM_HEIGHT;
         const container = document.getElementById("items-container");
@@ -997,7 +1001,10 @@ function createItemTextElement(item) {
         renderViewport();
         const targetId = visibleList[targetRow].item.id;
         const el = itemsEl.querySelector(`.item[data-id="${targetId}"] .item-text`);
-        if (el) el.focus();
+        if (el) {
+          el.focus();
+          if (cursorAtEnd) el.setSelectionRange(el.value.length, el.value.length);
+        }
       }
       return;
     }
