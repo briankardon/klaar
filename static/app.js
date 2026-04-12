@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.32";
+const KLAAR_VERSION = "0.9.33";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -1042,6 +1042,7 @@ function createItemTextElement(item) {
           el.focus({ preventScroll: true });
           if (caretX != null) setCaretFromPixelX(el, caretX);
           else if (cursorAtEnd) el.setSelectionRange(el.value.length, el.value.length);
+          else el.setSelectionRange(0, 0);
         }
         requestAnimationFrame(() => { _suppressScrollRender = false; });
       }
