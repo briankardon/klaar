@@ -1,6 +1,7 @@
 /* Klaar - User settings page */
 
 const API = "/api";
+const MIN_PASSWORD_LENGTH = 6;
 
 async function api(path, opts = {}) {
   const res = await fetch(API + path, {
@@ -119,8 +120,8 @@ document.getElementById("btn-change-pw").addEventListener("click", async () => {
     showMsg(msgEl, "Current password is required.", false);
     return;
   }
-  if (newPw.length < 6) {
-    showMsg(msgEl, "New password must be at least 6 characters.", false);
+  if (newPw.length < MIN_PASSWORD_LENGTH) {
+    showMsg(msgEl, `New password must be at least ${MIN_PASSWORD_LENGTH} characters.`, false);
     return;
   }
   if (newPw !== confirmPw) {
@@ -253,13 +254,13 @@ async function resetUserPassword(user) {
   const ok = await confirmDialog(
     "Reset password for " + user.username,
     "Enter a new password for this user.",
-    '<div class="form-group" style="margin-top:0.5rem;"><label for="reset-pw-input">New password (6+ characters)</label><input class="field-input" type="password" id="reset-pw-input" autocomplete="new-password"></div>'
+    `<div class="form-group" style="margin-top:0.5rem;"><label for="reset-pw-input">New password (${MIN_PASSWORD_LENGTH}+ characters)</label><input class="field-input" type="password" id="reset-pw-input" autocomplete="new-password"></div>`
   );
   if (!ok) return;
 
   const password = document.getElementById("reset-pw-input")?.value || "";
-  if (password.length < 6) {
-    alert("Password must be at least 6 characters.");
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    alert(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
     return;
   }
 
@@ -331,8 +332,8 @@ document.getElementById("btn-create-user").addEventListener("click", async () =>
     showMsg(msgEl, "Username and password are required.", false);
     return;
   }
-  if (password.length < 6) {
-    showMsg(msgEl, "Password must be at least 6 characters.", false);
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    showMsg(msgEl, `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`, false);
     return;
   }
 

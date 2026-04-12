@@ -30,6 +30,7 @@ else:
     _secret_path.write_bytes(app.secret_key)
 
 UNDO_LIMIT = 50
+MIN_PASSWORD_LENGTH = 6
 _undo_stacks: dict[str, list] = defaultdict(list)
 _redo_stacks: dict[str, list] = defaultdict(list)
 
@@ -218,6 +219,42 @@ def _ensure_contacts(user: dict) -> None:
         user["contact_requests_out"] = []
 
 
+def _load_contact_pair(user: dict):
+    """Load users list and resolve me + target for contact request operations.
+    Returns (users, me, target, error_response)."""
+    body = request.get_json(force=True)
+    target_id = body.get("user_id", "")
+    users = _load_users()
+    me = next((u for u in users if u["id"] == user["id"]), None)
+    target = next((u for u in users if u["id"] == target_id), None)
+    if target is None:
+        return None, None, None, (jsonify({"error": "user not found"}), 404)
+    _ensure_contacts(me)
+    _ensure_contacts(target)
+    return users, me, target, None
+
+
+def _delete_user_data(uid: str, users: list) -> None:
+    """Delete a user's owned lists and clean up contact references."""
+    for path in list(DATA_DIR.glob("*.json")):
+        if path.name == "users.json":
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if data.get("owner") == uid:
+                path.unlink()
+        except (json.JSONDecodeError, KeyError):
+            pass
+    for other in users:
+        if other["id"] == uid:
+            continue
+        _ensure_contacts(other)
+        other["contacts"] = [c for c in other["contacts"] if c != uid]
+        other["contact_requests_in"] = [c for c in other["contact_requests_in"] if c != uid]
+        other["contact_requests_out"] = [c for c in other["contact_requests_out"] if c != uid]
+
+
 def _next_tag_color(data: dict) -> str:
     used = {t["color"] for t in data["tags"]}
     for c in TAG_COLORS:
@@ -316,8 +353,8 @@ def setup():
     display = body.get("display_name", "").strip() or username
     if not username or not password:
         return jsonify({"error": "username and password required"}), 400
-    if len(password) < 6:
-        return jsonify({"error": "password must be at least 6 characters"}), 400
+    if len(password) < MIN_PASSWORD_LENGTH:
+        return jsonify({"error": f"password must be at least {MIN_PASSWORD_LENGTH} characters"}), 400
     user = {
         "id": uuid.uuid4().hex[:12],
         "username": username,
@@ -360,8 +397,8 @@ def register():
     display = body.get("display_name", "").strip() or username
     if not username or not password:
         return jsonify({"error": "username and password required"}), 400
-    if len(password) < 6:
-        return jsonify({"error": "password must be at least 6 characters"}), 400
+    if len(password) < MIN_PASSWORD_LENGTH:
+        return jsonify({"error": f"password must be at least {MIN_PASSWORD_LENGTH} characters"}), 400
     if _find_user(username):
         return jsonify({"error": "username already exists"}), 400
     users = _load_users()
@@ -448,8 +485,8 @@ def update_me():
         if not check_password_hash(u["password_hash"], current_pw):
             return jsonify({"error": "current password is incorrect"}), 403
         new_pw = body["new_password"]
-        if len(new_pw) < 6:
-            return jsonify({"error": "password must be at least 6 characters"}), 400
+        if len(new_pw) < MIN_PASSWORD_LENGTH:
+            return jsonify({"error": f"password must be at least {MIN_PASSWORD_LENGTH} characters"}), 400
         u["password_hash"] = generate_password_hash(new_pw)
 
     if "list_order" in body:
@@ -478,29 +515,8 @@ def delete_me():
     if not check_password_hash(u["password_hash"], password):
         return jsonify({"error": "incorrect password"}), 403
 
-    # Delete user's lists
-    for path in list(DATA_DIR.glob("*.json")):
-        if path.name == "users.json":
-            continue
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            if data.get("owner") == user["id"]:
-                path.unlink()
-        except (json.JSONDecodeError, KeyError):
-            pass
-
-    # Clean up contacts/requests references from all other users
-    uid = user["id"]
-    for other in users:
-        if other["id"] == uid:
-            continue
-        _ensure_contacts(other)
-        other["contacts"] = [c for c in other["contacts"] if c != uid]
-        other["contact_requests_in"] = [c for c in other["contact_requests_in"] if c != uid]
-        other["contact_requests_out"] = [c for c in other["contact_requests_out"] if c != uid]
-
-    users = [x for x in users if x["id"] != uid]
+    _delete_user_data(user["id"], users)
+    users = [x for x in users if x["id"] != user["id"]]
     _save_users(users)
     session.clear()
     return "", 204
@@ -520,27 +536,7 @@ def delete_user(user_id: str):
     if target is None:
         return jsonify({"error": "user not found"}), 404
 
-    # Delete target user's lists
-    for path in list(DATA_DIR.glob("*.json")):
-        if path.name == "users.json":
-            continue
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            if data.get("owner") == user_id:
-                path.unlink()
-        except (json.JSONDecodeError, KeyError):
-            pass
-
-    # Clean up contacts/requests references from all other users
-    for other in users:
-        if other["id"] == user_id:
-            continue
-        _ensure_contacts(other)
-        other["contacts"] = [c for c in other["contacts"] if c != user_id]
-        other["contact_requests_in"] = [c for c in other["contact_requests_in"] if c != user_id]
-        other["contact_requests_out"] = [c for c in other["contact_requests_out"] if c != user_id]
-
+    _delete_user_data(user_id, users)
     users = [x for x in users if x["id"] != user_id]
     _save_users(users)
     return "", 204
@@ -567,8 +563,8 @@ def admin_update_user(user_id: str):
         target["admin"] = bool(body["admin"])
     if "password" in body:
         pw = body["password"]
-        if len(pw) < 6:
-            return jsonify({"error": "password must be at least 6 characters"}), 400
+        if len(pw) < MIN_PASSWORD_LENGTH:
+            return jsonify({"error": f"password must be at least {MIN_PASSWORD_LENGTH} characters"}), 400
         target["password_hash"] = generate_password_hash(pw)
 
     _save_users(users)
@@ -593,8 +589,8 @@ def create_user():
     display = body.get("display_name", "").strip() or username
     if not username or not password:
         return jsonify({"error": "username and password required"}), 400
-    if len(password) < 6:
-        return jsonify({"error": "password must be at least 6 characters"}), 400
+    if len(password) < MIN_PASSWORD_LENGTH:
+        return jsonify({"error": f"password must be at least {MIN_PASSWORD_LENGTH} characters"}), 400
     if _find_user(username):
         return jsonify({"error": "username already exists"}), 400
     users = _load_users()
@@ -693,26 +689,16 @@ def send_contact_request():
 @_require_auth
 def accept_contact_request():
     """Accept an incoming contact request."""
-    user = _current_user()
-    body = request.get_json(force=True)
-    target_id = body.get("user_id", "")
+    users, me, target, err = _load_contact_pair(_current_user())
+    if err:
+        return err
 
-    users = _load_users()
-    me = next((u for u in users if u["id"] == user["id"]), None)
-    target = next((u for u in users if u["id"] == target_id), None)
-
-    if target is None:
-        return jsonify({"error": "user not found"}), 404
-
-    _ensure_contacts(me)
-    _ensure_contacts(target)
-
-    if target_id not in me["contact_requests_in"]:
+    if target["id"] not in me["contact_requests_in"]:
         return jsonify({"error": "no pending request from this user"}), 400
 
-    me["contact_requests_in"] = [c for c in me["contact_requests_in"] if c != target_id]
+    me["contact_requests_in"] = [c for c in me["contact_requests_in"] if c != target["id"]]
     target["contact_requests_out"] = [c for c in target["contact_requests_out"] if c != me["id"]]
-    me["contacts"].append(target_id)
+    me["contacts"].append(target["id"])
     target["contacts"].append(me["id"])
     _save_users(users)
     return jsonify({"ok": True})
@@ -722,21 +708,11 @@ def accept_contact_request():
 @_require_auth
 def decline_contact_request():
     """Decline an incoming contact request."""
-    user = _current_user()
-    body = request.get_json(force=True)
-    target_id = body.get("user_id", "")
+    users, me, target, err = _load_contact_pair(_current_user())
+    if err:
+        return err
 
-    users = _load_users()
-    me = next((u for u in users if u["id"] == user["id"]), None)
-    target = next((u for u in users if u["id"] == target_id), None)
-
-    if target is None:
-        return jsonify({"error": "user not found"}), 404
-
-    _ensure_contacts(me)
-    _ensure_contacts(target)
-
-    me["contact_requests_in"] = [c for c in me["contact_requests_in"] if c != target_id]
+    me["contact_requests_in"] = [c for c in me["contact_requests_in"] if c != target["id"]]
     target["contact_requests_out"] = [c for c in target["contact_requests_out"] if c != me["id"]]
     _save_users(users)
     return jsonify({"ok": True})
@@ -746,21 +722,11 @@ def decline_contact_request():
 @_require_auth
 def cancel_contact_request():
     """Cancel my outgoing contact request."""
-    user = _current_user()
-    body = request.get_json(force=True)
-    target_id = body.get("user_id", "")
+    users, me, target, err = _load_contact_pair(_current_user())
+    if err:
+        return err
 
-    users = _load_users()
-    me = next((u for u in users if u["id"] == user["id"]), None)
-    target = next((u for u in users if u["id"] == target_id), None)
-
-    if target is None:
-        return jsonify({"error": "user not found"}), 404
-
-    _ensure_contacts(me)
-    _ensure_contacts(target)
-
-    me["contact_requests_out"] = [c for c in me["contact_requests_out"] if c != target_id]
+    me["contact_requests_out"] = [c for c in me["contact_requests_out"] if c != target["id"]]
     target["contact_requests_in"] = [c for c in target["contact_requests_in"] if c != me["id"]]
     _save_users(users)
     return jsonify({"ok": True})
