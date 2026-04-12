@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.33";
+const KLAAR_VERSION = "0.9.35";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -57,6 +57,7 @@ let currentSort = null;          // {tagId, direction: "asc"|"desc"} or null
 let completionFilter = "all";    // "all" | "active" | "done"
 let currentViews = [];           // [{id, name, ...state}]
 let activeViewId = null;         // currently applied view
+let _autoEditId = null;          // item ID to auto-open mobile editor on next render
 
 // -------------------------------------------------------------------
 // Pane divider (resizable tag pane, desktop only)
@@ -969,6 +970,10 @@ function createItemTextElement(item) {
         tapTimer = setTimeout(() => { tapTimer = null; }, 300);
       }
     });
+    if (_autoEditId === item.id) {
+      _autoEditId = null;
+      openMobileEditor();
+    }
     return txt;
   }
 
@@ -1419,13 +1424,7 @@ async function addItemAfter(afterId, depth, tags) {
     lastSelectedId = result.id;
   }
   await refreshItems();
-  if (result && result.id) {
-    const newEl = itemsEl.querySelector(`.item[data-id="${result.id}"] .item-text`);
-    if (newEl) {
-      if (newEl.tagName === "INPUT") { newEl.value = ""; newEl.focus(); }
-      else { newEl.click(); } // mobile: tap span to open input
-    }
-  }
+  focusNewItem(result);
 }
 
 async function addItemBefore(beforeId, depth, tags) {
@@ -1441,13 +1440,22 @@ async function addItemBefore(beforeId, depth, tags) {
     lastSelectedId = result.id;
   }
   await refreshItems();
-  if (result && result.id) {
-    const newEl = itemsEl.querySelector(`.item[data-id="${result.id}"] .item-text`);
-    if (newEl) {
-      if (newEl.tagName === "INPUT") { newEl.value = ""; newEl.focus(); }
-      else { newEl.click(); }
-    }
+  focusNewItem(result);
+}
+
+function focusNewItem(result) {
+  if (!result || !result.id) return;
+  if (mobileQuery.matches) _autoEditId = result.id;
+  _suppressScrollRender = true;
+  scrollToItem(result.id);
+  renderViewport();
+  // On desktop, find the input and focus it; on mobile, _autoEditId
+  // already triggered openMobileEditor during renderViewport
+  const newEl = itemsEl.querySelector(`.item[data-id="${result.id}"] .item-text`);
+  if (newEl && newEl.tagName === "INPUT") {
+    newEl.focus({ preventScroll: true });
   }
+  requestAnimationFrame(() => { _suppressScrollRender = false; });
 }
 
 function toggleDoneSelected() {
