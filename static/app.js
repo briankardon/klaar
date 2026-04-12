@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.38";
+const KLAAR_VERSION = "0.9.39";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -974,6 +974,7 @@ function createItemTextElement(item) {
     }
     txt.addEventListener("click", (e) => {
       e.stopPropagation();
+      if (!ctxMenu.classList.contains("hidden")) hideContextMenu();
       if (tapTimer) {
         clearTimeout(tapTimer);
         tapTimer = null;
