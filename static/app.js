@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.39";
+const KLAAR_VERSION = "0.9.40";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -2535,9 +2535,10 @@ function showContextMenu(e, itemId, hierarchy) {
   const item = currentItems.find((it) => it.id === itemId);
   if (!item) return;
 
-  ctxHeader.textContent = hierarchy ? "Hierarchy" : "Item";
-  ctxDelete.textContent = hierarchy ? "Delete hierarchy" : "Delete";
-  ctxCopy.textContent = hierarchy ? "Copy hierarchy" : "Copy to clipboard";
+  const multiSel = selectedIds.size > 1 && selectedIds.has(itemId);
+  ctxHeader.textContent = multiSel ? `${selectedIds.size} items` : hierarchy ? "Hierarchy" : "Item";
+  ctxDelete.textContent = multiSel ? `Delete ${selectedIds.size} items` : hierarchy ? "Delete hierarchy" : "Delete";
+  ctxCopy.textContent = multiSel ? `Copy ${selectedIds.size} items` : hierarchy ? "Copy hierarchy" : "Copy to clipboard";
 
   // Show/hide "Visit link"
   const urlMatch = item.text.match(/https?:\/\/[^\s]+/);
@@ -2759,18 +2760,20 @@ function showContextMenuForCurrentItem() {
 
 ctxDelete.addEventListener("click", () => {
   if (!ctxItemId) return;
-  const item = currentItems.find((it) => it.id === ctxItemId);
-  if (!item) return;
   let ids;
-  if (ctxHierarchy) {
+  if (selectedIds.size > 1 && selectedIds.has(ctxItemId)) {
+    ids = new Set(selectedIds);
+  } else if (ctxHierarchy) {
+    const item = currentItems.find((it) => it.id === ctxItemId);
+    if (!item) return;
     const dataIdx = currentItems.indexOf(item);
     const [start, end] = getChildRange(dataIdx);
     ids = new Set([item.id, ...currentItems.slice(start, end).map((it) => it.id)]);
   } else {
     ids = new Set([ctxItemId]);
   }
-  // Optimistic local delete, single bulk server request
   currentItems = currentItems.filter((it) => !ids.has(it.id));
+  selectedIds.clear();
   renderItems();
   api(`/lists/${currentListId}/items/bulk-delete`, {
     method: "POST",
@@ -2782,19 +2785,24 @@ ctxDelete.addEventListener("click", () => {
 
 ctxCopy.addEventListener("click", async () => {
   if (!ctxItemId) return;
-  const item = currentItems.find((it) => it.id === ctxItemId);
-  if (!item) return;
   let items;
-  if (ctxHierarchy) {
+  if (selectedIds.size > 1 && selectedIds.has(ctxItemId)) {
+    // Copy all selected items in their list order
+    items = currentItems.filter((it) => selectedIds.has(it.id));
+  } else if (ctxHierarchy) {
+    const item = currentItems.find((it) => it.id === ctxItemId);
+    if (!item) return;
     const dataIdx = currentItems.indexOf(item);
     const [start, end] = getChildRange(dataIdx);
     items = [item, ...currentItems.slice(start, end)];
   } else {
+    const item = currentItems.find((it) => it.id === ctxItemId);
+    if (!item) return;
     items = [item];
   }
   const baseDepth = items[0].depth;
   const lines = items.map((it) => {
-    const indent = "  ".repeat(it.depth - baseDepth);
+    const indent = "  ".repeat(Math.max(0, it.depth - baseDepth));
     const checkbox = it.done ? "[x]" : "[ ]";
     return `${indent}- ${checkbox} ${it.text}`;
   });
