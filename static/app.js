@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.25";
+const KLAAR_VERSION = "0.9.26";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -1018,17 +1018,36 @@ function createTagBubbles(item, displayIdx) {
         inp.size = Math.max(3, inp.value.length + 1);
       });
       let pickerActive = false;
+      let spreadToSelected = false;
       function commit() {
         if (pickerActive) return;
         editing = false;
         const newVal = inp.value.trim() === "" ? null : inp.value.trim();
         setTagValue(item, tagId, newVal);
+        // Shift+Enter: copy value to selected items that have this tag but no value
+        if (spreadToSelected && newVal != null && selectedIds.size > 1) {
+          const updates = [];
+          for (const selId of selectedIds) {
+            if (selId === item.id) continue;
+            const selItem = currentItems.find(it => it.id === selId);
+            if (!selItem || !itemHasTag(selItem, tagId)) continue;
+            if (itemTagValue(selItem, tagId) != null) continue;
+            setTagValue(selItem, tagId, newVal);
+            updates.push({ id: selId, tags: [...selItem.tags] });
+          }
+          if (updates.length > 0) {
+            api(`/lists/${currentListId}/items/bulk-update`, {
+              method: "PATCH",
+              body: { updates },
+            }).then(() => scheduleSyncFromServer()).catch(() => refreshItems());
+          }
+        }
         renderItems();
         updateItem(item.id, { tags: [...item.tags] });
       }
       inp.addEventListener("blur", commit);
       inp.addEventListener("keydown", (ke) => {
-        if (ke.key === "Enter") { ke.preventDefault(); inp.blur(); }
+        if (ke.key === "Enter") { ke.preventDefault(); spreadToSelected = ke.shiftKey; inp.blur(); }
         if (ke.key === "Escape") { inp.value = current ?? ""; inp.blur(); }
         if (ke.ctrlKey && ke.key === "d") {
           ke.preventDefault();
