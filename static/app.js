@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.35";
+const KLAAR_VERSION = "0.9.36";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -972,7 +972,37 @@ function createItemTextElement(item) {
     });
     if (_autoEditId === item.id) {
       _autoEditId = null;
-      openMobileEditor();
+      // Build the same input that openMobileEditor would create,
+      // but return it directly (txt isn't in the DOM yet so replaceWith won't work)
+      const inp = document.createElement("input");
+      inp.type = "text";
+      inp.className = "item-text";
+      inp.style.fontSize = "16px";
+      inp.value = "";
+      let mobileDeleted = false;
+      inp.addEventListener("blur", () => {
+        if (mobileDeleted) return;
+        const val = inp.value.trim();
+        if (val !== item.text) {
+          updateItem(item.id, { text: val });
+        } else {
+          renderItems();
+        }
+      });
+      inp.addEventListener("keydown", (ke) => {
+        if (ke.key === "Enter") {
+          ke.preventDefault();
+          handleItemEnter(inp, ke.shiftKey);
+        }
+        if (ke.key === "Backspace" && inp.value === "") {
+          ke.preventDefault();
+          mobileDeleted = true;
+          deleteItem(item.id);
+        }
+      });
+      // Focus after the element is in the DOM (caller appends then we focus)
+      requestAnimationFrame(() => inp.focus());
+      return inp;
     }
     return txt;
   }
