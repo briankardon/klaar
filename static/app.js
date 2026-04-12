@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.41";
+const KLAAR_VERSION = "0.9.42";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -3281,6 +3281,57 @@ async function performRedo() {
     currentTags = data.tags || [];
     renderItems();
     renderTagPane();
+  }
+}
+
+// Shake-to-undo (mobile)
+if (mobileQuery.matches) {
+  // Intercept native shake-to-undo when an input is focused
+  document.addEventListener("beforeinput", (e) => {
+    if (e.inputType === "historyUndo") {
+      e.preventDefault();
+      performUndo();
+    } else if (e.inputType === "historyRedo") {
+      e.preventDefault();
+      performRedo();
+    }
+  });
+
+  // DeviceMotion shake detection (works even without focused input)
+  let _shakeLastX = 0, _shakeLastY = 0, _shakeLastZ = 0;
+  let _shakeLastTime = 0;
+  let _shakeCooldown = false;
+  const SHAKE_THRESHOLD = 25;
+
+  function onDeviceMotion(e) {
+    const acc = e.accelerationIncludingGravity;
+    if (!acc) return;
+    const now = Date.now();
+    const dt = now - _shakeLastTime;
+    if (dt < 100) return;
+    const dx = Math.abs(acc.x - _shakeLastX);
+    const dy = Math.abs(acc.y - _shakeLastY);
+    const dz = Math.abs(acc.z - _shakeLastZ);
+    _shakeLastX = acc.x; _shakeLastY = acc.y; _shakeLastZ = acc.z;
+    _shakeLastTime = now;
+    if ((dx + dy + dz) > SHAKE_THRESHOLD && !_shakeCooldown) {
+      _shakeCooldown = true;
+      setTimeout(() => { _shakeCooldown = false; }, 1500);
+      performUndo();
+    }
+  }
+
+  // iOS 13+ requires permission for DeviceMotion
+  if (typeof DeviceMotionEvent.requestPermission === "function") {
+    // Request on first user interaction
+    document.addEventListener("touchstart", function reqMotion() {
+      DeviceMotionEvent.requestPermission().then((state) => {
+        if (state === "granted") window.addEventListener("devicemotion", onDeviceMotion);
+      }).catch(() => {});
+      document.removeEventListener("touchstart", reqMotion);
+    }, { once: true });
+  } else {
+    window.addEventListener("devicemotion", onDeviceMotion);
   }
 }
 
