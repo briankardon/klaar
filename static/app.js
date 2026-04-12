@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.31";
+const KLAAR_VERSION = "0.9.32";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -1030,6 +1030,7 @@ function createItemTextElement(item) {
       if (targetRow >= 0 && targetRow < visibleList.length) {
         const targetTop = targetRow * ITEM_HEIGHT;
         const container = document.getElementById("items-container");
+        _suppressScrollRender = true;
         if (targetTop < container.scrollTop) container.scrollTop = targetTop;
         if (targetTop + ITEM_HEIGHT > container.scrollTop + container.clientHeight) {
           container.scrollTop = targetTop + ITEM_HEIGHT - container.clientHeight;
@@ -1042,6 +1043,7 @@ function createItemTextElement(item) {
           if (caretX != null) setCaretFromPixelX(el, caretX);
           else if (cursorAtEnd) el.setSelectionRange(el.value.length, el.value.length);
         }
+        requestAnimationFrame(() => { _suppressScrollRender = false; });
       }
       return;
     }
@@ -1307,7 +1309,9 @@ function renderViewport() {
 }
 
 // Wire up scroll-based viewport rendering
+let _suppressScrollRender = false;
 document.getElementById("items-container").addEventListener("scroll", () => {
+  if (_suppressScrollRender) return;
   if (visibleList.length > 0) renderViewport();
 });
 
