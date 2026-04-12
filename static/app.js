@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.36";
+const KLAAR_VERSION = "0.9.37";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -927,6 +927,7 @@ function createItemTextElement(item) {
     txt.textContent = item.text;
     let tapTimer = null;
     function openMobileEditor() {
+      dbg("openMobileEditor for " + item.id);
       const inp = document.createElement("input");
       inp.type = "text";
       inp.className = "item-text";
@@ -934,6 +935,7 @@ function createItemTextElement(item) {
       inp.value = item.text;
       let mobileDeleted = false;
       inp.addEventListener("blur", () => {
+        dbg("mobile inp blur, mobileDeleted=" + mobileDeleted);
         if (mobileDeleted) return;
         const val = inp.value.trim();
         if (val !== item.text) {
@@ -943,6 +945,7 @@ function createItemTextElement(item) {
         }
       });
       inp.addEventListener("keydown", (ke) => {
+        dbg("mobile keydown: " + ke.key);
         if (ke.key === "Enter") {
           ke.preventDefault();
           handleItemEnter(inp, ke.shiftKey);
@@ -955,6 +958,7 @@ function createItemTextElement(item) {
       });
       txt.replaceWith(inp);
       inp.focus();
+      dbg("openMobileEditor focus called, inDOM=" + document.body.contains(inp));
     }
     txt.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -971,9 +975,8 @@ function createItemTextElement(item) {
       }
     });
     if (_autoEditId === item.id) {
+      dbg("_autoEditId match! item=" + item.id);
       _autoEditId = null;
-      // Build the same input that openMobileEditor would create,
-      // but return it directly (txt isn't in the DOM yet so replaceWith won't work)
       const inp = document.createElement("input");
       inp.type = "text";
       inp.className = "item-text";
@@ -1000,8 +1003,11 @@ function createItemTextElement(item) {
           deleteItem(item.id);
         }
       });
-      // Focus after the element is in the DOM (caller appends then we focus)
-      requestAnimationFrame(() => inp.focus());
+      requestAnimationFrame(() => {
+        dbg("_autoEditId rAF focus: inDOM=" + document.body.contains(inp) + " activeEl=" + document.activeElement?.tagName);
+        inp.focus();
+        dbg("_autoEditId rAF after focus: activeEl=" + document.activeElement?.tagName + " class=" + document.activeElement?.className);
+      });
       return inp;
     }
     return txt;
@@ -1474,18 +1480,24 @@ async function addItemBefore(beforeId, depth, tags) {
 }
 
 function focusNewItem(result) {
+  dbg("focusNewItem id=" + (result?.id ?? "null") + " mobile=" + mobileQuery.matches);
   if (!result || !result.id) return;
   if (mobileQuery.matches) _autoEditId = result.id;
   _suppressScrollRender = true;
   scrollToItem(result.id);
+  dbg("focusNewItem: scrollToItem done, _autoEditId=" + _autoEditId);
   renderViewport();
-  // On desktop, find the input and focus it; on mobile, _autoEditId
-  // already triggered openMobileEditor during renderViewport
+  dbg("focusNewItem: renderViewport done, _autoEditId=" + _autoEditId);
   const newEl = itemsEl.querySelector(`.item[data-id="${result.id}"] .item-text`);
+  dbg("focusNewItem: newEl=" + (newEl ? newEl.tagName : "null") + " inDOM=" + (newEl ? document.body.contains(newEl) : "n/a"));
   if (newEl && newEl.tagName === "INPUT") {
     newEl.focus({ preventScroll: true });
+    dbg("focusNewItem: focus called, activeEl=" + document.activeElement?.tagName);
   }
-  requestAnimationFrame(() => { _suppressScrollRender = false; });
+  requestAnimationFrame(() => {
+    _suppressScrollRender = false;
+    dbg("focusNewItem rAF: activeEl=" + document.activeElement?.tagName + " class=" + document.activeElement?.className);
+  });
 }
 
 function toggleDoneSelected() {
