@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.37";
+const KLAAR_VERSION = "0.9.38";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -58,6 +58,7 @@ let completionFilter = "all";    // "all" | "active" | "done"
 let currentViews = [];           // [{id, name, ...state}]
 let activeViewId = null;         // currently applied view
 let _autoEditId = null;          // item ID to auto-open mobile editor on next render
+let _keyboardHolder = null;      // temp offscreen input to keep iOS keyboard alive across await
 
 // -------------------------------------------------------------------
 // Pane divider (resizable tag pane, desktop only)
@@ -909,6 +910,17 @@ function createItemCheckbox(item, displayIdx) {
 
 function createItemTextElement(item) {
   function handleItemEnter(inp, shiftKey) {
+    // On iOS, keyboard only stays open if focus() is in the user-gesture chain.
+    // Create an offscreen input and focus it synchronously to hold the keyboard
+    // alive while addItemAfter/Before does async work.
+    if (mobileQuery.matches) {
+      if (_keyboardHolder) _keyboardHolder.remove();
+      _keyboardHolder = document.createElement("input");
+      _keyboardHolder.style.cssText = "position:fixed;top:-9999px;opacity:0;font-size:16px;";
+      document.body.appendChild(_keyboardHolder);
+      _keyboardHolder.focus();
+      dbg("keyboard holder focused");
+    }
     const copyTags = shiftKey ? item.tags.map(t => ({ id: t.id, value: null })) : null;
     if (inp.selectionStart === 0 && inp.value !== "") {
       addItemBefore(item.id, item.depth, copyTags);
@@ -1493,6 +1505,11 @@ function focusNewItem(result) {
   if (newEl && newEl.tagName === "INPUT") {
     newEl.focus({ preventScroll: true });
     dbg("focusNewItem: focus called, activeEl=" + document.activeElement?.tagName);
+  }
+  if (_keyboardHolder) {
+    _keyboardHolder.remove();
+    _keyboardHolder = null;
+    dbg("keyboard holder removed");
   }
   requestAnimationFrame(() => {
     _suppressScrollRender = false;
