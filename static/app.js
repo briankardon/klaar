@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.50";
+const KLAAR_VERSION = "0.9.51";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -983,24 +983,20 @@ function createItemTextElement(item) {
       dbg("openMobileEditor focus called, inDOM=" + document.body.contains(inp));
     }
     txt.addEventListener("click", (e) => {
-      dbg("tap click fired on " + item.id + " (selSize=" + selectedIds.size + ", has=" + selectedIds.has(item.id) + ", selIds=" + [...selectedIds].join(",") + ")");
       e.stopPropagation();
       const fullMenuOpen = !ctxMenu.classList.contains("hidden") && !ctxMenu.classList.contains("peek");
       if (fullMenuOpen) hideContextMenu();
       if (tapTimer) {
         clearTimeout(tapTimer);
         tapTimer = null;
-        dbg("  → double tap, openMobileEditor");
         openMobileEditor();
       } else {
         if (selectedIds.size === 1 && selectedIds.has(item.id)) {
-          dbg("  → deselect");
           selectedIds.clear();
           lastSelectedId = null;
           applySelectionStyles();
           hideContextMenu();
         } else {
-          dbg("  → select + peek");
           selectedIds.clear();
           selectedIds.add(item.id);
           lastSelectedId = item.id;
@@ -1349,6 +1345,7 @@ function renderViewport() {
     li.style.right = "0";
 
     li.addEventListener("mousedown", (e) => {
+      if (mobileQuery.matches) return;  // mobile uses span click handler + touch setup
       if (e.button === 2) return;
       if (e.target.type === "checkbox") return;
       if (e.target.closest(".tag-bubble")) return;
