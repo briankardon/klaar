@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.52";
+const KLAAR_VERSION = "0.9.53";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -3714,13 +3714,9 @@ function setupItemTouch(li, itemId) {
       if (document.activeElement?.classList?.contains("item-text")) {
         document.activeElement.blur();
       }
-      // If long-pressed item isn't in the current selection, reset selection to just this item
-      if (!selectedIds.has(itemId)) {
-        selectedIds.clear();
-        selectedIds.add(itemId);
-        lastSelectedId = itemId;
-        applySelectionStyles();
-      }
+      // Long-press preserves the existing selection so "Select to here"
+      // remains available. Context menu header shows the pressed item's text
+      // for clarity about what actions will affect.
       showContextMenu(
         { preventDefault() {}, clientX: touch.clientX, clientY: touch.clientY },
         itemId, false
