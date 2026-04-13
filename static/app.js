@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.49";
+const KLAAR_VERSION = "0.9.50";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -983,7 +983,7 @@ function createItemTextElement(item) {
       dbg("openMobileEditor focus called, inDOM=" + document.body.contains(inp));
     }
     txt.addEventListener("click", (e) => {
-      dbg("tap click fired on " + item.id);
+      dbg("tap click fired on " + item.id + " (selSize=" + selectedIds.size + ", has=" + selectedIds.has(item.id) + ", selIds=" + [...selectedIds].join(",") + ")");
       e.stopPropagation();
       const fullMenuOpen = !ctxMenu.classList.contains("hidden") && !ctxMenu.classList.contains("peek");
       if (fullMenuOpen) hideContextMenu();
