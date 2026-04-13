@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.45";
+const KLAAR_VERSION = "0.9.46";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -3647,6 +3647,13 @@ function setupItemTouch(li, itemId) {
       // Blur input to dismiss iOS keyboard/selection
       if (document.activeElement?.classList?.contains("item-text")) {
         document.activeElement.blur();
+      }
+      // If long-pressed item isn't in the current selection, reset selection to just this item
+      if (!selectedIds.has(itemId)) {
+        selectedIds.clear();
+        selectedIds.add(itemId);
+        lastSelectedId = itemId;
+        applySelectionStyles();
       }
       showContextMenu(
         { preventDefault() {}, clientX: touch.clientX, clientY: touch.clientY },
