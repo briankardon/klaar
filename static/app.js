@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.51";
+const KLAAR_VERSION = "0.9.52";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -2556,7 +2556,7 @@ function showContextMenu(e, itemId, hierarchy) {
   if (!item) return;
 
   const multiSel = selectedIds.size > 1 && selectedIds.has(itemId);
-  ctxHeader.textContent = multiSel ? `${selectedIds.size} items` : hierarchy ? "Hierarchy" : "Item";
+  ctxHeader.textContent = multiSel ? `${selectedIds.size} items selected` : (item.text || "(empty)");
   ctxDelete.textContent = multiSel ? `Delete ${selectedIds.size} items` : hierarchy ? "Delete hierarchy" : "Delete";
   ctxCopy.textContent = multiSel ? `Copy ${selectedIds.size} items` : hierarchy ? "Copy hierarchy" : "Copy to clipboard";
 

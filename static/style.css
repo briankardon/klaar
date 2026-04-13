@@ -1142,10 +1142,15 @@ main {
 }
 
 .context-menu-header {
-  padding: 4px 12px;
-  font-size: 0.75rem;
-  color: var(--text-label);
-  font-style: italic;
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-bottom: 1px solid var(--border-light);
+  margin-bottom: 4px;
 }
 
 .context-menu-item {
