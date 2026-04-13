@@ -11,7 +11,7 @@
   <div class="auth-container">
     <h1>Klaar</h1>
     <form id="login-form">
-      <input type="text" id="username" placeholder="Username" autocomplete="username" required>
+      <input type="text" id="username" placeholder="Username" autocomplete="username" autocapitalize="none" autocorrect="off" required>
       <input type="password" id="password" placeholder="Password" autocomplete="current-password" required>
       <button type="submit">Log in</button>
       <p id="error" class="error hidden"></p>
@@ -21,7 +21,7 @@
     </p>
     <form id="register-form" class="hidden">
       <h3 style="margin-bottom:0.5rem;">Create Account</h3>
-      <input type="text" id="reg-username" placeholder="Username" autocomplete="username" required>
+      <input type="text" id="reg-username" placeholder="Username" autocomplete="username" autocapitalize="none" autocorrect="off" required>
       <input type="text" id="reg-display" placeholder="Display name (optional)" autocomplete="name">
       <input type="password" id="reg-password" placeholder="Password (6+ characters)" autocomplete="new-password" required minlength="6">
       <button type="submit">Create account</button>

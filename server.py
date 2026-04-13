@@ -8,7 +8,7 @@ import secrets
 import tempfile
 import uuid
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 from pathlib import Path
 
@@ -28,6 +28,8 @@ if _secret_path.exists():
 else:
     app.secret_key = secrets.token_bytes(32)
     _secret_path.write_bytes(app.secret_key)
+
+app.permanent_session_lifetime = timedelta(days=90)
 
 UNDO_LIMIT = 50
 MIN_PASSWORD_LENGTH = 6
@@ -377,6 +379,7 @@ def setup():
                 _save_list(data)
         except (json.JSONDecodeError, KeyError):
             pass
+    session.permanent = True
     session["user_id"] = user["id"]
     return jsonify({"ok": True}), 201
 
@@ -413,6 +416,7 @@ def register():
     }
     users.append(new_user)
     _save_users(users)
+    session.permanent = True
     session["user_id"] = new_user["id"]
     return jsonify({"ok": True}), 201
 
@@ -425,6 +429,7 @@ def login():
     user = _find_user(username)
     if not user or not check_password_hash(user["password_hash"], password):
         return jsonify({"error": "invalid credentials"}), 401
+    session.permanent = True
     session["user_id"] = user["id"]
     return jsonify({"ok": True, "user": {"id": user["id"], "username": user["username"], "display_name": user["display_name"]}})
 
