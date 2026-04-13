@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.48";
+const KLAAR_VERSION = "0.9.49";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -983,21 +983,24 @@ function createItemTextElement(item) {
       dbg("openMobileEditor focus called, inDOM=" + document.body.contains(inp));
     }
     txt.addEventListener("click", (e) => {
+      dbg("tap click fired on " + item.id);
       e.stopPropagation();
       const fullMenuOpen = !ctxMenu.classList.contains("hidden") && !ctxMenu.classList.contains("peek");
       if (fullMenuOpen) hideContextMenu();
       if (tapTimer) {
         clearTimeout(tapTimer);
         tapTimer = null;
+        dbg("  → double tap, openMobileEditor");
         openMobileEditor();
       } else {
-        // Tap on the lone-selected item → deselect and close peek
         if (selectedIds.size === 1 && selectedIds.has(item.id)) {
+          dbg("  → deselect");
           selectedIds.clear();
           lastSelectedId = null;
           applySelectionStyles();
           hideContextMenu();
         } else {
+          dbg("  → select + peek");
           selectedIds.clear();
           selectedIds.add(item.id);
           lastSelectedId = item.id;
