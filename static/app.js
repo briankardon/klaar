@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.47";
+const KLAAR_VERSION = "0.9.48";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -24,6 +24,15 @@ function dbg(msg) {
 
 dbg(`UA: ${navigator.userAgent}`);
 dbg(`Standalone: ${window.navigator.standalone ?? "N/A"}`);
+
+// Global error logging (mainly for mobile where console isn't visible)
+window.addEventListener("error", (e) => {
+  const where = e.filename ? `${e.filename.split("/").pop()}:${e.lineno}:${e.colno}` : "?";
+  dbg(`ERROR: ${e.message} (${where})`);
+});
+window.addEventListener("unhandledrejection", (e) => {
+  dbg(`UNHANDLED REJECTION: ${e.reason?.message || e.reason}`);
+});
 
 const API = "/api";
 
