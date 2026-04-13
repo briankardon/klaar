@@ -1408,11 +1408,31 @@ main {
     padding-bottom: env(safe-area-inset-bottom, 8px);
     max-height: 45vh;
     overflow-y: auto;
+    transition: max-height 0.2s ease;
   }
 
   #context-menu .context-menu-header {
     padding: 8px 16px;
     font-size: 0.85rem;
+    white-space: normal;
+    word-break: break-word;
+  }
+
+  /* Peek mode: show only the header with full item text */
+  #context-menu.peek {
+    max-height: 30vh;
+    padding-bottom: calc(env(safe-area-inset-bottom, 8px) + 8px);
+  }
+
+  #context-menu.peek > :not(.context-menu-header) {
+    display: none !important;
+  }
+
+  #context-menu.peek .context-menu-header {
+    font-size: 1rem;
+    font-style: normal;
+    color: var(--text-primary);
+    padding: 12px 16px;
   }
 
   #context-menu .context-menu-item,

@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.46";
+const KLAAR_VERSION = "0.9.47";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -975,16 +975,26 @@ function createItemTextElement(item) {
     }
     txt.addEventListener("click", (e) => {
       e.stopPropagation();
-      if (!ctxMenu.classList.contains("hidden")) hideContextMenu();
+      const fullMenuOpen = !ctxMenu.classList.contains("hidden") && !ctxMenu.classList.contains("peek");
+      if (fullMenuOpen) hideContextMenu();
       if (tapTimer) {
         clearTimeout(tapTimer);
         tapTimer = null;
         openMobileEditor();
       } else {
-        selectedIds.clear();
-        selectedIds.add(item.id);
-        lastSelectedId = item.id;
-        applySelectionStyles();
+        // Tap on the lone-selected item → deselect and close peek
+        if (selectedIds.size === 1 && selectedIds.has(item.id)) {
+          selectedIds.clear();
+          lastSelectedId = null;
+          applySelectionStyles();
+          hideContextMenu();
+        } else {
+          selectedIds.clear();
+          selectedIds.add(item.id);
+          lastSelectedId = item.id;
+          applySelectionStyles();
+          showPeek(item.id);
+        }
         tapTimer = setTimeout(() => { tapTimer = null; }, 300);
       }
     });
@@ -2673,6 +2683,7 @@ function showContextMenu(e, itemId, hierarchy) {
 
   // Position menu
   ctxMenu.classList.remove("hidden");
+  ctxMenu.classList.remove("peek");
   if (mobileQuery.matches) {
     // Bottom sheet — CSS handles positioning, show visual backdrop only
     ctxMenu.style.left = "";
@@ -2701,12 +2712,58 @@ function showContextMenu(e, itemId, hierarchy) {
 
 function hideContextMenu() {
   ctxMenu.classList.add("hidden");
+  ctxMenu.classList.remove("peek");
   if (mobileQuery.matches) {
     panelBackdrop.classList.remove("active");
     panelBackdrop.style.pointerEvents = "";
   }
   ctxItemId = null;
 }
+
+function isTextTruncated(itemId) {
+  const el = itemsEl.querySelector(`.item[data-id="${itemId}"] .item-text`);
+  if (!el) return false;
+  return el.scrollWidth > el.clientWidth + 1;
+}
+
+function showPeek(itemId) {
+  if (!mobileQuery.matches) return;
+  const item = currentItems.find((it) => it.id === itemId);
+  if (!item) return;
+
+  const multiSel = selectedIds.size > 1;
+  if (multiSel) {
+    ctxHeader.textContent = `${selectedIds.size} items selected`;
+  } else {
+    if (!isTextTruncated(itemId)) {
+      hideContextMenu();
+      return;
+    }
+    ctxHeader.textContent = item.text || "(empty)";
+  }
+
+  ctxItemId = itemId;
+  ctxHierarchy = false;
+  ctxMenu.classList.remove("hidden");
+  ctxMenu.classList.add("peek");
+  ctxMenu.style.left = "";
+  ctxMenu.style.top = "";
+  // No backdrop — peek is non-modal
+  panelBackdrop.classList.remove("active");
+  panelBackdrop.style.pointerEvents = "";
+}
+
+// Tap on the peek opens the full context menu
+(function setupPeekTap() {
+  if (!ctxMenu) return;
+  ctxMenu.addEventListener("click", (e) => {
+    if (!ctxMenu.classList.contains("peek")) return;
+    if (!ctxItemId) return;
+    e.stopPropagation();
+    const fakeEvent = { preventDefault() {}, clientX: 0, clientY: 0 };
+    showContextMenu(fakeEvent, ctxItemId, false);
+  });
+})();
 
 function toggleTagOnContextItem(tagId) {
   const item = currentItems.find((it) => it.id === ctxItemId);
