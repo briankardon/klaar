@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.55";
+const KLAAR_VERSION = "0.9.56";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -110,6 +110,8 @@ function showPaneDivider() {
   if (!mobileQuery.matches) {
     paneDivider.style.display = "block";
     showTextRuler();
+    // Clamp any previously-saved width against current viewport/content
+    requestAnimationFrame(clampTextWidth);
   }
 }
 
@@ -130,12 +132,12 @@ const textRulerMarker = document.getElementById("text-ruler-marker");
 function clampTextWidth() {
   const container = document.getElementById("items-container");
   if (!container || container.clientWidth === 0) return;
-  const dynamicMax = container.clientWidth - 16 - 4.8 - 120;
-  const cappedMax = Math.min(TEXT_WIDTH_MAX, Math.max(TEXT_WIDTH_MIN, dynamicMax));
-  const currentRaw = getComputedStyle(document.documentElement).getPropertyValue("--item-text-width").trim();
-  const current = parseInt(currentRaw) || 400;
-  if (current > cappedMax) {
-    document.documentElement.style.setProperty("--item-text-width", cappedMax + "px");
+  const overflow = container.scrollWidth - container.clientWidth;
+  if (overflow > 0) {
+    const currentRaw = getComputedStyle(document.documentElement).getPropertyValue("--item-text-width").trim();
+    const current = parseInt(currentRaw) || 400;
+    const clamped = Math.max(TEXT_WIDTH_MIN, current - overflow);
+    document.documentElement.style.setProperty("--item-text-width", clamped + "px");
   }
 }
 
@@ -158,15 +160,17 @@ function clampTextWidth() {
 
   document.addEventListener("mousemove", (e) => {
     if (!dragging) return;
-    // 16px fold-gutter + 0.3rem (~0.3rem) item padding = ~20.8px offset from ruler left
+    // 16px fold-gutter + 0.3rem (~4.8px) item padding offset from ruler left
     const rawWidth = e.clientX - containerLeft - 16 - 4.8;
-    // Dynamic max: don't let text column push tags off the right edge.
-    // Reserve ~120px for delete button + gaps + at least one tag bubble.
-    const itemsContainerEl = document.getElementById("items-container");
-    const dynamicMax = itemsContainerEl.clientWidth - 16 - 4.8 - 120;
-    const cappedMax = Math.min(TEXT_WIDTH_MAX, Math.max(TEXT_WIDTH_MIN, dynamicMax));
-    const newWidth = Math.max(TEXT_WIDTH_MIN, Math.min(cappedMax, rawWidth));
+    const newWidth = Math.max(TEXT_WIDTH_MIN, Math.min(TEXT_WIDTH_MAX, rawWidth));
     document.documentElement.style.setProperty("--item-text-width", newWidth + "px");
+    // Reading scrollWidth forces layout; if visible rows overflow, clamp.
+    const container = document.getElementById("items-container");
+    const overflow = container.scrollWidth - container.clientWidth;
+    if (overflow > 0) {
+      const clamped = Math.max(TEXT_WIDTH_MIN, newWidth - overflow);
+      document.documentElement.style.setProperty("--item-text-width", clamped + "px");
+    }
   });
 
   document.addEventListener("mouseup", () => {
