@@ -384,18 +384,31 @@ def setup():
     return jsonify({"ok": True}), 201
 
 
+def _registration_is_open(invite_token: str | None) -> bool:
+    # Globally open if .registration_open (no suffix) exists
+    if (DATA_DIR / ".registration_open").exists():
+        return True
+    # Otherwise look for .registration_open_<token> matching the supplied invite
+    if not invite_token:
+        return False
+    # Only allow tokens that look plausible to avoid filesystem trickery
+    if not re.match(r"^[A-Za-z0-9_-]{4,64}$", invite_token):
+        return False
+    return (DATA_DIR / f".registration_open_{invite_token}").exists()
+
+
 @app.get("/api/registration-status")
 def registration_status():
-    open_file = DATA_DIR / ".registration_open"
-    return jsonify({"open": open_file.exists()})
+    invite = request.args.get("invite")
+    return jsonify({"open": _registration_is_open(invite)})
 
 
 @app.post("/api/register")
 def register():
-    open_file = DATA_DIR / ".registration_open"
-    if not open_file.exists():
-        return jsonify({"error": "registration is closed"}), 403
     body = request.get_json(force=True)
+    invite = body.get("invite_token")
+    if not _registration_is_open(invite):
+        return jsonify({"error": "registration is closed"}), 403
     username = body.get("username", "").strip()
     password = body.get("password", "")
     display = body.get("display_name", "").strip() or username

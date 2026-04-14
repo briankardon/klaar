@@ -29,9 +29,19 @@
     </form>
   </div>
   <script>
-    // Check if registration is open
-    fetch("/api/registration-status").then(r => r.json()).then(data => {
-      if (data.open) document.getElementById("register-link").classList.remove("hidden");
+    // Check if registration is open (may require ?invite= token in URL)
+    const _inviteToken = new URLSearchParams(location.search).get("invite");
+    const _statusUrl = "/api/registration-status" + (_inviteToken ? "?invite=" + encodeURIComponent(_inviteToken) : "");
+    fetch(_statusUrl).then(r => r.json()).then(data => {
+      if (data.open) {
+        document.getElementById("register-link").classList.remove("hidden");
+        // If arriving via an invite link, jump straight to the registration form
+        if (_inviteToken) {
+          document.getElementById("login-form").classList.add("hidden");
+          document.getElementById("register-link").classList.add("hidden");
+          document.getElementById("register-form").classList.remove("hidden");
+        }
+      }
     });
 
     document.getElementById("show-register").addEventListener("click", (e) => {
@@ -52,6 +62,7 @@
           username: document.getElementById("reg-username").value,
           display_name: document.getElementById("reg-display").value,
           password: document.getElementById("reg-password").value,
+          invite_token: _inviteToken,
         }),
       });
       const data = await res.json();
