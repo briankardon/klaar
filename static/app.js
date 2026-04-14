@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.54";
+const KLAAR_VERSION = "0.9.55";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -127,6 +127,18 @@ const TEXT_WIDTH_MAX = 800;
 const textRuler = document.getElementById("text-ruler");
 const textRulerMarker = document.getElementById("text-ruler-marker");
 
+function clampTextWidth() {
+  const container = document.getElementById("items-container");
+  if (!container || container.clientWidth === 0) return;
+  const dynamicMax = container.clientWidth - 16 - 4.8 - 120;
+  const cappedMax = Math.min(TEXT_WIDTH_MAX, Math.max(TEXT_WIDTH_MIN, dynamicMax));
+  const currentRaw = getComputedStyle(document.documentElement).getPropertyValue("--item-text-width").trim();
+  const current = parseInt(currentRaw) || 400;
+  if (current > cappedMax) {
+    document.documentElement.style.setProperty("--item-text-width", cappedMax + "px");
+  }
+}
+
 (function initTextRuler() {
   const saved = localStorage.getItem("klaar-text-width");
   if (saved) document.documentElement.style.setProperty("--item-text-width", saved + "px");
@@ -146,9 +158,14 @@ const textRulerMarker = document.getElementById("text-ruler-marker");
 
   document.addEventListener("mousemove", (e) => {
     if (!dragging) return;
-    // 16px fold-gutter + 0.3rem (~4.8px) item padding = ~20.8px offset from ruler left
+    // 16px fold-gutter + 0.3rem (~0.3rem) item padding = ~20.8px offset from ruler left
     const rawWidth = e.clientX - containerLeft - 16 - 4.8;
-    const newWidth = Math.max(TEXT_WIDTH_MIN, Math.min(TEXT_WIDTH_MAX, rawWidth));
+    // Dynamic max: don't let text column push tags off the right edge.
+    // Reserve ~120px for delete button + gaps + at least one tag bubble.
+    const itemsContainerEl = document.getElementById("items-container");
+    const dynamicMax = itemsContainerEl.clientWidth - 16 - 4.8 - 120;
+    const cappedMax = Math.min(TEXT_WIDTH_MAX, Math.max(TEXT_WIDTH_MIN, dynamicMax));
+    const newWidth = Math.max(TEXT_WIDTH_MIN, Math.min(cappedMax, rawWidth));
     document.documentElement.style.setProperty("--item-text-width", newWidth + "px");
   });
 
