@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.10.2";
+const KLAAR_VERSION = "0.10.3";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -1301,11 +1301,11 @@ function createTagBubbles(item, displayIdx) {
         picker.style.left = bubbleRect.left + "px";
         picker.style.top = (bubbleRect.bottom + 2) + "px";
         picker.style.zIndex = "2000";
-        document.body.appendChild(picker);
         const seed = inp.value || current;
         if (seed) {
           try { picker.value = new Date(seed).toISOString().slice(0, 10); } catch (e) {}
         }
+        document.body.appendChild(picker);
         pickerActive = true;
         picker.focus();
         try { picker.showPicker(); } catch (e) {}
