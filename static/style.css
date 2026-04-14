@@ -607,6 +607,34 @@ main {
   overflow-y: auto;
 }
 
+/* Word-style ruler marker for adjusting item text column width */
+#text-ruler {
+  position: relative;
+  height: 10px;
+  margin-bottom: 2px;
+  display: none;
+  border-bottom: 1px solid var(--border-light);
+}
+
+#text-ruler-marker {
+  position: absolute;
+  top: 0;
+  left: calc(16px + 0.3rem + var(--item-text-width, 400px));
+  width: 14px;
+  height: 10px;
+  margin-left: -7px;
+  cursor: col-resize;
+  background: var(--accent-primary);
+  opacity: 0.5;
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+  transition: opacity 0.15s ease;
+}
+
+#text-ruler-marker:hover,
+#text-ruler-marker.dragging {
+  opacity: 1;
+}
+
 #fold-gutter {
   width: 16px;
   min-width: 16px;
@@ -655,9 +683,8 @@ main {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  flex: 1;
+  flex: 0 0 var(--item-text-width, 400px);
   min-width: 0;
-  max-width: 400px;
 }
 
 @media (hover: hover) {
@@ -1371,6 +1398,7 @@ main {
   }
 
   .item-left {
+    flex: 1;
     max-width: none;
   }
 

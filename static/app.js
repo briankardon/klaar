@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.53";
+const KLAAR_VERSION = "0.9.54";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -107,11 +107,68 @@ const TAG_PANE_MAX = 500;
 })();
 
 function showPaneDivider() {
-  if (!mobileQuery.matches) paneDivider.style.display = "block";
+  if (!mobileQuery.matches) {
+    paneDivider.style.display = "block";
+    showTextRuler();
+  }
 }
 
 function hidePaneDivider() {
   paneDivider.style.display = "none";
+  hideTextRuler();
+}
+
+// -------------------------------------------------------------------
+// Item text column width (ruler-style marker)
+// -------------------------------------------------------------------
+
+const TEXT_WIDTH_MIN = 100;
+const TEXT_WIDTH_MAX = 800;
+const textRuler = document.getElementById("text-ruler");
+const textRulerMarker = document.getElementById("text-ruler-marker");
+
+(function initTextRuler() {
+  const saved = localStorage.getItem("klaar-text-width");
+  if (saved) document.documentElement.style.setProperty("--item-text-width", saved + "px");
+
+  let dragging = false;
+  let containerLeft = 0;
+
+  textRulerMarker.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    dragging = true;
+    textRulerMarker.classList.add("dragging");
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    // Capture the ruler's left edge once at drag start
+    containerLeft = textRuler.getBoundingClientRect().left;
+  });
+
+  document.addEventListener("mousemove", (e) => {
+    if (!dragging) return;
+    // 16px fold-gutter + 0.3rem (~4.8px) item padding = ~20.8px offset from ruler left
+    const rawWidth = e.clientX - containerLeft - 16 - 4.8;
+    const newWidth = Math.max(TEXT_WIDTH_MIN, Math.min(TEXT_WIDTH_MAX, rawWidth));
+    document.documentElement.style.setProperty("--item-text-width", newWidth + "px");
+  });
+
+  document.addEventListener("mouseup", () => {
+    if (!dragging) return;
+    dragging = false;
+    textRulerMarker.classList.remove("dragging");
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+    const current = getComputedStyle(document.documentElement).getPropertyValue("--item-text-width").trim();
+    localStorage.setItem("klaar-text-width", parseInt(current));
+  });
+})();
+
+function showTextRuler() {
+  if (!mobileQuery.matches) textRuler.style.display = "block";
+}
+
+function hideTextRuler() {
+  textRuler.style.display = "none";
 }
 
 // -------------------------------------------------------------------
