@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.10.0";
+const KLAAR_VERSION = "0.10.1";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -1292,53 +1292,61 @@ function createTagBubbles(item, displayIdx) {
         renderItems();
         updateItem(item.id, { tags: [...item.tags] });
       }
+      function openDatePicker() {
+        const picker = document.createElement("input");
+        picker.type = "date";
+        picker.className = "tag-date-picker";
+        const bubbleRect = bubble.getBoundingClientRect();
+        picker.style.position = "fixed";
+        picker.style.left = bubbleRect.left + "px";
+        picker.style.top = (bubbleRect.bottom + 2) + "px";
+        picker.style.zIndex = "2000";
+        const seed = inp.value || current;
+        if (seed) {
+          try { picker.value = new Date(seed).toISOString().slice(0, 10); } catch (e) {}
+        }
+        document.body.appendChild(picker);
+        pickerActive = true;
+        picker.focus();
+        try { picker.showPicker(); } catch (e) {}
+        let closed = false;
+        function closePicker(andCommit) {
+          if (closed) return;
+          closed = true;
+          pickerActive = false;
+          if (picker.value) {
+            inp.value = picker.value;
+            inp.size = Math.max(3, inp.value.length + 1);
+          }
+          if (document.body.contains(picker)) picker.remove();
+          if (andCommit) {
+            commit();
+          } else {
+            inp.focus();
+          }
+        }
+        picker.addEventListener("change", () => closePicker(true));
+        picker.addEventListener("keydown", (pke) => {
+          if (pke.key === "Enter") { pke.preventDefault(); closePicker(true); }
+          if (pke.key === "Escape") { closed = true; pickerActive = false; picker.remove(); inp.focus(); }
+          pke.stopPropagation();
+        });
+        picker.addEventListener("blur", () => setTimeout(() => closePicker(false), 150));
+      }
       inp.addEventListener("blur", commit);
       inp.addEventListener("keydown", (ke) => {
         if (ke.key === "Enter") { ke.preventDefault(); spreadToSelected = ke.shiftKey; inp.blur(); }
         if (ke.key === "Escape") { inp.value = current ?? ""; inp.blur(); }
         if (ke.ctrlKey && ke.key === "d") {
           ke.preventDefault();
-          const picker = document.createElement("input");
-          picker.type = "date";
-          picker.className = "tag-date-picker";
-          const bubbleRect = bubble.getBoundingClientRect();
-          picker.style.position = "fixed";
-          picker.style.left = bubbleRect.left + "px";
-          picker.style.top = (bubbleRect.bottom + 2) + "px";
-          picker.style.zIndex = "2000";
-          if (current) {
-            try { picker.value = new Date(current).toISOString().slice(0, 10); } catch (e) {}
-          }
-          document.body.appendChild(picker);
-          pickerActive = true;
-          picker.focus();
-          try { picker.showPicker(); } catch (e) {}
-          let closed = false;
-          function closePicker(andCommit) {
-            if (closed) return;
-            closed = true;
-            pickerActive = false;
-            if (picker.value) {
-              inp.value = picker.value;
-              inp.size = Math.max(3, inp.value.length + 1);
-            }
-            if (document.body.contains(picker)) picker.remove();
-            if (andCommit) {
-              commit();
-            } else {
-              inp.focus();
-            }
-          }
-          picker.addEventListener("change", () => closePicker(true));
-          picker.addEventListener("keydown", (pke) => {
-            if (pke.key === "Enter") { pke.preventDefault(); closePicker(true); }
-            if (pke.key === "Escape") { closed = true; pickerActive = false; picker.remove(); inp.focus(); }
-            pke.stopPropagation();
-          });
-          picker.addEventListener("blur", () => setTimeout(() => closePicker(false), 150));
+          openDatePicker();
         }
         ke.stopPropagation();
       });
+      // Auto-open the date picker if the existing value looks like a date
+      if (friendlyDate(current)) {
+        openDatePicker();
+      }
     });
     tagsContainer.appendChild(bubble);
   }
