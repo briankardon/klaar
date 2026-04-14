@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.9.57";
+const KLAAR_VERSION = "0.10.0";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -2703,6 +2703,11 @@ function showContextMenu(e, itemId, hierarchy) {
       if (!tagVal) valSpan.style.opacity = "0.4";
       valSpan.addEventListener("click", (ve) => {
         ve.stopPropagation();
+        // If the value already looks like a date, jump straight to the date picker
+        if (friendlyDate(tagVal)) {
+          dateBtn.click();
+          return;
+        }
         const valInp = document.createElement("input");
         valInp.type = "text";
         valInp.className = "ctx-tag-value-input";
