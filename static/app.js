@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.10.4";
+const KLAAR_VERSION = "0.10.5";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -2688,6 +2688,11 @@ function showContextMenu(e, itemId, hierarchy) {
       const allHave = block.every((it) => itemHasTag(it, tagDef.id));
       const someHave = block.some((it) => itemHasTag(it, tagDef.id));
       check.textContent = allHave ? "\u2713" : someHave ? "\u2013" : "";
+    } else if (selectedIds.size > 1 && selectedIds.has(ctxItemId)) {
+      const block = currentItems.filter((it) => selectedIds.has(it.id));
+      const allHave = block.every((it) => itemHasTag(it, tagDef.id));
+      const someHave = block.some((it) => itemHasTag(it, tagDef.id));
+      check.textContent = allHave ? "\u2713" : someHave ? "\u2013" : "";
     } else {
       check.textContent = itemHasTag(item, tagDef.id) ? "\u2713" : "";
     }
@@ -2868,6 +2873,26 @@ function showPeek(itemId) {
 function toggleTagOnContextItem(tagId) {
   const item = currentItems.find((it) => it.id === ctxItemId);
   if (!item) return;
+  // If multiple items are selected and the context target is one of them,
+  // apply the toggle across the whole selection.
+  if (selectedIds.size > 1 && selectedIds.has(ctxItemId)) {
+    const block = currentItems.filter((it) => selectedIds.has(it.id));
+    const allHave = block.every((it) => itemHasTag(it, tagId));
+    const updates = [];
+    for (const it of block) {
+      if (allHave) removeTagFromItemData(it, tagId);
+      else addTagToItem(it, tagId);
+      updates.push({ id: it.id, tags: [...it.tags] });
+    }
+    renderItems();
+    api(`/lists/${currentListId}/items`, {
+      method: "PATCH",
+      body: { updates },
+    }).then(() => scheduleSyncFromServer())
+      .catch(() => refreshItems());
+    showContextMenuForCurrentItem();
+    return;
+  }
   if (itemHasTag(item, tagId)) {
     removeTagFromItemData(item, tagId);
   } else {
@@ -2879,7 +2904,6 @@ function toggleTagOnContextItem(tagId) {
     body: { tags: item.tags },
   }).then(() => scheduleSyncFromServer())
     .catch(() => refreshItems());
-  // Refresh the menu to update checks
   showContextMenuForCurrentItem();
 }
 
