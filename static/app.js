@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.10.7";
+const KLAAR_VERSION = "0.10.8";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -3851,7 +3851,7 @@ function setupItemTouch(li, itemId) {
     const dy = t.clientY - startY;
     if (!swipeEngaged) {
       // Engage only when the gesture is clearly horizontal
-      if (Math.abs(dx) >= 20 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      if (Math.abs(dx) >= 20 && Math.abs(dx) > Math.abs(dy) * 3) {
         swipeEngaged = true;
       }
     }
