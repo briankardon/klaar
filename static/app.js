@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.10.6";
+const KLAAR_VERSION = "0.10.7";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -1062,6 +1062,8 @@ function createItemTextElement(item) {
     }
     txt.addEventListener("click", (e) => {
       e.stopPropagation();
+      // If a swipe gesture just completed, ignore the synthesized click
+      if (_suppressNextClick) { _suppressNextClick = false; return; }
       const fullMenuOpen = !ctxMenu.classList.contains("hidden") && !ctxMenu.classList.contains("peek");
       if (fullMenuOpen) hideContextMenu();
       if (tapTimer) {
@@ -3815,39 +3817,82 @@ document.addEventListener("selectstart", (e) => {
 
 function setupItemTouch(li, itemId) {
   let longPressTimer = null;
+  let startX = 0, startY = 0;
+  let swipeEngaged = false;
 
   li.addEventListener("touchstart", (e) => {
     if (e.target.type === "checkbox") return;
     const touch = e.touches[0];
+    startX = touch.clientX;
+    startY = touch.clientY;
+    swipeEngaged = false;
     longPressActive = true;
 
     longPressTimer = setTimeout(() => {
       longPressTimer = null;
       longPressActive = false;
       window.getSelection()?.removeAllRanges();
-      // Blur input to dismiss iOS keyboard/selection
       if (document.activeElement?.classList?.contains("item-text")) {
         document.activeElement.blur();
       }
-      // Long-press preserves the existing selection so "Select to here"
-      // remains available. Context menu header shows the pressed item's text
-      // for clarity about what actions will affect.
       showContextMenu(
         { preventDefault() {}, clientX: touch.clientX, clientY: touch.clientY },
         itemId, false
       );
-      // Clear selection again after a tick (iOS sometimes re-selects)
       setTimeout(() => window.getSelection()?.removeAllRanges(), 50);
     }, 500);
   }, { passive: true });
 
-  li.addEventListener("touchmove", () => {
+  li.addEventListener("touchmove", (e) => {
     if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; longPressActive = false; }
-  }, { passive: true });
+    if (!selectedIds.has(itemId)) return;
+    const t = e.touches[0];
+    const dx = t.clientX - startX;
+    const dy = t.clientY - startY;
+    if (!swipeEngaged) {
+      // Engage only when the gesture is clearly horizontal
+      if (Math.abs(dx) >= 20 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+        swipeEngaged = true;
+      }
+    }
+    if (swipeEngaged) e.preventDefault();
+  }, { passive: false });
 
-  li.addEventListener("touchend", () => {
+  li.addEventListener("touchend", (e) => {
     if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+    if (!swipeEngaged) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - startX;
+    swipeEngaged = false;
+    _suppressNextClick = true;
+    if (Math.abs(dx) >= 40) {
+      const delta = dx > 0 ? 1 : -1;
+      applyIndentToSelection(delta, itemId);
+    }
   });
+}
+
+let _suppressNextClick = false;
+
+function applyIndentToSelection(delta, anchorId) {
+  // Indent/outdent every item in the current selection (falls back to anchor)
+  const ids = selectedIds.size > 0 ? [...selectedIds] : [anchorId];
+  const updates = [];
+  for (const id of ids) {
+    const it = currentItems.find((x) => x.id === id);
+    if (!it) continue;
+    const newDepth = Math.max(0, Math.min(MAX_DEPTH, it.depth + delta));
+    if (newDepth !== it.depth) {
+      it.depth = newDepth;
+      updates.push({ id, depth: newDepth });
+    }
+  }
+  if (updates.length === 0) return;
+  renderItems();
+  api(`/lists/${currentListId}/items`, {
+    method: "PATCH",
+    body: { updates },
+  }).then(() => scheduleSyncFromServer()).catch(() => refreshItems());
 }
 
 // -------------------------------------------------------------------
