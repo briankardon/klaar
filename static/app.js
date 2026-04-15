@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.10.5";
+const KLAAR_VERSION = "0.10.6";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -3927,6 +3927,18 @@ document.getElementById("ctx-move-hierarchy").addEventListener("click", () => {
   const itemId = ctxItemId;
   hideContextMenu();
   enterReorderMode(itemId, true);
+});
+document.getElementById("ctx-add-above").addEventListener("click", () => {
+  const itemId = ctxItemId;
+  const item = currentItems.find((it) => it.id === itemId);
+  hideContextMenu();
+  if (item) addItemBefore(itemId, item.depth);
+});
+document.getElementById("ctx-add-below").addEventListener("click", () => {
+  const itemId = ctxItemId;
+  const item = currentItems.find((it) => it.id === itemId);
+  hideContextMenu();
+  if (item) addItemAfter(itemId, item.depth);
 });
 
 // -------------------------------------------------------------------
