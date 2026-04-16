@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.10.11";
+const KLAAR_VERSION = "0.10.12";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -3551,11 +3551,25 @@ function onItemMouseDown(e, itemId, isTextClick = false) {
       document.body.style.userSelect = "";
       onDragEnd();
     } else if (isTextClick && !ue.shiftKey && !ue.ctrlKey) {
-      // Select the item without re-rendering (which would destroy the focused input)
       selectedIds.clear();
       selectedIds.add(itemId);
       lastSelectedId = itemId;
-      applySelectionStyles();
+      if (hasActiveFilters()) {
+        // Preserve cursor position across the re-render so the user's click
+        // position in the new input isn't lost.
+        const oldInput = itemsEl.querySelector(`.item[data-id="${itemId}"] .item-text`);
+        const cursorPos = oldInput && oldInput.selectionStart != null ? oldInput.selectionStart : null;
+        renderItems();
+        const newInput = itemsEl.querySelector(`.item[data-id="${itemId}"] .item-text`);
+        if (newInput) {
+          newInput.focus({ preventScroll: true });
+          if (cursorPos != null && newInput.setSelectionRange) {
+            newInput.setSelectionRange(cursorPos, cursorPos);
+          }
+        }
+      } else {
+        applySelectionStyles();
+      }
     } else {
       handleSelectionClick(itemId, ue.shiftKey, ue.ctrlKey);
     }
