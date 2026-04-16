@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.10.9";
+const KLAAR_VERSION = "0.10.10";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -1491,10 +1491,8 @@ if (!_isMobile) {
       const id = itemEl?.dataset?.id;
       const it = id && currentItems.find((x) => x.id === id);
       if (it && it.completed) {
-        const d = new Date(it.completed);
-        const friendly = friendlyDate(it.completed);
-        const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-        tooltip.textContent = `Completed ${friendly ?? d.toLocaleDateString()} at ${time}`;
+        const friendly = friendlyDate(it.completed) ?? new Date(it.completed).toLocaleString();
+        tooltip.textContent = `Completed ${friendly}`;
         tooltip.classList.remove("hidden");
         const rect = cb.getBoundingClientRect();
         tooltip.style.left = rect.left + "px";
