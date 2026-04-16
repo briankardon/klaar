@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.10.8";
+const KLAAR_VERSION = "0.10.9";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -1484,6 +1484,24 @@ if (!_isMobile) {
   const itemsContainer = document.getElementById("items-container");
 
   itemsContainer.addEventListener("mouseover", (e) => {
+    // Completion timestamp on checked-item checkbox
+    const cb = e.target.closest('.item input[type="checkbox"]');
+    if (cb && cb.checked) {
+      const itemEl = cb.closest(".item");
+      const id = itemEl?.dataset?.id;
+      const it = id && currentItems.find((x) => x.id === id);
+      if (it && it.completed) {
+        const d = new Date(it.completed);
+        const friendly = friendlyDate(it.completed);
+        const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+        tooltip.textContent = `Completed ${friendly ?? d.toLocaleDateString()} at ${time}`;
+        tooltip.classList.remove("hidden");
+        const rect = cb.getBoundingClientRect();
+        tooltip.style.left = rect.left + "px";
+        tooltip.style.top = (rect.bottom + 2) + "px";
+        return;
+      }
+    }
     // Date tag bubble tooltip
     const bubble = e.target.closest(".tag-bubble");
     if (bubble && bubble.dataset.rawDate) {
@@ -1508,7 +1526,11 @@ if (!_isMobile) {
   });
 
   itemsContainer.addEventListener("mouseout", (e) => {
-    if (e.target.closest(".item-text") || e.target.closest(".tag-bubble")) {
+    if (
+      e.target.closest(".item-text") ||
+      e.target.closest(".tag-bubble") ||
+      e.target.closest('.item input[type="checkbox"]')
+    ) {
       tooltip.classList.add("hidden");
     }
   });
