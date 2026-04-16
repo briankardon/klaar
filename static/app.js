@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.10.10";
+const KLAAR_VERSION = "0.10.11";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -1714,6 +1714,14 @@ let knownVersion = null;  // version counter from server
 
 async function syncFromServer() {
   if (!currentListId) return;
+  // Defer if the user is actively editing a tag value — a refetch would
+  // destroy the open input mid-edit.
+  const active = document.activeElement;
+  if (active?.classList?.contains("tag-value-input") ||
+      active?.classList?.contains("ctx-tag-value-input")) {
+    scheduleSyncFromServer();
+    return;
+  }
   // Lightweight version check first
   const ver = await api(`/lists/${currentListId}/version`);
   if (ver && !ver.error && ver.version === knownVersion) return;  // no changes
