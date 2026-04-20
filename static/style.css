@@ -495,6 +495,24 @@ main {
   border-color: var(--accent-primary);
 }
 
+#btn-date-filter {
+  background: var(--bg-comp-btn);
+  border: 1px solid var(--border-comp-btn);
+  border-radius: 4px;
+  padding: 0 0.4rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+  color: var(--text-secondary);
+  height: 100%;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+#btn-date-filter.active {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
 #search-input {
   width: 100%;
   padding: 0.4rem 0.6rem;

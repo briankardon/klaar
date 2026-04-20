@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.10.13";
+const KLAAR_VERSION = "0.11.0";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -64,6 +64,7 @@ const textFilters = [];          // [{pattern: string, regex: RegExp}]
 const tagFilters = [];           // [{tagId, condition}] — multiple per tag allowed
 let currentSort = null;          // {tagId, direction: "asc"|"desc"} or null
 let completionFilter = "all";    // "all" | "active" | "done"
+let dateFilterActive = false;    // when true, only items with any date-valued tag match
 let currentViews = [];           // [{id, name, ...state}]
 let activeViewId = null;         // currently applied view
 let _autoEditId = null;          // item ID to auto-open mobile editor on next render
@@ -505,6 +506,8 @@ async function selectList(id) {
   tagFilters.length = 0;
   currentSort = null;
   completionFilter = "all";
+  dateFilterActive = false;
+  document.getElementById("btn-date-filter")?.classList.remove("active");
   selectedIds.clear();
   lastSelectedId = null;
   hiddenTagIds.clear();
@@ -1793,7 +1796,11 @@ function deleteItem(itemId) {
 // -------------------------------------------------------------------
 
 function hasActiveFilters() {
-  return textFilters.length > 0 || tagFilters.length > 0 || completionFilter !== "all";
+  return textFilters.length > 0 || tagFilters.length > 0 || completionFilter !== "all" || dateFilterActive;
+}
+
+function itemHasDateTag(item) {
+  return item.tags.some((t) => friendlyDate(t.value) != null);
 }
 
 function smartCompare(a, b) {
@@ -1825,6 +1832,7 @@ function itemMatchesFilters(item) {
   if (selectedIds.has(item.id)) return true;
   if (completionFilter === "active" && item.done) return false;
   if (completionFilter === "done" && !item.done) return false;
+  if (dateFilterActive && !itemHasDateTag(item)) return false;
   for (const f of textFilters) {
     if (!f.regex.test(item.text)) return false;
   }
@@ -2072,6 +2080,13 @@ document.querySelectorAll(".comp-btn").forEach((btn) => {
     renderItems();
     scrollToItem(lastSelectedId);
   });
+});
+
+document.getElementById("btn-date-filter").addEventListener("click", () => {
+  dateFilterActive = !dateFilterActive;
+  document.getElementById("btn-date-filter").classList.toggle("active", dateFilterActive);
+  renderItems();
+  scrollToItem(lastSelectedId);
 });
 
 function toggleTagFilter(tagId) {
@@ -2455,6 +2470,7 @@ function captureViewState() {
     textFilters: textFilters.map((f) => f.pattern),
     tagFilters: tagFilters.map((f) => ({ tagId: f.tagId, condition: f.condition, exclude: f.exclude || false })),
     completionFilter,
+    dateFilterActive,
     sort: currentSort ? { tagId: currentSort.tagId, direction: currentSort.direction } : null,
     hiddenTagIds: [...hiddenTagIds],
   };
@@ -2482,6 +2498,9 @@ function applyViewState(view) {
   document.querySelectorAll(".comp-btn").forEach((b) =>
     b.classList.toggle("active", b.dataset.mode === completionFilter)
   );
+
+  dateFilterActive = !!view.dateFilterActive;
+  document.getElementById("btn-date-filter").classList.toggle("active", dateFilterActive);
 
   if (view.sort && validTagIds.has(view.sort.tagId)) {
     currentSort = { tagId: view.sort.tagId, direction: view.sort.direction };
@@ -2566,6 +2585,11 @@ function renderViewPane() {
           tagFilters.length = 0;
           currentSort = null;
           completionFilter = "all";
+          document.querySelectorAll(".comp-btn").forEach((b) =>
+            b.classList.toggle("active", b.dataset.mode === "all")
+          );
+          dateFilterActive = false;
+          document.getElementById("btn-date-filter").classList.remove("active");
           hiddenTagIds.clear();
           searchInput.value = "";
           renderFilterBar();
