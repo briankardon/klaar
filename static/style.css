@@ -499,8 +499,8 @@ main {
   background: var(--bg-comp-btn);
   border: 1px solid var(--border-comp-btn);
   border-radius: 4px;
-  padding: 0 0.4rem;
-  font-size: 0.9rem;
+  padding: 0 0.5rem;
+  font-size: 0.8rem;
   cursor: pointer;
   color: var(--text-secondary);
   height: 100%;
