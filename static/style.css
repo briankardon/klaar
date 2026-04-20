@@ -503,7 +503,6 @@ main {
   font-size: 0.8rem;
   cursor: pointer;
   color: var(--text-secondary);
-  height: 100%;
   flex-shrink: 0;
   line-height: 1;
 }
