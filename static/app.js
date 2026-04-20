@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.10.12";
+const KLAAR_VERSION = "0.10.13";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -3551,6 +3551,13 @@ function onItemMouseDown(e, itemId, isTextClick = false) {
       document.body.style.userSelect = "";
       onDragEnd();
     } else if (isTextClick && !ue.shiftKey && !ue.ctrlKey) {
+      // If the item is already the only selected one, selection isn't changing
+      // — skip the re-render / style pass so we don't clobber the native text
+      // selection created by double-click (word) or triple-click (line).
+      if (selectedIds.size === 1 && selectedIds.has(itemId)) {
+        lastSelectedId = itemId;
+        return;
+      }
       selectedIds.clear();
       selectedIds.add(itemId);
       lastSelectedId = itemId;
