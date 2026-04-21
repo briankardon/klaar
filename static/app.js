@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.12.4";
+const KLAAR_VERSION = "0.12.5";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -743,11 +743,15 @@ document.getElementById("transfer-export").addEventListener("click", () => {
   exportListAsMarkdown();
 });
 
+// Capture phase so descendants that stopPropagation their click events
+// (list-delete buttons, mobile item text, tag bubbles, input boxes, etc.)
+// don't prevent us from closing the menu.
 document.addEventListener("click", (e) => {
+  if (transferMenu.classList.contains("hidden")) return;
   if (!transferMenu.contains(e.target) && e.target !== btnTransferList) {
     hideTransferMenu();
   }
-});
+}, true);
 
 // -------------------------------------------------------------------
 // Import
@@ -3259,15 +3263,18 @@ document.getElementById("ctx-select-to").addEventListener("click", () => {
   applySelectionStyles();
 });
 
-// Close context menu on click elsewhere
+// Close context menu on click elsewhere. Capture phase so descendants
+// that stopPropagation can't suppress the close.
 document.addEventListener("click", (e) => {
+  if (ctxMenu.classList.contains("hidden")) return;
   if (!ctxMenu.contains(e.target)) {
     hideContextMenu();
   }
-});
+}, true);
 document.addEventListener("contextmenu", (e) => {
+  if (ctxMenu.classList.contains("hidden")) return;
   if (!ctxMenu.contains(e.target) && !e.target.closest(".item")) hideContextMenu();
-});
+}, true);
 
 // -------------------------------------------------------------------
 // Keyboard shortcuts
