@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.12.5";
+const KLAAR_VERSION = "0.12.6-debug";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -747,10 +747,15 @@ document.getElementById("transfer-export").addEventListener("click", () => {
 // (list-delete buttons, mobile item text, tag bubbles, input boxes, etc.)
 // don't prevent us from closing the menu.
 document.addEventListener("click", (e) => {
+  console.log("[transfer] capture click, target:", e.target?.tagName, e.target?.className, "hidden:", transferMenu.classList.contains("hidden"));
   if (transferMenu.classList.contains("hidden")) return;
   if (!transferMenu.contains(e.target) && e.target !== btnTransferList) {
+    console.log("[transfer] closing menu");
     hideTransferMenu();
   }
+}, true);
+document.addEventListener("mousedown", (e) => {
+  console.log("[transfer] capture mousedown, target:", e.target?.tagName, e.target?.className);
 }, true);
 
 // -------------------------------------------------------------------
