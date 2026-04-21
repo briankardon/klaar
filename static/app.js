@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.11.5";
+const KLAAR_VERSION = "0.12.0";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -4249,6 +4249,191 @@ document.addEventListener("visibilitychange", () => {
 for (const evt of ["mousedown", "keydown", "touchstart", "scroll"]) {
   document.addEventListener(evt, onUserActivity, { passive: true, capture: true });
 }
+
+// -------------------------------------------------------------------
+// Upcoming dated items (cross-list) modal
+// -------------------------------------------------------------------
+
+const upcomingModal = document.getElementById("upcoming-modal");
+const upcomingBody = document.getElementById("upcoming-body");
+const upcomingFooter = document.getElementById("upcoming-footer");
+const upcomingFutureSelect = document.getElementById("upcoming-future");
+
+let upcomingPastMode = 7;  // 7 (default) | "all"
+
+function todayIsoLocal() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function openUpcomingModal() {
+  upcomingPastMode = 7;
+  upcomingModal.classList.remove("hidden");
+  fetchAndRenderUpcoming();
+}
+
+function closeUpcomingModal() {
+  upcomingModal.classList.add("hidden");
+}
+
+async function fetchAndRenderUpcoming() {
+  upcomingBody.innerHTML = "";
+  upcomingFooter.innerHTML = "";
+  const loading = document.createElement("div");
+  loading.className = "upcoming-loading";
+  loading.textContent = "Loading…";
+  upcomingBody.appendChild(loading);
+
+  const future = upcomingFutureSelect.value;
+  const past = upcomingPastMode === "all" ? "all" : String(upcomingPastMode);
+  const today = todayIsoLocal();
+  const data = await api(`/upcoming?today=${today}&future=${future}&past=${past}`);
+  if (!data || data.error) {
+    upcomingBody.innerHTML = "";
+    const err = document.createElement("div");
+    err.className = "upcoming-empty";
+    err.textContent = "Could not load upcoming items.";
+    upcomingBody.appendChild(err);
+    return;
+  }
+  renderUpcoming(data);
+}
+
+function renderUpcoming(data) {
+  upcomingBody.innerHTML = "";
+  upcomingFooter.innerHTML = "";
+
+  if (data.items.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "upcoming-empty";
+    empty.textContent = "No upcoming dated items in this range.";
+    upcomingBody.appendChild(empty);
+  } else {
+    let curDate = null;
+    for (const entry of data.items) {
+      if (entry.sort_date !== curDate) {
+        curDate = entry.sort_date;
+        upcomingBody.appendChild(buildUpcomingDayHeader(curDate, data.today));
+      }
+      const listMeta = data.lists[entry.list_id];
+      if (!listMeta) continue;
+      upcomingBody.appendChild(buildUpcomingItemRow(entry, listMeta));
+    }
+  }
+
+  if (upcomingPastMode === 7) {
+    const btn = document.createElement("button");
+    btn.className = "upcoming-load-more";
+    btn.textContent = "Load older overdue items";
+    btn.addEventListener("click", () => {
+      upcomingPastMode = "all";
+      fetchAndRenderUpcoming();
+    });
+    upcomingFooter.appendChild(btn);
+  } else {
+    const note = document.createElement("span");
+    note.style.color = "var(--text-muted)";
+    note.style.fontSize = "0.8rem";
+    note.textContent = "Showing all overdue items.";
+    upcomingFooter.appendChild(note);
+  }
+}
+
+function buildUpcomingDayHeader(dateStr, todayStr) {
+  const header = document.createElement("div");
+  header.className = "upcoming-day-header";
+  const friendly = friendlyDate(dateStr) ?? dateStr;
+  header.textContent = friendly;
+  if (friendly !== dateStr) {
+    const datePart = document.createElement("span");
+    datePart.className = "upcoming-day-date";
+    datePart.textContent = dateStr;
+    header.appendChild(datePart);
+  }
+  if (dateStr < todayStr) header.classList.add("overdue");
+  return header;
+}
+
+function buildUpcomingItemRow(entry, listMeta) {
+  const row = document.createElement("div");
+  row.className = "upcoming-item";
+  row.addEventListener("click", () => jumpToItemFromUpcoming(entry.list_id, entry.item.id));
+
+  const crumbs = document.createElement("div");
+  crumbs.className = "upcoming-item-breadcrumb";
+  const listSpan = document.createElement("span");
+  listSpan.className = "upcoming-item-crumb upcoming-item-listname";
+  listSpan.textContent = listMeta.name;
+  listSpan.title = listMeta.name;
+  crumbs.appendChild(listSpan);
+  for (const a of entry.ancestors) {
+    const sep = document.createElement("span");
+    sep.className = "upcoming-item-crumb-sep";
+    sep.textContent = "›";
+    crumbs.appendChild(sep);
+    const span = document.createElement("span");
+    span.className = "upcoming-item-crumb";
+    const t = a.text || "(untitled)";
+    span.textContent = t;
+    span.title = t;
+    crumbs.appendChild(span);
+  }
+
+  const main = document.createElement("div");
+  main.className = "upcoming-item-main";
+  const textSpan = document.createElement("span");
+  textSpan.className = "upcoming-item-text";
+  textSpan.textContent = entry.item.text || "(untitled)";
+  main.appendChild(textSpan);
+  const tagsSpan = document.createElement("span");
+  tagsSpan.className = "item-tags";
+  for (const tagDef of listMeta.tags) {
+    const itemTag = entry.item.tags.find((t) => t.id === tagDef.id);
+    if (!itemTag) continue;
+    tagsSpan.appendChild(buildTagBubbleElement(tagDef, itemTag.value, { mobile: false }));
+  }
+  main.appendChild(tagsSpan);
+
+  row.appendChild(crumbs);
+  row.appendChild(main);
+  return row;
+}
+
+async function jumpToItemFromUpcoming(listId, itemId) {
+  closeUpcomingModal();
+  await selectList(listId);
+  const idx = currentItems.findIndex((it) => it.id === itemId);
+  if (idx === -1) return;
+  // Expand any collapsed ancestors so the item is reachable.
+  let d = currentItems[idx].depth;
+  for (let j = idx - 1; j >= 0 && d > 0; j--) {
+    if (currentItems[j].depth < d) {
+      collapsedIds.delete(currentItems[j].id);
+      d = currentItems[j].depth;
+    }
+  }
+  selectedIds.clear();
+  selectedIds.add(itemId);
+  lastSelectedId = itemId;
+  renderItems();
+  scrollToItem(itemId);
+}
+
+document.getElementById("btn-upcoming").addEventListener("click", openUpcomingModal);
+document.getElementById("upcoming-close").addEventListener("click", closeUpcomingModal);
+document.getElementById("upcoming-refresh").addEventListener("click", fetchAndRenderUpcoming);
+upcomingFutureSelect.addEventListener("change", fetchAndRenderUpcoming);
+upcomingModal.addEventListener("click", (e) => {
+  if (e.target === upcomingModal) closeUpcomingModal();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !upcomingModal.classList.contains("hidden")) {
+    closeUpcomingModal();
+  }
+});
 
 // -------------------------------------------------------------------
 // Init

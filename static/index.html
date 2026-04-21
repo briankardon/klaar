@@ -43,6 +43,7 @@
       <div class="sidebar-header">
         <h2>Lists</h2>
         <div class="sidebar-btns">
+          <button id="btn-upcoming" title="Upcoming dated items (across all lists)">&#x1F4C5;</button>
           <button id="btn-export-list" title="Export list">&#x21e9;</button>
           <button id="btn-import-list" title="Import from text">&#x21e7;</button>
           <button id="btn-new-list" title="New list">+</button>
@@ -153,6 +154,30 @@
         <button id="import-to-current" disabled>Add to current list</button>
         <button id="import-cancel">Cancel</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Upcoming dated items modal -->
+  <div id="upcoming-modal" class="modal-overlay hidden">
+    <div class="modal upcoming-dialog" role="dialog" aria-modal="true" aria-label="Upcoming dated items">
+      <div class="upcoming-header">
+        <h3>Upcoming</h3>
+        <div class="upcoming-controls">
+          <label for="upcoming-future">Next</label>
+          <select id="upcoming-future">
+            <option value="1">1 day</option>
+            <option value="3">3 days</option>
+            <option value="7" selected>1 week</option>
+            <option value="14">2 weeks</option>
+            <option value="30">1 month</option>
+            <option value="90">3 months</option>
+          </select>
+          <button id="upcoming-refresh" title="Refresh">&#x21bb;</button>
+          <button id="upcoming-close" title="Close">&#xd7;</button>
+        </div>
+      </div>
+      <div id="upcoming-body" class="upcoming-body"></div>
+      <div id="upcoming-footer" class="upcoming-footer"></div>
     </div>
   </div>
 
