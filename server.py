@@ -1376,6 +1376,132 @@ def bulk_add_items(list_id: str):
     return jsonify(data), 201
 
 
+_ISO_DATE_PREFIX = re.compile(r"^(\d{4}-\d{2}-\d{2})")
+
+
+def _earliest_item_date(item: dict) -> str | None:
+    """Return the earliest YYYY-MM-DD key among the item's tag values, or None."""
+    earliest = None
+    for t in item.get("tags", []):
+        v = t.get("value")
+        if not isinstance(v, str):
+            continue
+        m = _ISO_DATE_PREFIX.match(v)
+        if not m:
+            continue
+        k = m.group(1)
+        if earliest is None or k < earliest:
+            earliest = k
+    return earliest
+
+
+@app.get("/api/upcoming")
+@_require_auth
+def get_upcoming():
+    """Cross-list snapshot of not-done items with a date-valued tag
+    whose earliest date falls within [today - past, today + future].
+
+    Query params: today=YYYY-MM-DD (client's local today), future (int, days),
+    past ("all" or int, days). Returns sorted items with ancestor chains
+    and per-list tag definitions.
+    """
+    user = _current_user()
+    from datetime import date as _date
+
+    today_str = request.args.get("today", "")
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", today_str):
+        return jsonify({"error": "invalid today"}), 400
+    today_date = _date.fromisoformat(today_str)
+
+    try:
+        future_days = int(request.args.get("future", "7"))
+    except ValueError:
+        future_days = 7
+    future_days = max(0, min(future_days, 3650))
+    future_cutoff = (today_date + timedelta(days=future_days)).isoformat()
+
+    past_arg = request.args.get("past", "7")
+    if past_arg == "all":
+        past_cutoff = None
+    else:
+        try:
+            past_days = int(past_arg)
+        except ValueError:
+            past_days = 7
+        past_days = max(0, min(past_days, 3650))
+        past_cutoff = (today_date - timedelta(days=past_days)).isoformat()
+
+    lists_meta: dict[str, dict] = {}
+    results = []
+    for path in sorted(DATA_DIR.glob("*.json")):
+        if path.name == "users.json":
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            _ensure_owner(data)
+            _ensure_tags(data)
+        except (json.JSONDecodeError, KeyError, OSError):
+            continue
+        if not _can_access(data, user):
+            continue
+
+        list_id = data["id"]
+        items = data.get("items", [])
+        any_match = False
+
+        for idx, item in enumerate(items):
+            if item.get("done"):
+                continue
+            date_key = _earliest_item_date(item)
+            if date_key is None:
+                continue
+            if date_key > future_cutoff:
+                continue
+            if past_cutoff is not None and date_key < past_cutoff:
+                continue
+            depth = item.get("depth", 0)
+            ancestors = []
+            target_depth = depth
+            for j in range(idx - 1, -1, -1):
+                if target_depth == 0:
+                    break
+                jd = items[j].get("depth", 0)
+                if jd < target_depth:
+                    ancestors.append({
+                        "text": items[j].get("text", ""),
+                        "depth": jd,
+                    })
+                    target_depth = jd
+            ancestors.reverse()
+
+            results.append({
+                "list_id": list_id,
+                "item": {
+                    "id": item.get("id"),
+                    "text": item.get("text", ""),
+                    "depth": depth,
+                    "tags": item.get("tags", []),
+                },
+                "ancestors": ancestors,
+                "sort_date": date_key,
+            })
+            any_match = True
+
+        if any_match:
+            lists_meta[list_id] = {
+                "name": data.get("name", ""),
+                "tags": data.get("tags", []),
+            }
+
+    results.sort(key=lambda r: r["sort_date"])
+    return jsonify({
+        "today": today_str,
+        "lists": lists_meta,
+        "items": results,
+    })
+
+
 @app.post("/api/lists/generate-test")
 @_require_auth
 def generate_test_list():
