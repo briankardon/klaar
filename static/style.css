@@ -1610,9 +1610,9 @@ main {
 
 /* Upcoming dated-items modal */
 .upcoming-dialog {
-  width: 720px;
-  max-width: 90vw;
-  max-height: 85vh;
+  width: 900px;
+  max-width: 93vw;
+  max-height: 90vh;
   padding: 0;
   overflow: hidden;
 }
@@ -1722,7 +1722,6 @@ main {
 }
 
 .upcoming-item-crumb {
-  max-width: 10em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
