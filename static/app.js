@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.12.3";
+const KLAAR_VERSION = "0.12.4";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -607,7 +607,8 @@ const importText = document.getElementById("import-text");
 const importNewBtn = document.getElementById("import-new-list");
 const importCurrentBtn = document.getElementById("import-to-current");
 const importCancelBtn = document.getElementById("import-cancel");
-const btnImportList = document.getElementById("btn-import-list");
+const btnTransferList = document.getElementById("btn-transfer-list");
+const transferMenu = document.getElementById("transfer-menu");
 
 function parseImportText(text) {
   const lines = text.split(/\r?\n/);
@@ -685,8 +686,6 @@ async function doImport(targetListId, parsedItems) {
 // Export
 // -------------------------------------------------------------------
 
-const btnExportList = document.getElementById("btn-export-list");
-
 function exportListAsMarkdown() {
   if (!currentListId || currentItems.length === 0) return;
   const lines = [];
@@ -714,12 +713,40 @@ function exportListAsMarkdown() {
   URL.revokeObjectURL(url);
 }
 
-btnExportList.addEventListener("click", () => {
-  if (!currentListId) {
-    alert("Select a list first.");
-    return;
-  }
+function showTransferMenu() {
+  const rect = btnTransferList.getBoundingClientRect();
+  transferMenu.style.left = rect.left + "px";
+  transferMenu.style.top = (rect.bottom + 4) + "px";
+  const exportItem = document.getElementById("transfer-export");
+  exportItem.classList.toggle("disabled", !currentListId);
+  transferMenu.classList.remove("hidden");
+}
+
+function hideTransferMenu() {
+  transferMenu.classList.add("hidden");
+}
+
+btnTransferList.addEventListener("click", (e) => {
+  e.stopPropagation();
+  if (transferMenu.classList.contains("hidden")) showTransferMenu();
+  else hideTransferMenu();
+});
+
+document.getElementById("transfer-import").addEventListener("click", () => {
+  hideTransferMenu();
+  showImportModal();
+});
+
+document.getElementById("transfer-export").addEventListener("click", () => {
+  if (!currentListId) return;
+  hideTransferMenu();
   exportListAsMarkdown();
+});
+
+document.addEventListener("click", (e) => {
+  if (!transferMenu.contains(e.target) && e.target !== btnTransferList) {
+    hideTransferMenu();
+  }
 });
 
 // -------------------------------------------------------------------
@@ -742,7 +769,6 @@ function hideImportModal() {
   importModal.classList.add("hidden");
 }
 
-btnImportList.addEventListener("click", showImportModal);
 importCancelBtn.addEventListener("click", hideImportModal);
 importModal.addEventListener("click", (e) => {
   if (e.target === importModal && !importText.disabled) hideImportModal();

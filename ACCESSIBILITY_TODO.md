@@ -36,7 +36,7 @@ read by screen readers but it's a lossy fallback.
 
 - `#btn-date-filter` (📅) — app.js:~index.html, "Show only items with date tags"
 - `#btn-undo` (↶), `#btn-redo` (↷) — index.html:59-60
-- `#btn-export-list` (⇩), `#btn-import-list` (⇧) — index.html:46-47
+- `#btn-transfer-list` (⇅) — import/export popover trigger
 - `#btn-toggle-tagpane` (•••) — index.html:29
 
 Mechanical fix: add `aria-label="..."` matching each `title`.

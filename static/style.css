@@ -289,9 +289,8 @@ main {
   gap: 4px;
 }
 
-#btn-export-list,
-#btn-import-list,
-#btn-upcoming {
+#btn-upcoming,
+#btn-transfer-list {
   background: var(--accent-gray);
   color: #fff;
   border: none;
@@ -1151,7 +1150,8 @@ main {
 /* ---- Context menu ---- */
 
 #context-menu,
-#list-context-menu {
+#list-context-menu,
+#transfer-menu {
   position: fixed;
   background: var(--bg-context-menu);
   border: 1px solid var(--border-context-menu);

@@ -44,8 +44,7 @@
         <h2>Lists</h2>
         <div class="sidebar-btns">
           <button id="btn-upcoming" title="Upcoming dated items (across all lists)">&#x1F4C5;</button>
-          <button id="btn-export-list" title="Export list">&#x21e9;</button>
-          <button id="btn-import-list" title="Import from text">&#x21e7;</button>
+          <button id="btn-transfer-list" title="Import / Export">&#x21c5;</button>
           <button id="btn-new-list" title="New list">+</button>
         </div>
       </div>
@@ -120,6 +119,12 @@
     <div class="context-menu-item" id="ctx-select-to">Select to here</div>
     <div class="context-menu-divider"></div>
     <div id="ctx-tags"></div>
+  </div>
+
+  <!-- Transfer (import/export) menu -->
+  <div id="transfer-menu" class="hidden">
+    <div class="context-menu-item" id="transfer-import">Import from text&hellip;</div>
+    <div class="context-menu-item" id="transfer-export">Export as Markdown</div>
   </div>
 
   <!-- List context menu -->
