@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.11.2";
+const KLAAR_VERSION = "0.11.3";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -62,7 +62,8 @@ let lastSelectedId = null;       // anchor for shift-click range selection
 const hiddenTagIds = new Set();  // client-side tag visibility state
 const textFilters = [];          // [{pattern: string, regex: RegExp}]
 const tagFilters = [];           // [{tagId, condition}] — multiple per tag allowed
-let currentSort = null;          // {tagId, direction: "asc"|"desc"} or null
+let currentSort = null;          // {tagId, direction: "asc"|"desc"} or {type: "date", direction} or null
+let _stashedSort = null;         // sort saved when date filter is toggled on; restored on toggle off
 let completionFilter = "all";    // "all" | "active" | "done"
 let dateFilterActive = false;    // when true, only items with any date-valued tag match
 let currentViews = [];           // [{id, name, ...state}]
@@ -505,6 +506,7 @@ async function selectList(id) {
   textFilters.length = 0;
   tagFilters.length = 0;
   currentSort = null;
+  _stashedSort = null;
   completionFilter = "all";
   dateFilterActive = false;
   document.getElementById("btn-date-filter")?.classList.remove("active");
@@ -1876,9 +1878,18 @@ function computeFilterVisibility() {
   return vis;
 }
 
+function earliestDateTagValue(item) {
+  let earliest = null;
+  for (const t of item.tags) {
+    if (friendlyDate(t.value) != null && (earliest == null || t.value < earliest)) {
+      earliest = t.value;
+    }
+  }
+  return earliest;
+}
+
 function getSortedItems() {
   if (!currentSort) return currentItems;
-  const { tagId, direction } = currentSort;
 
   // Group items into blocks: each item at a given depth with all deeper items following it
   const blocks = [];
@@ -1894,11 +1905,16 @@ function getSortedItems() {
     blocks.push(block);
   }
 
-  // Sort blocks by the lead item's tag value
+  const { direction } = currentSort;
+  const valueFor = currentSort.type === "date"
+    ? (item) => earliestDateTagValue(item)
+    : (item) => itemTagValue(item, currentSort.tagId);
+
+  // Sort blocks by the lead item's sort value
   blocks.sort((a, b) => {
-    const aVal = itemTagValue(a[0], tagId);
-    const bVal = itemTagValue(b[0], tagId);
-    // Items without the tag sort to end
+    const aVal = valueFor(a[0]);
+    const bVal = valueFor(b[0]);
+    // Items without a value sort to end
     if (aVal == null && bVal == null) return 0;
     if (aVal == null) return 1;
     if (bVal == null) return -1;
@@ -1910,6 +1926,9 @@ function getSortedItems() {
 }
 
 function toggleSort(tagId) {
+  // User made a deliberate sort choice — drop any stash so toggling the
+  // date filter off won't revert away from their pick.
+  _stashedSort = null;
   if (!currentSort || currentSort.tagId !== tagId) {
     currentSort = { tagId, direction: "asc" };
   } else if (currentSort.direction === "asc") {
@@ -2085,7 +2104,15 @@ document.querySelectorAll(".comp-btn").forEach((btn) => {
 document.getElementById("btn-date-filter").addEventListener("click", () => {
   dateFilterActive = !dateFilterActive;
   document.getElementById("btn-date-filter").classList.toggle("active", dateFilterActive);
+  if (dateFilterActive) {
+    _stashedSort = currentSort;
+    currentSort = { type: "date", direction: "asc" };
+  } else {
+    currentSort = _stashedSort;
+    _stashedSort = null;
+  }
   renderItems();
+  renderTagPane();
   scrollToItem(lastSelectedId);
 });
 
@@ -2471,7 +2498,7 @@ function captureViewState() {
     tagFilters: tagFilters.map((f) => ({ tagId: f.tagId, condition: f.condition, exclude: f.exclude || false })),
     completionFilter,
     dateFilterActive,
-    sort: currentSort ? { tagId: currentSort.tagId, direction: currentSort.direction } : null,
+    sort: currentSort ? { ...currentSort } : null,
     hiddenTagIds: [...hiddenTagIds],
   };
 }
@@ -2502,11 +2529,14 @@ function applyViewState(view) {
   dateFilterActive = !!view.dateFilterActive;
   document.getElementById("btn-date-filter").classList.toggle("active", dateFilterActive);
 
-  if (view.sort && validTagIds.has(view.sort.tagId)) {
+  if (view.sort && view.sort.type === "date") {
+    currentSort = { type: "date", direction: view.sort.direction || "asc" };
+  } else if (view.sort && validTagIds.has(view.sort.tagId)) {
     currentSort = { tagId: view.sort.tagId, direction: view.sort.direction };
   } else {
     currentSort = null;
   }
+  _stashedSort = null;
 
   hiddenTagIds.clear();
   for (const id of (view.hiddenTagIds || [])) {
@@ -2584,6 +2614,7 @@ function renderViewPane() {
           textFilters.length = 0;
           tagFilters.length = 0;
           currentSort = null;
+          _stashedSort = null;
           completionFilter = "all";
           document.querySelectorAll(".comp-btn").forEach((b) =>
             b.classList.toggle("active", b.dataset.mode === "all")
