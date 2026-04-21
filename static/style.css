@@ -1671,10 +1671,11 @@ main {
 
 .upcoming-day-header {
   font-weight: 600;
-  padding: 0.65rem 0 0.2rem;
+  padding: 0.4rem 0.9rem 0.3rem;
+  margin: 0.2rem -0.9rem 0;
+  background: var(--bg-gutter);
   color: var(--text-secondary);
   border-bottom: 1px solid var(--border-lighter);
-  margin-top: 0.2rem;
   font-size: 0.9rem;
 }
 
