@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.12.6-debug";
+const KLAAR_VERSION = "0.12.6";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -743,19 +743,15 @@ document.getElementById("transfer-export").addEventListener("click", () => {
   exportListAsMarkdown();
 });
 
-// Capture phase so descendants that stopPropagation their click events
-// (list-delete buttons, mobile item text, tag bubbles, input boxes, etc.)
-// don't prevent us from closing the menu.
-document.addEventListener("click", (e) => {
-  console.log("[transfer] capture click, target:", e.target?.tagName, e.target?.className, "hidden:", transferMenu.classList.contains("hidden"));
+// Capture-phase mousedown: descendant click handlers that stopPropagation
+// (and, on desktop items, the onItemMouseDown/onUp dance that appears to
+// suppress the synthesized click entirely) can't prevent us from closing
+// the menu this way. mousedown fires reliably on every user interaction.
+document.addEventListener("mousedown", (e) => {
   if (transferMenu.classList.contains("hidden")) return;
   if (!transferMenu.contains(e.target) && e.target !== btnTransferList) {
-    console.log("[transfer] closing menu");
     hideTransferMenu();
   }
-}, true);
-document.addEventListener("mousedown", (e) => {
-  console.log("[transfer] capture mousedown, target:", e.target?.tagName, e.target?.className);
 }, true);
 
 // -------------------------------------------------------------------
@@ -3268,9 +3264,11 @@ document.getElementById("ctx-select-to").addEventListener("click", () => {
   applySelectionStyles();
 });
 
-// Close context menu on click elsewhere. Capture phase so descendants
-// that stopPropagation can't suppress the close.
-document.addEventListener("click", (e) => {
+// Close context menu on mousedown elsewhere. Capture phase + mousedown
+// (not click) so descendants can't stopPropagation us away, and so the
+// onItemMouseDown/onUp dance on desktop items — which seems to suppress
+// the subsequent click event entirely — doesn't leave the menu stuck open.
+document.addEventListener("mousedown", (e) => {
   if (ctxMenu.classList.contains("hidden")) return;
   if (!ctxMenu.contains(e.target)) {
     hideContextMenu();
