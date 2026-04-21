@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.11.4";
+const KLAAR_VERSION = "0.11.5";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -1219,6 +1219,23 @@ function createItemTextElement(item) {
   return txt;
 }
 
+function buildTagBubbleElement(tagDef, value, options = {}) {
+  const isMobile = options.mobile ?? mobileQuery.matches;
+  const bubble = document.createElement("span");
+  bubble.className = "tag-bubble";
+  const friendly = friendlyDate(value);
+  const displayVal = friendly ?? value;
+  if (isMobile) {
+    bubble.textContent = tagDef.name.charAt(0).toUpperCase();
+    bubble.title = value != null ? `${tagDef.name}: ${value}` : tagDef.name;
+  } else {
+    bubble.textContent = displayVal != null ? `${tagDef.name}: ${displayVal}` : tagDef.name;
+    if (friendly) bubble.dataset.rawDate = value;
+  }
+  bubble.style.background = tagDef.color;
+  return bubble;
+}
+
 function createTagBubbles(item, displayIdx) {
   const tagsContainer = document.createElement("span");
   tagsContainer.className = "item-tags";
@@ -1227,18 +1244,7 @@ function createTagBubbles(item, displayIdx) {
     if (hiddenTagIds.has(tagDef.id)) continue;
     const tagId = tagDef.id;
     const tagVal = itemTagValue(item, tagId);
-    const bubble = document.createElement("span");
-    bubble.className = "tag-bubble";
-    const friendly = friendlyDate(tagVal);
-    const displayVal = friendly ?? tagVal;
-    if (mobileQuery.matches) {
-      bubble.textContent = tagDef.name.charAt(0).toUpperCase();
-      bubble.title = tagVal != null ? `${tagDef.name}: ${tagVal}` : tagDef.name;
-    } else {
-      bubble.textContent = displayVal != null ? `${tagDef.name}: ${displayVal}` : tagDef.name;
-      if (friendly) bubble.dataset.rawDate = tagVal;
-    }
-    bubble.style.background = tagDef.color;
+    const bubble = buildTagBubbleElement(tagDef, tagVal);
     let clickTimer = null;
     let editing = false;
     bubble.addEventListener("click", (e) => {
