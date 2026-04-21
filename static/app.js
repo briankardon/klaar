@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.11.3";
+const KLAAR_VERSION = "0.11.4";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -3295,6 +3295,16 @@ document.addEventListener("keydown", (e) => {
   if (e.ctrlKey && ((e.key === "z" && e.shiftKey) || (e.key === "y" && !e.shiftKey)) && !e.altKey) {
     e.preventDefault();
     performRedo();
+    return;
+  }
+
+  // Tab / Shift+Tab — adjust indent of multiple selected items.
+  // Single-item Tab is handled by the focused input's own keydown; here we
+  // cover the multi-select case where no input has keyboard focus and the
+  // browser would otherwise walk the focus ring.
+  if (e.key === "Tab" && !e.defaultPrevented && selectedIds.size > 1) {
+    e.preventDefault();
+    changeDepthSelected(e.shiftKey ? -1 : 1);
     return;
   }
 
