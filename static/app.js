@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.13.0";
+const KLAAR_VERSION = "0.13.1";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -21,9 +21,6 @@ function dbg(msg) {
   _dbgEl.appendChild(line);
   _dbgEl.scrollTop = _dbgEl.scrollHeight;
 }
-
-dbg(`UA: ${navigator.userAgent}`);
-dbg(`Standalone: ${window.navigator.standalone ?? "N/A"}`);
 
 // Global error logging (mainly for mobile where console isn't visible)
 window.addEventListener("error", (e) => {
@@ -1073,7 +1070,6 @@ function createItemTextElement(item) {
       _keyboardHolder.style.cssText = "position:fixed;top:-9999px;opacity:0;font-size:16px;";
       document.body.appendChild(_keyboardHolder);
       _keyboardHolder.focus();
-      dbg("keyboard holder focused");
     }
     const copyTags = shiftKey ? item.tags.map(t => ({ id: t.id, value: null })) : null;
     if (inp.selectionStart === 0 && inp.value !== "") {
@@ -1093,7 +1089,6 @@ function createItemTextElement(item) {
     txt.textContent = item.text;
     let tapTimer = null;
     function openMobileEditor() {
-      dbg("openMobileEditor for " + item.id);
       const inp = document.createElement("input");
       inp.type = "text";
       inp.className = "item-text";
@@ -1101,7 +1096,6 @@ function createItemTextElement(item) {
       inp.value = item.text;
       let mobileDeleted = false;
       inp.addEventListener("blur", () => {
-        dbg("mobile inp blur, mobileDeleted=" + mobileDeleted);
         if (mobileDeleted) return;
         const val = inp.value.trim();
         if (val !== item.text) {
@@ -1111,7 +1105,6 @@ function createItemTextElement(item) {
         }
       });
       inp.addEventListener("keydown", (ke) => {
-        dbg("mobile keydown: " + ke.key);
         if (ke.key === "Enter") {
           ke.preventDefault();
           handleItemEnter(inp, ke.shiftKey);
@@ -1124,7 +1117,6 @@ function createItemTextElement(item) {
       });
       txt.replaceWith(inp);
       inp.focus();
-      dbg("openMobileEditor focus called, inDOM=" + document.body.contains(inp));
     }
     txt.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -1153,7 +1145,6 @@ function createItemTextElement(item) {
       }
     });
     if (_autoEditId === item.id) {
-      dbg("_autoEditId match! item=" + item.id);
       _autoEditId = null;
       const inp = document.createElement("input");
       inp.type = "text";
@@ -1182,9 +1173,7 @@ function createItemTextElement(item) {
         }
       });
       requestAnimationFrame(() => {
-        dbg("_autoEditId rAF focus: inDOM=" + document.body.contains(inp) + " activeEl=" + document.activeElement?.tagName);
         inp.focus();
-        dbg("_autoEditId rAF after focus: activeEl=" + document.activeElement?.tagName + " class=" + document.activeElement?.className);
       });
       return inp;
     }
@@ -1680,28 +1669,21 @@ async function addItemBefore(beforeId, depth, tags) {
 }
 
 function focusNewItem(result) {
-  dbg("focusNewItem id=" + (result?.id ?? "null") + " mobile=" + mobileQuery.matches);
   if (!result || !result.id) return;
   if (mobileQuery.matches) _autoEditId = result.id;
   _suppressScrollRender = true;
   scrollToItem(result.id);
-  dbg("focusNewItem: scrollToItem done, _autoEditId=" + _autoEditId);
   renderViewport();
-  dbg("focusNewItem: renderViewport done, _autoEditId=" + _autoEditId);
   const newEl = itemsEl.querySelector(`.item[data-id="${result.id}"] .item-text`);
-  dbg("focusNewItem: newEl=" + (newEl ? newEl.tagName : "null") + " inDOM=" + (newEl ? document.body.contains(newEl) : "n/a"));
   if (newEl && newEl.tagName === "INPUT") {
     newEl.focus({ preventScroll: true });
-    dbg("focusNewItem: focus called, activeEl=" + document.activeElement?.tagName);
   }
   if (_keyboardHolder) {
     _keyboardHolder.remove();
     _keyboardHolder = null;
-    dbg("keyboard holder removed");
   }
   requestAnimationFrame(() => {
     _suppressScrollRender = false;
-    dbg("focusNewItem rAF: activeEl=" + document.activeElement?.tagName + " class=" + document.activeElement?.className);
   });
 }
 
@@ -4517,7 +4499,6 @@ document.addEventListener("keydown", (e) => {
 
 const _h1 = document.querySelector("header h1");
 _h1.textContent = "Klaar";
-dbg(`Klaar v${KLAAR_VERSION}`);
 // Debug panel toggle: long-press on mobile, double-click on desktop
 if (_isMobile && _dbgEl) {
   let _dbgTimer = null;
