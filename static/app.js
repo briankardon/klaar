@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.12.8";
+const KLAAR_VERSION = "0.13.0";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -3471,6 +3471,24 @@ document.getElementById("list-ctx-leave").addEventListener("click", () => {
 document.getElementById("list-ctx-sharing").addEventListener("click", () => {
   hideListContextMenu();
   showSharingModal(listCtxId);
+});
+
+document.getElementById("list-ctx-copy-cal").addEventListener("click", async (e) => {
+  const el = e.currentTarget;
+  const originalText = "Copy calendar URL";
+  const flash = (msg) => {
+    el.textContent = msg;
+    setTimeout(() => { el.textContent = originalText; hideListContextMenu(); }, 900);
+  };
+  const tokenRes = await api("/me/calendar-token");
+  if (!tokenRes || tokenRes.error) { flash("Failed"); return; }
+  const url = window.location.origin + "/calendar/" + tokenRes.token + "/" + listCtxId + ".ics";
+  try {
+    await navigator.clipboard.writeText(url);
+    flash("Copied!");
+  } catch (err) {
+    flash("Copy failed");
+  }
 });
 
 // Close list context menu on outside click

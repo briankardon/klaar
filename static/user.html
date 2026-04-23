@@ -388,6 +388,29 @@
       </div>
     </div>
 
+    <!-- Calendar subscription section -->
+    <div class="section">
+      <h2>Calendar Subscription</h2>
+      <p style="font-size:0.9rem; color:var(--text-secondary); margin-bottom:0.8rem;">
+        Subscribe a calendar app to this URL to see your dated Klaar items
+        alongside your other events. In Google Calendar: "Other calendars" &rarr;
+        "+" &rarr; "From URL". In Apple Calendar: File &rarr; New Calendar Subscription.
+        For a single list, use "Copy calendar URL" on the list's right-click menu.
+      </p>
+      <div class="field-row">
+        <span class="field-label">All-lists URL</span>
+        <input class="field-input" type="text" id="calendar-url" readonly style="max-width:420px;">
+        <button class="btn btn-small btn-primary" id="btn-copy-cal-url">Copy</button>
+        <button class="btn btn-small btn-danger" id="btn-regen-cal-url">Regenerate</button>
+      </div>
+      <div id="cal-msg" class="msg hidden"></div>
+      <p style="font-size:0.8rem; color:var(--text-muted); margin-top:0.5rem;">
+        The URL contains a secret token &mdash; treat it like a password.
+        Regenerating creates a new URL and breaks any existing subscriptions.
+        Google Calendar typically refreshes external feeds every 6&ndash;12 hours.
+      </p>
+    </div>
+
     <!-- Delete account section -->
     <div class="section">
       <h2>Delete Account</h2>

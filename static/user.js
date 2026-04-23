@@ -84,7 +84,50 @@ async function loadCurrentUser() {
   }
 
   loadContacts();
+  loadCalendarUrl();
 }
+
+// --- Calendar subscription URL ---
+function calendarUrlFor(token) {
+  return window.location.origin + "/calendar/" + token + ".ics";
+}
+
+async function loadCalendarUrl() {
+  const data = await api("/me/calendar-token");
+  if (!data || data.error) return;
+  document.getElementById("calendar-url").value = calendarUrlFor(data.token);
+}
+
+document.getElementById("btn-copy-cal-url").addEventListener("click", async () => {
+  const input = document.getElementById("calendar-url");
+  const msgEl = document.getElementById("cal-msg");
+  if (!input.value) return;
+  try {
+    await navigator.clipboard.writeText(input.value);
+    showMsg(msgEl, "URL copied to clipboard.", true);
+  } catch (e) {
+    input.select();
+    document.execCommand("copy");
+    showMsg(msgEl, "URL copied (fallback).", true);
+  }
+  setTimeout(() => hideMsg(msgEl), 2500);
+});
+
+document.getElementById("btn-regen-cal-url").addEventListener("click", async () => {
+  const ok = await confirmDialog(
+    "Regenerate calendar URL?",
+    "Any calendar app subscribed to the old URL will stop receiving updates. You'll need to re-subscribe with the new URL."
+  );
+  if (!ok) return;
+  const msgEl = document.getElementById("cal-msg");
+  const data = await api("/me/calendar-token/regenerate", { method: "POST" });
+  if (!data || data.error) {
+    showMsg(msgEl, data?.error || "Failed to regenerate.", false);
+    return;
+  }
+  document.getElementById("calendar-url").value = calendarUrlFor(data.token);
+  showMsg(msgEl, "New URL generated.", true);
+});
 
 // --- Save display name ---
 document.getElementById("btn-save-display").addEventListener("click", async () => {

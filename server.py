@@ -1502,6 +1502,179 @@ def get_upcoming():
     })
 
 
+# ---------------------------------------------------------------------------
+# Calendar subscription (.ics feed)
+# ---------------------------------------------------------------------------
+
+def _ics_escape(s: str) -> str:
+    """Escape text per RFC 5545 §3.3.11."""
+    return (
+        s.replace("\\", "\\\\")
+         .replace(";", "\\;")
+         .replace(",", "\\,")
+         .replace("\n", "\\n")
+         .replace("\r", "")
+    )
+
+
+def _ics_fold(line: str) -> str:
+    """Fold a line at 75 octets per RFC 5545 §3.1."""
+    if len(line) <= 75:
+        return line
+    out = [line[:75]]
+    i = 75
+    while i < len(line):
+        out.append(" " + line[i:i + 74])
+        i += 74
+    return "\r\n".join(out)
+
+
+def _find_user_by_calendar_token(token: str) -> dict | None:
+    if not token or len(token) > 200:
+        return None
+    for u in _load_users():
+        if u.get("calendar_token") == token:
+            return u
+    return None
+
+
+def _iter_user_date_events(user: dict, list_filter_id: str | None):
+    """Yield (item, tag_def, date_iso, list_name) for each not-done, date-tagged
+    item in lists the user can read. If list_filter_id is set, only that list."""
+    for path in sorted(DATA_DIR.glob("*.json")):
+        if path.name == "users.json":
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            _ensure_owner(data)
+            _ensure_tags(data)
+        except (json.JSONDecodeError, KeyError, OSError):
+            continue
+        if not _can_access(data, user):
+            continue
+        if list_filter_id is not None and data.get("id") != list_filter_id:
+            continue
+        tags_by_id = {t["id"]: t for t in data.get("tags", [])}
+        list_name = data.get("name", "")
+        for item in data.get("items", []):
+            if item.get("done"):
+                continue
+            for tag_ref in item.get("tags", []):
+                val = tag_ref.get("value")
+                if not isinstance(val, str):
+                    continue
+                m = _ISO_DATE_PREFIX.match(val)
+                if not m:
+                    continue
+                tag_def = tags_by_id.get(tag_ref.get("id"))
+                if tag_def is None:
+                    continue
+                yield item, tag_def, m.group(1), list_name
+
+
+def _build_calendar_ics(user: dict, list_filter_id: str | None, cal_name: str, cal_desc: str) -> str:
+    from datetime import date as _date
+    dtstamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Klaar//Klaar Todo//EN",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        _ics_fold(f"X-WR-CALNAME:{_ics_escape(cal_name)}"),
+        _ics_fold(f"X-WR-CALDESC:{_ics_escape(cal_desc)}"),
+    ]
+    for item, tag_def, date_iso, list_name in _iter_user_date_events(user, list_filter_id):
+        ymd = date_iso.replace("-", "")
+        end_ymd = (_date.fromisoformat(date_iso) + timedelta(days=1)).isoformat().replace("-", "")
+        tag_name = tag_def.get("name", "")
+        text = item.get("text", "")
+        summary = f"{text} ({tag_name})" if tag_name else text
+        uid = f"klaar-{item.get('id')}-{tag_def.get('id')}@klaar"
+        lines.extend([
+            "BEGIN:VEVENT",
+            _ics_fold(f"UID:{uid}"),
+            f"DTSTAMP:{dtstamp}",
+            f"DTSTART;VALUE=DATE:{ymd}",
+            f"DTEND;VALUE=DATE:{end_ymd}",
+            _ics_fold(f"SUMMARY:{_ics_escape(summary)}"),
+            _ics_fold(f"DESCRIPTION:{_ics_escape(f'Klaar list: {list_name}')}"),
+            "END:VEVENT",
+        ])
+    lines.append("END:VCALENDAR")
+    return "\r\n".join(lines) + "\r\n"
+
+
+@app.get("/calendar/<token>.ics")
+def calendar_feed_all(token):
+    user = _find_user_by_calendar_token(token)
+    if not user:
+        return "Not found", 404
+    label = user.get("display_name") or user.get("username", "")
+    body = _build_calendar_ics(
+        user,
+        None,
+        cal_name=f"Klaar ({label})" if label else "Klaar",
+        cal_desc="All dated Klaar items",
+    )
+    return body, 200, {
+        "Content-Type": "text/calendar; charset=utf-8",
+        "Content-Disposition": 'inline; filename="klaar.ics"',
+        "Cache-Control": "no-cache, private",
+    }
+
+
+@app.get("/calendar/<token>/<list_id>.ics")
+def calendar_feed_list(token, list_id):
+    user = _find_user_by_calendar_token(token)
+    if not user:
+        return "Not found", 404
+    data = _load_list(list_id)
+    if not data or not _can_access(data, user):
+        return "Not found", 404
+    list_name = data.get("name", "List")
+    body = _build_calendar_ics(
+        user,
+        list_id,
+        cal_name=f"Klaar: {list_name}",
+        cal_desc=f"Dated items from {list_name}",
+    )
+    safe_name = re.sub(r"[^a-zA-Z0-9_-]", "_", list_name)[:40] or "list"
+    return body, 200, {
+        "Content-Type": "text/calendar; charset=utf-8",
+        "Content-Disposition": f'inline; filename="klaar-{safe_name}.ics"',
+        "Cache-Control": "no-cache, private",
+    }
+
+
+@app.get("/api/me/calendar-token")
+@_require_auth
+def get_calendar_token():
+    user = _current_user()
+    users = _load_users()
+    u = next((x for x in users if x["id"] == user["id"]), None)
+    if u is None:
+        return jsonify({"error": "user not found"}), 404
+    if not u.get("calendar_token"):
+        u["calendar_token"] = secrets.token_urlsafe(32)
+        _save_users(users)
+    return jsonify({"token": u["calendar_token"]})
+
+
+@app.post("/api/me/calendar-token/regenerate")
+@_require_auth
+def regenerate_calendar_token():
+    user = _current_user()
+    users = _load_users()
+    u = next((x for x in users if x["id"] == user["id"]), None)
+    if u is None:
+        return jsonify({"error": "user not found"}), 404
+    u["calendar_token"] = secrets.token_urlsafe(32)
+    _save_users(users)
+    return jsonify({"token": u["calendar_token"]})
+
+
 @app.post("/api/lists/generate-test")
 @_require_auth
 def generate_test_list():
