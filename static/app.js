@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.12.7";
+const KLAAR_VERSION = "0.12.8";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -257,6 +257,36 @@ function removeTagFromItemData(item, tagId) {
 function setTagValue(item, tagId, value) {
   const t = item.tags.find((t) => t.id === tagId);
   if (t) t.value = value;
+}
+
+// Apply a just-committed tag value to other selected items that share the
+// same tag. Caller is responsible for updating the editing item itself.
+// spreadMode:
+//   null         → no spread (used for blur/abort paths)
+//   "overwrite"  → set value on every selected item that has the tag
+//   "fillBlanks" → only set where the selected item has no existing value
+// Requires the editing item to be in the selection; otherwise editing a
+// stray bubble on an unselected item could silently mutate others.
+function spreadTagValueToSelection(editItemId, tagId, newVal, spreadMode) {
+  if (!spreadMode || newVal == null || selectedIds.size <= 1 || !selectedIds.has(editItemId)) {
+    return;
+  }
+  const fillBlanksOnly = spreadMode === "fillBlanks";
+  const updates = [];
+  for (const selId of selectedIds) {
+    if (selId === editItemId) continue;
+    const selItem = currentItems.find((it) => it.id === selId);
+    if (!selItem || !itemHasTag(selItem, tagId)) continue;
+    if (fillBlanksOnly && itemTagValue(selItem, tagId) != null) continue;
+    setTagValue(selItem, tagId, newVal);
+    updates.push({ id: selId, tags: [...selItem.tags] });
+  }
+  if (updates.length > 0) {
+    api(`/lists/${currentListId}/items`, {
+      method: "PATCH",
+      body: { updates },
+    }).then(() => scheduleSyncFromServer()).catch(() => refreshItems());
+  }
 }
 
 // Format ISO date strings as friendly relative labels
@@ -1309,30 +1339,14 @@ function createTagBubbles(item, displayIdx) {
         inp.size = Math.max(3, inp.value.length + 1);
       });
       let pickerActive = false;
-      let spreadToSelected = false;
+      // null = blur/no spread; "overwrite" = Enter; "fillBlanks" = Shift+Enter
+      let spreadMode = null;
       function commit() {
         if (pickerActive) return;
         editing = false;
         const newVal = inp.value.trim() === "" ? null : inp.value.trim();
         setTagValue(item, tagId, newVal);
-        // Shift+Enter: copy value to selected items that have this tag but no value
-        if (spreadToSelected && newVal != null && selectedIds.size > 1) {
-          const updates = [];
-          for (const selId of selectedIds) {
-            if (selId === item.id) continue;
-            const selItem = currentItems.find(it => it.id === selId);
-            if (!selItem || !itemHasTag(selItem, tagId)) continue;
-            if (itemTagValue(selItem, tagId) != null) continue;
-            setTagValue(selItem, tagId, newVal);
-            updates.push({ id: selId, tags: [...selItem.tags] });
-          }
-          if (updates.length > 0) {
-            api(`/lists/${currentListId}/items`, {
-              method: "PATCH",
-              body: { updates },
-            }).then(() => scheduleSyncFromServer()).catch(() => refreshItems());
-          }
-        }
+        spreadTagValueToSelection(item.id, tagId, newVal, spreadMode);
         renderItems();
         updateItem(item.id, { tags: [...item.tags] });
       }
@@ -1364,6 +1378,9 @@ function createTagBubbles(item, displayIdx) {
           }
           if (document.body.contains(picker)) picker.remove();
           if (andCommit) {
+            // Picking a date is an explicit commit — spread to selection by
+            // default, same as pressing Enter in the text input.
+            spreadMode = "overwrite";
             commit();
           } else {
             inp.focus();
@@ -1379,7 +1396,7 @@ function createTagBubbles(item, displayIdx) {
       }
       inp.addEventListener("blur", commit);
       inp.addEventListener("keydown", (ke) => {
-        if (ke.key === "Enter") { ke.preventDefault(); spreadToSelected = ke.shiftKey; inp.blur(); }
+        if (ke.key === "Enter") { ke.preventDefault(); spreadMode = ke.shiftKey ? "fillBlanks" : "overwrite"; inp.blur(); }
         if (ke.key === "Escape") { inp.value = current ?? ""; inp.blur(); }
         if (ke.ctrlKey && ke.key === "d") {
           ke.preventDefault();
@@ -2851,15 +2868,21 @@ function showContextMenu(e, itemId, hierarchy) {
         valSpan.replaceWith(valInp);
         valInp.focus();
         valInp.select();
+        // null = blur/no spread; "overwrite" = Enter; "fillBlanks" = Shift+Enter
+        let spreadMode = null;
+        let aborted = false;
         function commitVal() {
+          if (aborted) { showContextMenuForCurrentItem(); return; }
           const newVal = valInp.value.trim() === "" ? null : valInp.value.trim();
           setTagValue(item, tagDef.id, newVal);
+          spreadTagValueToSelection(itemId, tagDef.id, newVal, spreadMode);
           updateItem(itemId, { tags: [...item.tags] });
           showContextMenuForCurrentItem();
         }
         valInp.addEventListener("blur", commitVal);
         valInp.addEventListener("keydown", (ke) => {
-          if (ke.key === "Enter") { ke.preventDefault(); valInp.blur(); }
+          if (ke.key === "Enter") { ke.preventDefault(); spreadMode = ke.shiftKey ? "fillBlanks" : "overwrite"; valInp.blur(); }
+          if (ke.key === "Escape") { ke.preventDefault(); aborted = true; valInp.blur(); }
           ke.stopPropagation();
         });
         valInp.addEventListener("click", (ce) => ce.stopPropagation());
@@ -2886,6 +2909,7 @@ function showContextMenu(e, itemId, hierarchy) {
         picker.addEventListener("change", () => {
           if (picker.value) {
             setTagValue(item, tagDef.id, picker.value);
+            spreadTagValueToSelection(itemId, tagDef.id, picker.value, "overwrite");
             updateItem(itemId, { tags: [...item.tags] });
             showContextMenuForCurrentItem();
           }
