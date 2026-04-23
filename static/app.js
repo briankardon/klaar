@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.12.6";
+const KLAAR_VERSION = "0.12.7";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -3698,7 +3698,6 @@ function startDrag(e, itemId, startY, ctrlKey) {
   if (!sourceEl) return;
 
   const rect = sourceEl.getBoundingClientRect();
-  const itemsRect = itemsEl.getBoundingClientRect();
 
   let blockIds;
   let useFullReorder = false;
@@ -3757,7 +3756,6 @@ function startDrag(e, itemId, startY, ctrlKey) {
     offsetX: e.clientX - rect.left,
     offsetY: startY - rect.top,
     itemHeight: ITEM_HEIGHT,
-    itemsRect,
     currentVisibleIdx: getVisibleIndex(itemId),
     sourceListId: currentListId,
     crossListTarget: null,
@@ -3811,7 +3809,7 @@ function clearSidebarHighlight() {
 
 function onDragMove(e) {
   if (!dragState) return;
-  const { ghost, itemId, blockIds, blockSize, offsetY, itemHeight, itemsRect } = dragState;
+  const { ghost, itemId, blockIds, blockSize, offsetY, itemHeight } = dragState;
 
   // Move ghost to follow mouse
   ghost.style.left = (e.clientX - dragState.offsetX) + "px";
@@ -3841,9 +3839,10 @@ function onDragMove(e) {
   dragState.hoverListId = null;
   dragState.crossListTarget = null;
 
-  // Normal within-list drag logic
-  const container = document.getElementById("items-container");
-  const relY = e.clientY - itemsRect.top + container.scrollTop;
+  // Live rect each move: caching itemsEl's rect at drag start bakes in the
+  // drag-start scrollTop, which is then double-counted when we add scrollTop.
+  const liveItemsRect = itemsEl.getBoundingClientRect();
+  const relY = e.clientY - liveItemsRect.top;
   let targetRow = Math.round(relY / itemHeight);
   targetRow = Math.max(0, Math.min(targetRow, visibleList.length));
 
@@ -3885,7 +3884,6 @@ async function switchDuringDrag(destListId) {
   currentItems.unshift(...dragState.draggedItems);
   dragState.blockSize = dragState.draggedItems.length;
   dragState.currentVisibleIdx = 0;
-  dragState.itemsRect = itemsEl.getBoundingClientRect();
 
   renderItems();
   renderTagPane();
