@@ -116,7 +116,7 @@ document.getElementById("btn-copy-cal-url").addEventListener("click", async () =
 document.getElementById("btn-regen-cal-url").addEventListener("click", async () => {
   const ok = await confirmDialog(
     "Regenerate calendar URL?",
-    "Any calendar app subscribed to the old URL will stop receiving updates. You'll need to re-subscribe with the new URL."
+    "This invalidates the all-lists URL and every per-list URL. Any calendar app subscribed to any old URL will stop receiving updates until you re-subscribe with a new one."
   );
   if (!ok) return;
   const msgEl = document.getElementById("cal-msg");

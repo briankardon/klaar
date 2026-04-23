@@ -406,7 +406,10 @@
       <div id="cal-msg" class="msg hidden"></div>
       <p style="font-size:0.8rem; color:var(--text-muted); margin-top:0.5rem;">
         The URL contains a secret token &mdash; treat it like a password.
-        Regenerating creates a new URL and breaks any existing subscriptions.
+        The same token is used for every Klaar calendar URL, including
+        per-list URLs copied from the sidebar. Regenerating invalidates
+        <em>all</em> of them at once; any subscribed calendar app will
+        stop receiving updates until re-subscribed with the new URL.
         Google Calendar typically refreshes external feeds every 6&ndash;12 hours.
       </p>
     </div>
