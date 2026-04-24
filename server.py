@@ -1659,6 +1659,12 @@ def _build_calendar_ics(user: dict, list_filter_id: str | None, cal_name: str, c
             for c in ev["children"]:
                 indent = "  " * c["relative_depth"]
                 desc_parts.append(f"{indent}- {c['text']}")
+        # Repeat the deep link in the description body. The separate URL
+        # property above is ignored by Google Calendar's web UI; putting the
+        # URL in the description text lets Google auto-link it so the event
+        # actually becomes clickable from Google Calendar.
+        desc_parts.append("")
+        desc_parts.append(f"Open in Klaar: {deep_link}")
         description = "\n".join(desc_parts)
 
         lines.extend([
