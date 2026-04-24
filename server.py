@@ -1538,10 +1538,17 @@ def _find_user_by_calendar_token(token: str) -> dict | None:
     return None
 
 
-def _iter_user_date_events(user: dict, list_filter_id: str | None):
-    """Yield (item, tag_def, date_iso, list_name, list_id) for each not-done,
-    date-tagged item in lists the user can read. If list_filter_id is set,
-    only that list."""
+def _collect_calendar_events(user: dict, list_filter_id: str | None) -> list[dict]:
+    """Collect top-level calendar events. If a descendant shares the same
+    (tag, date) pair as any ancestor, it is collapsed into the top-most such
+    ancestor's event rather than emitted separately — so an aligned hierarchy
+    becomes one calendar event with the children listed in the description.
+
+    Returns a list of dicts with keys:
+        list_name, list_id, item_id, item_text, tag_def, date_iso, children
+    where children is a list of {text, relative_depth} for collapsed descendants.
+    """
+    events: list[dict] = []
     for path in sorted(DATA_DIR.glob("*.json")):
         if path.name == "users.json":
             continue
@@ -1556,23 +1563,73 @@ def _iter_user_date_events(user: dict, list_filter_id: str | None):
             continue
         if list_filter_id is not None and data.get("id") != list_filter_id:
             continue
+
         tags_by_id = {t["id"]: t for t in data.get("tags", [])}
         list_name = data.get("name", "")
         list_id = data.get("id", "")
-        for item in data.get("items", []):
-            if item.get("done"):
+        items = data.get("items", [])
+
+        # Pre-compute the date-valued (tag_id, date) pairs per item.
+        # Done items contribute nothing, so they can't "swallow" descendants.
+        item_pairs: list[set[tuple[str, str]]] = []
+        for item in items:
+            pairs: set[tuple[str, str]] = set()
+            if not item.get("done"):
+                for tag_ref in item.get("tags", []):
+                    val = tag_ref.get("value")
+                    if not isinstance(val, str):
+                        continue
+                    m = _ISO_DATE_PREFIX.match(val)
+                    if not m:
+                        continue
+                    tid = tag_ref.get("id")
+                    if tid in tags_by_id:
+                        pairs.add((tid, m.group(1)))
+            item_pairs.append(pairs)
+
+        # (top_idx, tag_id, date_iso) -> event dict
+        key_to_event: dict[tuple[int, str, str], dict] = {}
+
+        for idx, item in enumerate(items):
+            if not item_pairs[idx]:
                 continue
-            for tag_ref in item.get("tags", []):
-                val = tag_ref.get("value")
-                if not isinstance(val, str):
-                    continue
-                m = _ISO_DATE_PREFIX.match(val)
-                if not m:
-                    continue
-                tag_def = tags_by_id.get(tag_ref.get("id"))
-                if tag_def is None:
-                    continue
-                yield item, tag_def, m.group(1), list_name, list_id
+            depth = item.get("depth", 0)
+            for tag_id, date_iso in item_pairs[idx]:
+                # Walk ancestor chain (backward, strictly-decreasing depth);
+                # top_idx ends up at the top-most ancestor with the same pair,
+                # or stays at idx if no ancestor matches.
+                top_idx = idx
+                cur_depth = depth
+                for j in range(idx - 1, -1, -1):
+                    if cur_depth == 0:
+                        break
+                    jd = items[j].get("depth", 0)
+                    if jd < cur_depth:
+                        if (tag_id, date_iso) in item_pairs[j]:
+                            top_idx = j
+                        cur_depth = jd
+
+                if top_idx == idx:
+                    ev = {
+                        "list_name": list_name,
+                        "list_id": list_id,
+                        "item_id": item.get("id"),
+                        "item_text": item.get("text", ""),
+                        "tag_def": tags_by_id[tag_id],
+                        "date_iso": date_iso,
+                        "children": [],
+                    }
+                    events.append(ev)
+                    key_to_event[(idx, tag_id, date_iso)] = ev
+                else:
+                    ev = key_to_event.get((top_idx, tag_id, date_iso))
+                    if ev is not None:
+                        ev["children"].append({
+                            "text": item.get("text", ""),
+                            "relative_depth": depth - items[top_idx].get("depth", 0),
+                        })
+
+    return events
 
 
 def _build_calendar_ics(user: dict, list_filter_id: str | None, cal_name: str, cal_desc: str, base_url: str) -> str:
@@ -1587,14 +1644,23 @@ def _build_calendar_ics(user: dict, list_filter_id: str | None, cal_name: str, c
         _ics_fold(f"X-WR-CALNAME:{_ics_escape(cal_name)}"),
         _ics_fold(f"X-WR-CALDESC:{_ics_escape(cal_desc)}"),
     ]
-    for item, tag_def, date_iso, list_name, list_id in _iter_user_date_events(user, list_filter_id):
-        ymd = date_iso.replace("-", "")
-        end_ymd = (_date.fromisoformat(date_iso) + timedelta(days=1)).isoformat().replace("-", "")
-        tag_name = tag_def.get("name", "")
-        text = item.get("text", "")
-        summary = f"{text} ({tag_name})" if tag_name else text
-        uid = f"klaar-{item.get('id')}-{tag_def.get('id')}@klaar"
-        deep_link = f"{base_url}#list={list_id}&item={item.get('id')}"
+    for ev in _collect_calendar_events(user, list_filter_id):
+        ymd = ev["date_iso"].replace("-", "")
+        end_ymd = (_date.fromisoformat(ev["date_iso"]) + timedelta(days=1)).isoformat().replace("-", "")
+        tag_name = ev["tag_def"].get("name", "")
+        summary = f"{ev['item_text']} ({tag_name})" if tag_name else ev["item_text"]
+        uid = f"klaar-{ev['item_id']}-{ev['tag_def'].get('id')}@klaar"
+        deep_link = f"{base_url}#list={ev['list_id']}&item={ev['item_id']}"
+
+        desc_parts = [f"Klaar list: {ev['list_name']}"]
+        if ev["children"]:
+            desc_parts.append("")
+            desc_parts.append("Includes:")
+            for c in ev["children"]:
+                indent = "  " * c["relative_depth"]
+                desc_parts.append(f"{indent}- {c['text']}")
+        description = "\n".join(desc_parts)
+
         lines.extend([
             "BEGIN:VEVENT",
             _ics_fold(f"UID:{uid}"),
@@ -1602,7 +1668,7 @@ def _build_calendar_ics(user: dict, list_filter_id: str | None, cal_name: str, c
             f"DTSTART;VALUE=DATE:{ymd}",
             f"DTEND;VALUE=DATE:{end_ymd}",
             _ics_fold(f"SUMMARY:{_ics_escape(summary)}"),
-            _ics_fold(f"DESCRIPTION:{_ics_escape(f'Klaar list: {list_name}')}"),
+            _ics_fold(f"DESCRIPTION:{_ics_escape(description)}"),
             _ics_fold(f"URL:{deep_link}"),
             "END:VEVENT",
         ])
