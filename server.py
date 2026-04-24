@@ -1539,8 +1539,9 @@ def _find_user_by_calendar_token(token: str) -> dict | None:
 
 
 def _iter_user_date_events(user: dict, list_filter_id: str | None):
-    """Yield (item, tag_def, date_iso, list_name) for each not-done, date-tagged
-    item in lists the user can read. If list_filter_id is set, only that list."""
+    """Yield (item, tag_def, date_iso, list_name, list_id) for each not-done,
+    date-tagged item in lists the user can read. If list_filter_id is set,
+    only that list."""
     for path in sorted(DATA_DIR.glob("*.json")):
         if path.name == "users.json":
             continue
@@ -1557,6 +1558,7 @@ def _iter_user_date_events(user: dict, list_filter_id: str | None):
             continue
         tags_by_id = {t["id"]: t for t in data.get("tags", [])}
         list_name = data.get("name", "")
+        list_id = data.get("id", "")
         for item in data.get("items", []):
             if item.get("done"):
                 continue
@@ -1570,10 +1572,10 @@ def _iter_user_date_events(user: dict, list_filter_id: str | None):
                 tag_def = tags_by_id.get(tag_ref.get("id"))
                 if tag_def is None:
                     continue
-                yield item, tag_def, m.group(1), list_name
+                yield item, tag_def, m.group(1), list_name, list_id
 
 
-def _build_calendar_ics(user: dict, list_filter_id: str | None, cal_name: str, cal_desc: str) -> str:
+def _build_calendar_ics(user: dict, list_filter_id: str | None, cal_name: str, cal_desc: str, base_url: str) -> str:
     from datetime import date as _date
     dtstamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     lines = [
@@ -1585,13 +1587,14 @@ def _build_calendar_ics(user: dict, list_filter_id: str | None, cal_name: str, c
         _ics_fold(f"X-WR-CALNAME:{_ics_escape(cal_name)}"),
         _ics_fold(f"X-WR-CALDESC:{_ics_escape(cal_desc)}"),
     ]
-    for item, tag_def, date_iso, list_name in _iter_user_date_events(user, list_filter_id):
+    for item, tag_def, date_iso, list_name, list_id in _iter_user_date_events(user, list_filter_id):
         ymd = date_iso.replace("-", "")
         end_ymd = (_date.fromisoformat(date_iso) + timedelta(days=1)).isoformat().replace("-", "")
         tag_name = tag_def.get("name", "")
         text = item.get("text", "")
         summary = f"{text} ({tag_name})" if tag_name else text
         uid = f"klaar-{item.get('id')}-{tag_def.get('id')}@klaar"
+        deep_link = f"{base_url}#list={list_id}&item={item.get('id')}"
         lines.extend([
             "BEGIN:VEVENT",
             _ics_fold(f"UID:{uid}"),
@@ -1600,10 +1603,21 @@ def _build_calendar_ics(user: dict, list_filter_id: str | None, cal_name: str, c
             f"DTEND;VALUE=DATE:{end_ymd}",
             _ics_fold(f"SUMMARY:{_ics_escape(summary)}"),
             _ics_fold(f"DESCRIPTION:{_ics_escape(f'Klaar list: {list_name}')}"),
+            _ics_fold(f"URL:{deep_link}"),
             "END:VEVENT",
         ])
     lines.append("END:VCALENDAR")
     return "\r\n".join(lines) + "\r\n"
+
+
+def _ics_base_url() -> str:
+    """Base URL for ICS event deep links. Honors X-Forwarded-Proto so that
+    a reverse proxy terminating HTTPS doesn't bake http:// links into feeds."""
+    proto = request.headers.get("X-Forwarded-Proto", "").strip().lower()
+    host = request.headers.get("X-Forwarded-Host") or request.host
+    if proto in ("http", "https"):
+        return f"{proto}://{host}/"
+    return request.host_url
 
 
 @app.get("/calendar/<token>.ics")
@@ -1617,6 +1631,7 @@ def calendar_feed_all(token):
         None,
         cal_name=f"Klaar ({label})" if label else "Klaar",
         cal_desc="All dated Klaar items",
+        base_url=_ics_base_url(),
     )
     return body, 200, {
         "Content-Type": "text/calendar; charset=utf-8",
@@ -1639,6 +1654,7 @@ def calendar_feed_list(token, list_id):
         list_id,
         cal_name=f"Klaar: {list_name}",
         cal_desc=f"Dated items from {list_name}",
+        base_url=_ics_base_url(),
     )
     safe_name = re.sub(r"[^a-zA-Z0-9_-]", "_", list_name)[:40] or "list"
     return body, 200, {

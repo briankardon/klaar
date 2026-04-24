@@ -561,6 +561,7 @@
 
       <h3>What appears in the calendar</h3>
       <p>Each not-done item with a date-valued tag produces one all-day event per date tag. The event title is <code>&lt;item text&gt; (&lt;tag name&gt;)</code> so items with multiple dated tags (e.g. <code>due</code> and <code>reminder</code>) show which date is which. Done items are excluded. Deleting an item or marking it done in Klaar removes the event on the next sync.</p>
+      <p>Each event also carries a link back to the specific Klaar item &mdash; your calendar app typically renders it in the event detail as a clickable URL. On desktop this opens Klaar and jumps straight to the item (expanding any collapsed ancestors and scrolling into view). On mobile, if Klaar is installed as a home-screen web app, the link may open inside the app; otherwise it opens in a new browser tab.</p>
 
       <h3>Sync latency</h3>
       <p>Google Calendar polls external feeds on its own schedule, typically every 6&ndash;12 hours (sometimes longer) &mdash; this is the one real downside of the iCal approach and Google does not let you shorten it. Apple Calendar and Outlook are more aggressive and let you set the interval (often down to 15 minutes).</p>

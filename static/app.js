@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.13.3";
+const KLAAR_VERSION = "0.13.4";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -4460,11 +4460,12 @@ function buildUpcomingItemRow(entry, listMeta) {
   return row;
 }
 
-async function jumpToItemFromUpcoming(listId, itemId) {
-  closeUpcomingModal();
-  await selectList(listId);
+async function openItemDeepLink(listId, itemId) {
+  if (currentListId !== listId) {
+    await selectList(listId);
+  }
   const idx = currentItems.findIndex((it) => it.id === itemId);
-  if (idx === -1) return;
+  if (idx === -1) return false;
   // Expand any collapsed ancestors so the item is reachable.
   let d = currentItems[idx].depth;
   for (let j = idx - 1; j >= 0 && d > 0; j--) {
@@ -4478,6 +4479,12 @@ async function jumpToItemFromUpcoming(listId, itemId) {
   lastSelectedId = itemId;
   renderItems();
   scrollToItem(itemId);
+  return true;
+}
+
+async function jumpToItemFromUpcoming(listId, itemId) {
+  closeUpcomingModal();
+  await openItemDeepLink(listId, itemId);
 }
 
 document.getElementById("btn-upcoming").addEventListener("click", openUpcomingModal);
@@ -4511,4 +4518,26 @@ if (_isMobile && _dbgEl) {
   _h1.addEventListener("touchend", () => { if (_dbgTimer) { clearTimeout(_dbgTimer); _dbgTimer = null; } });
   _h1.addEventListener("touchmove", () => { if (_dbgTimer) { clearTimeout(_dbgTimer); _dbgTimer = null; } });
 }
-loadCurrentUser().then(() => loadLists());
+
+// Deep link: URLs like /#list=<list_id>&item=<item_id> (emitted in ICS feeds)
+// open the referenced item after login completes. Also fired on hashchange
+// so clicking another calendar event while Klaar is already open just works.
+const _DEEP_LINK_ID = /^[a-f0-9]{1,24}$/;
+function parseDeepLinkHash() {
+  const h = location.hash.replace(/^#/, "");
+  if (!h) return null;
+  const params = new URLSearchParams(h);
+  const listId = params.get("list");
+  const itemId = params.get("item");
+  if (!listId || !itemId) return null;
+  if (!_DEEP_LINK_ID.test(listId) || !_DEEP_LINK_ID.test(itemId)) return null;
+  return { listId, itemId };
+}
+async function maybeHandleDeepLink() {
+  const dl = parseDeepLinkHash();
+  if (!dl) return;
+  await openItemDeepLink(dl.listId, dl.itemId);
+}
+window.addEventListener("hashchange", maybeHandleDeepLink);
+
+loadCurrentUser().then(() => loadLists()).then(maybeHandleDeepLink);

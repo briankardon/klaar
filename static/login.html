@@ -67,7 +67,7 @@
       });
       const data = await res.json();
       if (res.ok) {
-        window.location.href = "/";
+        window.location.href = "/" + (location.hash || "");
       } else {
         errEl.textContent = data.error || "Registration failed";
         errEl.classList.remove("hidden");
@@ -88,7 +88,7 @@
       });
       const data = await res.json();
       if (res.ok) {
-        window.location.href = "/";
+        window.location.href = "/" + (location.hash || "");
       } else {
         errEl.textContent = data.error || "Login failed";
         errEl.classList.remove("hidden");
