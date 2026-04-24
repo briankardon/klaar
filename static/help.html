@@ -215,8 +215,10 @@
         <li><a href="#tags">Tags</a></li>
         <li><a href="#views">Views</a></li>
         <li><a href="#filtering">Filtering</a></li>
+        <li><a href="#upcoming">Upcoming Dated Items</a></li>
         <li><a href="#lists">Lists</a></li>
         <li><a href="#sharing">Sharing and Collaboration</a></li>
+        <li><a href="#calendar">Calendar Subscription</a></li>
         <li><a href="#dark-mode">Dark Mode</a></li>
         <li><a href="#user-account">User Account</a></li>
         <li><a href="#mobile">Mobile</a></li>
@@ -259,6 +261,24 @@
       <p>Each item has a checkbox to mark it as done. Completed items are displayed with strikethrough text.</p>
       <p>Hold <kbd>Ctrl</kbd> and click a checkbox to toggle done status for the item and all its children.</p>
       <p>If multiple items are selected, clicking any selected item's checkbox toggles done status for the entire selection.</p>
+      <p>Hover over a completed item's checkbox on desktop to see when it was marked done.</p>
+
+      <h3>Context menu</h3>
+      <p>Right-click an item (or long-press on mobile) to open its context menu. Options include:</p>
+      <ul>
+        <li><strong>Add above / Add below</strong> &mdash; insert a new item adjacent to the target.</li>
+        <li><strong>Move</strong> / <strong>Move with children</strong> &mdash; on mobile, enter reorder mode to re-position the item (or the item plus its children) without drag-and-drop.</li>
+        <li><strong>Delete</strong> &mdash; remove the item (and if multiple items are selected, the whole selection).</li>
+        <li><strong>Copy to clipboard</strong> &mdash; copy the item (or selection) as indented Markdown-style text.</li>
+        <li><strong>Visit link</strong> &mdash; if the item's text contains a URL, open it in a new tab.</li>
+        <li><strong>Gather matching</strong> &mdash; find sibling items with the same text as this one and merge their children under this item. Useful for consolidating duplicate headings.</li>
+        <li><strong>Indent / Outdent</strong> &mdash; adjust depth (keyboard-less alternative to <kbd>Tab</kbd>).</li>
+        <li><strong>Select to here</strong> &mdash; extend the current selection to include every item between the last-selected one and this one.</li>
+        <li><strong>Tag checklist</strong> at the bottom &mdash; toggle tags on the target and set tag values; see the <a href="#tags">Tags</a> section for details.</li>
+      </ul>
+
+      <h3>Resize the text column (desktop)</h3>
+      <p>A thin ruler above the items area has a draggable marker. Drag it left or right to change the width of the item text column; tags wrap to the next line if the text pushes past the marker. The chosen width is remembered per list.</p>
 
       <h3>Selection</h3>
       <ul>
@@ -362,10 +382,12 @@
       </ul>
 
       <h3>Tag values</h3>
-      <p>Tags can have optional values. Double-click a tag bubble on an item to edit its value. Values can be any text, number, or date.</p>
+      <p>Tags can have optional values. Double-click a tag bubble on an item (or use the value field in the context menu's tag checklist) to edit. Values can be any text, number, or date.</p>
+      <p><strong>Setting a value on multiple items at once:</strong> if several items are selected and you edit a tag value on any one of them, pressing <kbd>Enter</kbd> spreads the new value to every selected item that has the same tag, <em>overwriting</em> any existing values. Press <kbd>Shift+Enter</kbd> instead to fill only the selected items where the tag currently has no value. Clicking away (blur) commits the value to just this one item without spreading. <kbd>Escape</kbd> aborts without saving.</p>
 
       <h3>Date values</h3>
-      <p>If a tag value is a date (YYYY-MM-DD format), it is displayed as a friendly label such as "Today", "Tomorrow", "This Wednesday", or "Jan 15". Hover over the bubble to see the raw date in a tooltip. Press <kbd>Ctrl+D</kbd> while editing a tag value to open a date picker.</p>
+      <p>If a tag value is a date (YYYY-MM-DD format), it is displayed as a friendly label such as "Today", "Tomorrow", "This Wednesday", or "Jan 15". Hover over the bubble to see the raw date in a tooltip.</p>
+      <p>Double-clicking a tag bubble whose value is already a date auto-opens a date picker. You can also press <kbd>Ctrl+D</kbd> while editing a tag value to open the picker manually. Picking a date counts as an explicit commit &mdash; it spreads to all selected items the same way <kbd>Enter</kbd> does.</p>
 
       <h3>Tag colors</h3>
       <p>Click the colored dot next to a tag name in the tag pane to change its color using a color picker.</p>
@@ -397,7 +419,8 @@
         <li>Text filters</li>
         <li>Tag filters (include/exclude, with conditions)</li>
         <li>Completion filter (All / Active / Done)</li>
-        <li>Sort order (tag and direction)</li>
+        <li>Date filter (📅 toggle)</li>
+        <li>Sort order &mdash; either a tag sort (tag + direction) or the virtual date sort</li>
         <li>Hidden tag IDs</li>
       </ul>
 
@@ -444,11 +467,23 @@
         <li><strong>Done</strong> &mdash; show only completed items.</li>
       </ul>
 
+      <h3>Date filter (📅)</h3>
+      <p>The calendar button next to the completion filter toggles a tag-agnostic date filter: only items with at least one date-valued tag are shown, sorted by the item's earliest date (oldest first). If you had a different sort active when you enabled the date filter, that sort is remembered and restored when you disable the filter. Picking a different tag sort while the date filter is on overrides the memory &mdash; your deliberate choice wins.</p>
+
       <h3>Ancestor visibility</h3>
       <p>When filters are active, parent items that do not match the filter but have matching descendants are shown with a muted style, preserving the hierarchy context.</p>
 
       <h3>Selected items</h3>
       <p>Selected items are always visible regardless of filters. This allows you to keep working with selected items even when a filter would normally hide them.</p>
+    </div>
+
+    <!-- Upcoming -->
+    <div class="section" id="upcoming">
+      <h2>Upcoming Dated Items</h2>
+      <p>The calendar button (📅) in the Lists panel header opens an <strong>Upcoming</strong> modal: a cross-list, read-only snapshot of every not-done item that has a date-valued tag, grouped by day.</p>
+      <p>Items are pulled from every list you can access &mdash; your own and shared &mdash; and sorted earliest-date first. Each entry shows the item text, its date tags, and a breadcrumb of its ancestor items and list name so you can tell where it lives.</p>
+      <p>By default the snapshot spans from one week ago to one week ahead. Use the "Next" selector in the header to extend the forward window (up to 3 months). A "Load earlier items" button at the bottom adds any older overdue items.</p>
+      <p>Click an item to jump to it in its list (expanding any collapsed ancestors). The refresh button (↻) re-fetches in case lists changed while the modal was open.</p>
     </div>
 
     <!-- Lists -->
@@ -467,18 +502,20 @@
       <h3>Reordering lists</h3>
       <p>Drag and drop list names in the sidebar to reorder them. The order is saved per user.</p>
 
-      <h3>Importing</h3>
-      <p>Click the import button (up arrow) in the Lists panel to paste text and import it as items. The importer handles:</p>
+      <h3>Import and export (⇅)</h3>
+      <p>The transfer button (up/down arrows) in the Lists panel opens a small popover with both options:</p>
       <ul>
-        <li>Indentation (spaces or tabs) for nesting depth</li>
-        <li>Bullet prefixes (<code>-</code>, <code>*</code>, numbered lists, etc.)</li>
-        <li>Checkboxes (<code>[x]</code> for done, <code>[ ]</code> for active)</li>
-        <li>Markdown strikethrough</li>
+        <li><strong>Import from text</strong> &mdash; paste text to create items. The importer handles indentation (spaces or tabs) for nesting depth, bullet prefixes (<code>-</code>, <code>*</code>, numbered lists), checkboxes (<code>[x]</code> for done, <code>[ ]</code> for active), and Markdown strikethrough. You can import as a new list or add to the current list.</li>
+        <li><strong>Export as Markdown</strong> &mdash; downloads the current list as a Markdown file with indentation, checkboxes, and tag annotations preserved.</li>
       </ul>
-      <p>You can import as a new list or add to the current list.</p>
 
-      <h3>Exporting</h3>
-      <p>Click the export button (down arrow) in the Lists panel to download the current list as a Markdown file. Items are exported with indentation, checkboxes, and tag annotations.</p>
+      <h3>List context menu</h3>
+      <p>Right-click a list (or long-press on mobile) for these actions:</p>
+      <ul>
+        <li><strong>Rename</strong>, <strong>Delete</strong> (owner only), <strong>Leave list</strong> (non-owners).</li>
+        <li><strong>Sharing</strong> &mdash; opens the sharing dialog (see <a href="#sharing">Sharing</a>).</li>
+        <li><strong>Copy calendar URL</strong> &mdash; copies a list-scoped ICS subscription URL to your clipboard (see <a href="#calendar">Calendar Subscription</a>).</li>
+      </ul>
     </div>
 
     <!-- Sharing & Collaboration -->
@@ -510,6 +547,32 @@
       <p>Changes made by other users are synced automatically via polling. The poll interval starts at 5 seconds and gradually slows to 30 seconds when no changes are detected. It speeds up again when activity is detected. Polling pauses when the browser tab is hidden and resumes immediately when you return.</p>
     </div>
 
+    <!-- Calendar Subscription -->
+    <div class="section" id="calendar">
+      <h2>Calendar Subscription</h2>
+      <p>Klaar exposes your dated items as iCalendar (<code>.ics</code>) feeds. Point any calendar app (Google Calendar, Apple Calendar, Outlook&hellip;) at a feed URL and your Klaar items show up as all-day events alongside your other calendars. Feeds are read-only &mdash; edits in the calendar don't flow back to Klaar.</p>
+
+      <h3>Two URL flavors</h3>
+      <ul>
+        <li><strong>All lists</strong> &mdash; shown on the <a href="/user">User settings page</a> under "Calendar Subscription". Includes every dated item you can see, across all your own and shared lists.</li>
+        <li><strong>Single list</strong> &mdash; right-click any list in the sidebar and choose "Copy calendar URL" to put a list-scoped URL on your clipboard.</li>
+      </ul>
+      <p>Both URL forms share a single secret token per user. Regenerating the token (from the User page) invalidates <em>every</em> subscription at once &mdash; the all-lists URL and every per-list URL &mdash; so only regenerate if you need to revoke access.</p>
+
+      <h3>What appears in the calendar</h3>
+      <p>Each not-done item with a date-valued tag produces one all-day event per date tag. The event title is <code>&lt;item text&gt; (&lt;tag name&gt;)</code> so items with multiple dated tags (e.g. <code>due</code> and <code>reminder</code>) show which date is which. Done items are excluded. Deleting an item or marking it done in Klaar removes the event on the next sync.</p>
+
+      <h3>Sync latency</h3>
+      <p>Google Calendar polls external feeds on its own schedule, typically every 6&ndash;12 hours (sometimes longer) &mdash; this is the one real downside of the iCal approach and Google does not let you shorten it. Apple Calendar and Outlook are more aggressive and let you set the interval (often down to 15 minutes).</p>
+
+      <h3>Subscribing</h3>
+      <ul>
+        <li><strong>Google Calendar:</strong> Left sidebar &rarr; "Other calendars" &rarr; "+" &rarr; "From URL" &rarr; paste.</li>
+        <li><strong>Apple Calendar:</strong> File &rarr; New Calendar Subscription &rarr; paste.</li>
+        <li><strong>Outlook:</strong> Add calendar &rarr; Subscribe from web &rarr; paste.</li>
+      </ul>
+    </div>
+
     <!-- Dark Mode -->
     <div class="section" id="dark-mode">
       <h2>Dark Mode</h2>
@@ -525,6 +588,7 @@
         <li><strong>Display name</strong> &mdash; change how your name appears to others.</li>
         <li><strong>Password</strong> &mdash; change your password (requires current password).</li>
         <li><strong>Contacts</strong> &mdash; send contact requests, accept or decline incoming requests, and manage your contact list.</li>
+        <li><strong>Calendar subscription</strong> &mdash; copy your all-lists ICS URL or regenerate the token. See <a href="#calendar">Calendar Subscription</a>.</li>
         <li><strong>Delete account</strong> &mdash; permanently delete your account and all your owned lists.</li>
       </ul>
       <p>Admin users also see a user administration section where they can create, edit, and delete other users.</p>
@@ -535,6 +599,9 @@
       <h2>Mobile</h2>
       <p>Klaar adapts to smaller screens with a mobile-optimized layout.</p>
 
+      <h3>Install as a web app (recommended)</h3>
+      <p>Klaar works noticeably better on phones when installed to the home screen as a web app &mdash; the browser address bar and chrome go away, giving more vertical space and a more native feel. On iOS, open Klaar in Safari, tap the Share button, and choose "Add to Home Screen". On Android, open Klaar in Chrome, tap the menu (⋮), and choose "Add to Home screen" (or "Install app").</p>
+
       <h3>Panels</h3>
       <p>On mobile, the Lists and Tags panels slide in as overlays from the left and right edges. Tap outside a panel or use the toggle buttons to close them.</p>
 
@@ -543,16 +610,14 @@
         <li><strong>Tap</strong> an item's text to open an inline editor.</li>
         <li><strong>Long-press</strong> (500ms) an item to open the context menu as a bottom sheet.</li>
         <li><strong>Long-press</strong> a list name in the sidebar to open the list context menu.</li>
+        <li><strong>Swipe right / left</strong> on a selected item to indent / outdent it (replaces <kbd>Tab</kbd>/<kbd>Shift+Tab</kbd> on touch). If multiple items are selected, all of them move. The gesture has to be clearly horizontal to engage, so you won't accidentally trigger it while scrolling.</li>
       </ul>
 
       <h3>Context menu</h3>
-      <p>On mobile, the context menu appears as a bottom sheet rather than a floating menu. It provides access to move, delete, copy, visit link, gather matching items, and tag management.</p>
+      <p>On mobile, the context menu appears as a bottom sheet rather than a floating menu. See the <a href="#items">Items &rarr; Context menu</a> list for what's in it.</p>
 
       <h3>Reorder mode</h3>
       <p>Since drag and drop is not available on mobile, use the context menu's "Move" or "Move with children" option to enter reorder mode. A cursor line appears at the center of the screen. Scroll the list to position the cursor where you want the item, then tap "Place here" to confirm or "Cancel" to abort.</p>
-
-      <h3>Gather matching</h3>
-      <p>The "Gather matching" option in the context menu finds all sibling items with the same text as the selected item and merges their children under the selected item. This is useful for consolidating duplicate headings.</p>
 
       <h3>Debug panel</h3>
       <p>Long-press the "Klaar" title in the header to toggle an on-screen debug log, useful for troubleshooting mobile-specific issues.</p>
