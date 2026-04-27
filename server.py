@@ -210,6 +210,10 @@ def _ensure_owner(data: dict) -> None:
         data["shared_with"] = []
     if "views" not in data:
         data["views"] = []
+    if "api_token" not in data:
+        data["api_token"] = None
+        data["api_token_created_at"] = None
+        data["api_token_last_used_at"] = None
 
 
 def _ensure_contacts(user: dict) -> None:
@@ -315,6 +319,81 @@ def _can_write(data: dict, user: dict) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# List-scoped API token auth
+# ---------------------------------------------------------------------------
+
+def _bearer_token() -> str | None:
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        return auth[7:].strip() or None
+    tok = request.args.get("token", "").strip()
+    return tok or None
+
+
+def _check_list_token(data: dict) -> bool:
+    """If the request carries a valid list API token for this list, mark it
+    used (in-memory; caller persists) and return True."""
+    expected = data.get("api_token")
+    if not expected:
+        return False
+    presented = _bearer_token()
+    if not presented:
+        return False
+    if not secrets.compare_digest(expected, presented):
+        return False
+    data["api_token_last_used_at"] = _now()
+    return True
+
+
+def _authorize_list_write(list_id: str):
+    """Authorize a write operation on a list. Accepts session+edit permission
+    or a matching list API token. Returns (data, snapshot, error_response)."""
+    data, snap = _load_and_snapshot(list_id)
+    if data is None:
+        return None, None, (jsonify({"error": "list not found"}), 404)
+    if _check_list_token(data):
+        return data, snap, None
+    user = _current_user()
+    if not user:
+        return None, None, (jsonify({"error": "unauthorized"}), 401)
+    if not _can_write(data, user):
+        return None, None, (jsonify({"error": "forbidden"}), 403)
+    return data, snap, None
+
+
+def _list_for_response(data: dict) -> dict:
+    """Strip the api_token (and timestamps) before returning list data to a
+    client — the token is fetched via its own owner-only endpoint."""
+    out = dict(data)
+    out.pop("api_token", None)
+    out.pop("api_token_created_at", None)
+    out.pop("api_token_last_used_at", None)
+    return out
+
+
+def _authorize_list_read(list_id: str):
+    """Authorize a read operation on a list. Accepts session+access or a
+    matching list API token. Returns (data, error_response).
+
+    Note: token "last_used" is only persisted on writes — a read-only
+    endpoint will not bump it, both to avoid a disk write per poll and
+    because "last write" is the more useful staleness signal."""
+    data = _load_list(list_id)
+    if data is None:
+        return None, (jsonify({"error": "not found"}), 404)
+    expected = data.get("api_token")
+    presented = _bearer_token()
+    if expected and presented and secrets.compare_digest(expected, presented):
+        return data, None
+    user = _current_user()
+    if not user:
+        return None, (jsonify({"error": "unauthorized"}), 401)
+    if not _can_access(data, user):
+        return None, (jsonify({"error": "not found"}), 404)
+    return data, None
+
+
+# ---------------------------------------------------------------------------
 # Auth pages & endpoints
 # ---------------------------------------------------------------------------
 
@@ -343,6 +422,18 @@ def user_page():
 @app.route("/help")
 def help_page():
     return send_from_directory("static", "help.html")
+
+
+@app.route("/api/docs")
+def api_docs():
+    """Serve the public API reference as plain markdown.
+
+    Public (no auth) — it's reference material, not data. Intended audience
+    is anyone holding a list API token (typically an AI assistant) who needs
+    to learn the endpoint shapes without reading the source."""
+    path = Path(app.static_folder) / "api-docs.md"
+    body = path.read_text(encoding="utf-8")
+    return body, 200, {"Content-Type": "text/markdown; charset=utf-8"}
 
 
 @app.post("/api/setup")
@@ -831,30 +922,22 @@ def create_list():
         "items": [],
     }
     _save_list(data)
-    return jsonify(data), 201
+    return jsonify(_list_for_response(data)), 201
 
 
 @app.get("/api/lists/<list_id>")
-@_require_auth
 def get_list(list_id: str):
-    data = _load_list(list_id)
-    if data is None:
-        return jsonify({"error": "not found"}), 404
-    user = _current_user()
-    if not _can_access(data, user):
-        return jsonify({"error": "not found"}), 404
-    return jsonify(data)
+    data, err = _authorize_list_read(list_id)
+    if err:
+        return err
+    return jsonify(_list_for_response(data))
 
 
 @app.get("/api/lists/<list_id>/version")
-@_require_auth
 def get_list_version(list_id: str):
-    data = _load_list(list_id)
-    if data is None:
-        return jsonify({"error": "not found"}), 404
-    user = _current_user()
-    if not _can_access(data, user):
-        return jsonify({"error": "not found"}), 404
+    data, err = _authorize_list_read(list_id)
+    if err:
+        return err
     return jsonify({"version": data.get("version", 0)})
 
 
@@ -877,7 +960,7 @@ def update_list(list_id: str):
     if "active_view" in body:
         data["active_view"] = body["active_view"]
     _save_list(data)
-    return jsonify(data)
+    return jsonify(_list_for_response(data))
 
 
 @app.get("/api/lists/<list_id>/sharing")
@@ -946,14 +1029,10 @@ def delete_list(list_id: str):
 # ---------------------------------------------------------------------------
 
 @app.post("/api/lists/<list_id>/items")
-@_require_auth
 def add_item(list_id: str):
-    data, snap = _load_and_snapshot(list_id)
-    if data is None:
-        return jsonify({"error": "list not found"}), 404
-    user = _current_user()
-    if not _can_write(data, user):
-        return jsonify({"error": "forbidden"}), 403
+    data, snap, err = _authorize_list_write(list_id)
+    if err:
+        return err
     body = request.get_json(force=True)
     text = str(body.get("text", "")).strip()[:1000]
     depth = max(0, min(MAX_DEPTH, int(body.get("depth", 0))))
@@ -981,15 +1060,20 @@ def add_item(list_id: str):
 
 
 @app.patch("/api/lists/<list_id>/items/<item_id>")
-@_require_auth
 def update_item(list_id: str, item_id: str):
     data, snap = _load_and_snapshot(list_id)
     if data is None:
         return jsonify({"error": "list not found"}), 404
-    user = _current_user()
-    perm = _get_permission(data, user)
-    if perm == "none" or perm == "view":
-        return jsonify({"error": "forbidden"}), 403
+    token_ok = _check_list_token(data)
+    if token_ok:
+        perm = "edit"
+    else:
+        user = _current_user()
+        if not user:
+            return jsonify({"error": "unauthorized"}), 401
+        perm = _get_permission(data, user)
+        if perm == "none" or perm == "view":
+            return jsonify({"error": "forbidden"}), 403
     item = _find_item(data["items"], item_id)
     if item is None:
         return jsonify({"error": "item not found"}), 404
@@ -1004,15 +1088,20 @@ def update_item(list_id: str, item_id: str):
 
 
 @app.patch("/api/lists/<list_id>/items")
-@_require_auth
 def bulk_update_items(list_id: str):
     data, snap = _load_and_snapshot(list_id)
     if data is None:
         return jsonify({"error": "list not found"}), 404
-    user = _current_user()
-    perm = _get_permission(data, user)
-    if perm == "none" or perm == "view":
-        return jsonify({"error": "forbidden"}), 403
+    token_ok = _check_list_token(data)
+    if token_ok:
+        perm = "edit"
+    else:
+        user = _current_user()
+        if not user:
+            return jsonify({"error": "unauthorized"}), 401
+        perm = _get_permission(data, user)
+        if perm == "none" or perm == "view":
+            return jsonify({"error": "forbidden"}), 403
     body = request.get_json(force=True)
     updates = body.get("updates", [])
     for upd in updates:
@@ -1022,18 +1111,14 @@ def bulk_update_items(list_id: str):
         if item:
             _apply_item_fields(item, upd)
     _save_with_undo(data, snap)
-    return jsonify(data)
+    return jsonify(_list_for_response(data))
 
 
 @app.delete("/api/lists/<list_id>/items/<item_id>")
-@_require_auth
 def delete_item(list_id: str, item_id: str):
-    data, snap = _load_and_snapshot(list_id)
-    if data is None:
-        return jsonify({"error": "list not found"}), 404
-    user = _current_user()
-    if not _can_write(data, user):
-        return jsonify({"error": "forbidden"}), 403
+    data, snap, err = _authorize_list_write(list_id)
+    if err:
+        return err
     before = len(data["items"])
     data["items"] = [it for it in data["items"] if it["id"] != item_id]
     if len(data["items"]) == before:
@@ -1043,20 +1128,16 @@ def delete_item(list_id: str, item_id: str):
 
 
 @app.post("/api/lists/<list_id>/items/bulk-delete")
-@_require_auth
 def bulk_delete_items(list_id: str):
     """Delete multiple items at once. Body: {item_ids: [...]}."""
-    data, snap = _load_and_snapshot(list_id)
-    if data is None:
-        return jsonify({"error": "list not found"}), 404
-    user = _current_user()
-    if not _can_write(data, user):
-        return jsonify({"error": "forbidden"}), 403
+    data, snap, err = _authorize_list_write(list_id)
+    if err:
+        return err
     body = request.get_json(force=True)
     ids = set(body.get("item_ids", []))
     data["items"] = [it for it in data["items"] if it["id"] not in ids]
     _save_with_undo(data, snap)
-    return jsonify(data)
+    return jsonify(_list_for_response(data))
 
 
 @app.post("/api/lists/<list_id>/items/move-from")
@@ -1092,18 +1173,14 @@ def move_items(list_id: str):
 
     _save_with_undo(src, src_snap)
     _save_with_undo(dest, dest_snap)
-    return jsonify(dest)
+    return jsonify(_list_for_response(dest))
 
 
 @app.post("/api/lists/<list_id>/items/reorder")
-@_require_auth
 def reorder_items(list_id: str):
-    data, snap = _load_and_snapshot(list_id)
-    if data is None:
-        return jsonify({"error": "list not found"}), 404
-    user = _current_user()
-    if not _can_write(data, user):
-        return jsonify({"error": "forbidden"}), 403
+    data, snap, err = _authorize_list_write(list_id)
+    if err:
+        return err
     body = request.get_json(force=True)
     items = data["items"]
 
@@ -1126,7 +1203,7 @@ def reorder_items(list_id: str):
             items.insert(target_index + i, it)
 
     _save_with_undo(data, snap)
-    return jsonify(data)
+    return jsonify(_list_for_response(data))
 
 
 # ---------------------------------------------------------------------------
@@ -1191,7 +1268,7 @@ def reorder_tags(list_id: str):
     by_id = {t["id"]: t for t in data["tags"]}
     data["tags"] = [by_id[tid] for tid in order if tid in by_id]
     _save_with_undo(data, snap)
-    return jsonify(data)
+    return jsonify(_list_for_response(data))
 
 
 @app.delete("/api/lists/<list_id>/tags/<tag_id>")
@@ -1231,7 +1308,7 @@ def undo(list_id: str):
     data["items"] = prev["items"]
     data["tags"] = prev["tags"]
     _save_list(data)
-    return jsonify(data)
+    return jsonify(_list_for_response(data))
 
 
 @app.post("/api/lists/<list_id>/redo")
@@ -1251,7 +1328,7 @@ def redo(list_id: str):
     data["items"] = nxt["items"]
     data["tags"] = nxt["tags"]
     _save_list(data)
-    return jsonify(data)
+    return jsonify(_list_for_response(data))
 
 
 # ---------------------------------------------------------------------------
@@ -1259,17 +1336,13 @@ def redo(list_id: str):
 # ---------------------------------------------------------------------------
 
 @app.post("/api/lists/<list_id>/items/gather")
-@_require_auth
 def gather_items(list_id: str):
     """Gather items with matching names at the same depth under the target.
     Body: {item_id}. Merges children of duplicates into the target item.
     """
-    data, snap = _load_and_snapshot(list_id)
-    if data is None:
-        return jsonify({"error": "list not found"}), 404
-    user = _current_user()
-    if not _can_write(data, user):
-        return jsonify({"error": "forbidden"}), 403
+    data, snap, err = _authorize_list_write(list_id)
+    if err:
+        return err
     body = request.get_json(force=True)
     target_id = body.get("item_id")
     items = data["items"]
@@ -1324,7 +1397,7 @@ def gather_items(list_id: str):
         indices_to_remove.add(i)
 
     if not indices_to_remove:
-        return jsonify(data)
+        return jsonify(_list_for_response(data))
 
     # Sort gathered children by original position
     children_to_gather.sort(key=lambda x: x[0])
@@ -1345,7 +1418,7 @@ def gather_items(list_id: str):
 
     data["items"] = new_items
     _save_with_undo(data, snap)
-    return jsonify(data)
+    return jsonify(_list_for_response(data))
 
 
 # ---------------------------------------------------------------------------
@@ -1353,17 +1426,18 @@ def gather_items(list_id: str):
 # ---------------------------------------------------------------------------
 
 @app.post("/api/lists/<list_id>/items/bulk-add")
-@_require_auth
 def bulk_add_items(list_id: str):
-    """Add multiple items at once. Body: {items: [{text, depth?, done?}]}."""
-    data, snap = _load_and_snapshot(list_id)
-    if data is None:
-        return jsonify({"error": "list not found"}), 404
-    user = _current_user()
-    if not _can_write(data, user):
-        return jsonify({"error": "forbidden"}), 403
+    """Add multiple items at once. Body: {items: [{text, depth?, done?, tags?}]}.
+
+    `tags` (optional) is a list of {id, value?} objects; tag IDs must exist in
+    the list's tag definitions. Items are appended in order — hierarchy is
+    expressed via the `depth` attribute combined with relative position."""
+    data, snap, err = _authorize_list_write(list_id)
+    if err:
+        return err
     body = request.get_json(force=True)
     new_items = body.get("items", [])
+    valid_tag_ids = {t["id"] for t in data.get("tags", [])}
     for ni in new_items:
         text = str(ni.get("text", "")).strip()[:1000]
         depth = max(0, min(MAX_DEPTH, int(ni.get("depth", 0))))
@@ -1371,9 +1445,15 @@ def bulk_add_items(list_id: str):
         if ni.get("done"):
             item["done"] = True
             item["completed"] = _now()
+        if isinstance(ni.get("tags"), list):
+            cleaned = []
+            for t in ni["tags"]:
+                if isinstance(t, dict) and t.get("id") in valid_tag_ids:
+                    cleaned.append({"id": t["id"], "value": t.get("value")})
+            item["tags"] = cleaned
         data["items"].append(item)
     _save_with_undo(data, snap)
-    return jsonify(data), 201
+    return jsonify(_list_for_response(data)), 201
 
 
 _ISO_DATE_PREFIX = re.compile(r"^(\d{4}-\d{2}-\d{2})")
@@ -1761,6 +1841,94 @@ def regenerate_calendar_token():
     u["calendar_token"] = secrets.token_urlsafe(32)
     _save_users(users)
     return jsonify({"token": u["calendar_token"]})
+
+
+# ---------------------------------------------------------------------------
+# List API tokens (per-list, for granting AI / external write access)
+# ---------------------------------------------------------------------------
+
+def _api_token_info(data: dict) -> dict:
+    return {
+        "list_id": data["id"],
+        "list_name": data.get("name", ""),
+        "token": data.get("api_token"),
+        "created_at": data.get("api_token_created_at"),
+        "last_used_at": data.get("api_token_last_used_at"),
+    }
+
+
+@app.get("/api/lists/<list_id>/api-token")
+@_require_auth
+def get_list_api_token(list_id: str):
+    """Owner-only: fetch the current API token for a list (or null)."""
+    data = _load_list(list_id)
+    if data is None:
+        return jsonify({"error": "not found"}), 404
+    user = _current_user()
+    if not _can_write(data, user):
+        return jsonify({"error": "forbidden"}), 403
+    return jsonify(_api_token_info(data))
+
+
+@app.post("/api/lists/<list_id>/api-token")
+@_require_auth
+def create_list_api_token(list_id: str):
+    """Owner-only: create or rotate the API token for a list."""
+    data = _load_list(list_id)
+    if data is None:
+        return jsonify({"error": "not found"}), 404
+    user = _current_user()
+    if not _can_write(data, user):
+        return jsonify({"error": "forbidden"}), 403
+    data["api_token"] = secrets.token_urlsafe(32)
+    data["api_token_created_at"] = _now()
+    data["api_token_last_used_at"] = None
+    _save_list(data)
+    return jsonify(_api_token_info(data))
+
+
+@app.delete("/api/lists/<list_id>/api-token")
+@_require_auth
+def revoke_list_api_token(list_id: str):
+    """Owner-only: clear the API token for a list."""
+    data = _load_list(list_id)
+    if data is None:
+        return jsonify({"error": "not found"}), 404
+    user = _current_user()
+    if not _can_write(data, user):
+        return jsonify({"error": "forbidden"}), 403
+    data["api_token"] = None
+    data["api_token_created_at"] = None
+    data["api_token_last_used_at"] = None
+    _save_list(data)
+    return "", 204
+
+
+@app.get("/api/me/api-tokens")
+@_require_auth
+def list_my_api_tokens():
+    """Return all lists the current user can write to that have an active
+    API token, plus created/last-used timestamps. Used by the user page
+    to surface zombie tokens for review."""
+    user = _current_user()
+    out = []
+    for path in sorted(DATA_DIR.glob("*.json")):
+        if path.name == "users.json":
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            _ensure_owner(data)
+        except (json.JSONDecodeError, KeyError, OSError):
+            continue
+        if not data.get("api_token"):
+            continue
+        if not _can_write(data, user):
+            continue
+        info = _api_token_info(data)
+        info.pop("token", None)  # don't leak token value via the list endpoint
+        out.append(info)
+    return jsonify({"tokens": out})
 
 
 @app.post("/api/lists/generate-test")

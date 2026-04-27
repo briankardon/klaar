@@ -414,6 +414,32 @@
       </p>
     </div>
 
+    <!-- API tokens section -->
+    <div class="section" id="api-tokens-section">
+      <h2>List API Tokens</h2>
+      <p style="font-size:0.9rem; color:var(--text-secondary); margin-bottom:0.6rem;">
+        Per-list API tokens grant write access to a single list (used for letting an AI
+        assistant edit a list on your behalf). Generate or rotate tokens from the
+        <em>"API access&hellip;"</em> item on a list's right-click menu.
+        <a href="/api/docs" target="_blank" rel="noopener">API docs &rarr;</a>
+      </p>
+      <table class="user-table" id="api-tokens-table">
+        <thead>
+          <tr>
+            <th>List</th>
+            <th>Created</th>
+            <th>Last used</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="api-tokens-list"></tbody>
+      </table>
+      <div id="api-tokens-empty" class="hidden" style="font-size:0.85rem; color:var(--text-muted);">
+        No active API tokens. Tokens you generate will appear here.
+      </div>
+      <div id="api-tokens-msg" class="msg hidden"></div>
+    </div>
+
     <!-- Delete account section -->
     <div class="section">
       <h2>Delete Account</h2>

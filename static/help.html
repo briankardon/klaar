@@ -219,6 +219,7 @@
         <li><a href="#lists">Lists</a></li>
         <li><a href="#sharing">Sharing and Collaboration</a></li>
         <li><a href="#calendar">Calendar Subscription</a></li>
+        <li><a href="#api-access">API Access</a></li>
         <li><a href="#dark-mode">Dark Mode</a></li>
         <li><a href="#user-account">User Account</a></li>
         <li><a href="#mobile">Mobile</a></li>
@@ -575,6 +576,42 @@
       </ul>
     </div>
 
+    <!-- API Access -->
+    <div class="section" id="api-access">
+      <h2>API Access</h2>
+      <p>Each list can have its own <strong>API token</strong> &mdash; a per-list secret that lets an external tool (most usefully an AI assistant like Claude) read and edit the items in that one list, without giving the tool access to your account or any other list.</p>
+
+      <h3>When to use it</h3>
+      <p>The driving use case: you've worked out a plan or to-do structure with a chatbot, and rather than copying it line-by-line into Klaar, you want the chatbot to write the items into your list directly. Generate a token, paste it into the chat with a brief instruction, and it can do the work for you.</p>
+
+      <h3>Generating a token</h3>
+      <ul>
+        <li>Right-click the list in the sidebar (long-press on mobile) and choose <strong>"API access&hellip;"</strong>.</li>
+        <li>If the list has no token yet, click <strong>Generate token</strong>. The endpoint URL and token will appear.</li>
+        <li>Use the <strong>Copy share message</strong> button to put a ready-to-paste blurb on your clipboard &mdash; it includes the endpoint, the token, the auth header to use, and a link to the API reference. Drop it into the chat and the assistant has everything it needs.</li>
+        <li>Alternatively, use <strong>Copy URL</strong> and <strong>Copy token</strong> separately if you'd rather assemble the message yourself.</li>
+      </ul>
+
+      <h3>What the token can and can't do</h3>
+      <p>The token grants <strong>full edit access on the one list it belongs to</strong>: read items and tags, add/edit/delete/reorder items, including bulk operations. It does <em>not</em> grant access to:</p>
+      <ul>
+        <li>Other lists you own or are shared on.</li>
+        <li>Your account, password, contacts, or settings.</li>
+        <li>List metadata changes (rename, delete, sharing, tag definitions).</li>
+      </ul>
+      <p>If the token is leaked, the worst case is unwanted edits to that one list &mdash; recoverable via undo and by revoking the token.</p>
+
+      <h3>Rotating and revoking</h3>
+      <ul>
+        <li><strong>Regenerate</strong> &mdash; from the same "API access&hellip;" dialog, issues a new token. The old token stops working immediately.</li>
+        <li><strong>Revoke</strong> &mdash; clears the token entirely; the list goes back to having no API access until you generate a new one.</li>
+        <li>The <a href="/user">User settings page</a> has a <strong>List API Tokens</strong> section listing every list with an active token, with creation and last-used timestamps and a per-row revoke button. Useful for spotting tokens you forgot about.</li>
+      </ul>
+
+      <h3>API reference</h3>
+      <p>The <a href="/api/docs" target="_blank" rel="noopener">API reference</a> documents endpoint shapes (item schema, depth-based hierarchy, bulk operations). The "Copy share message" button gives the AI assistant a link to it directly &mdash; you don't need to read it yourself unless you want to script against the API by hand.</p>
+    </div>
+
     <!-- Dark Mode -->
     <div class="section" id="dark-mode">
       <h2>Dark Mode</h2>
@@ -591,6 +628,7 @@
         <li><strong>Password</strong> &mdash; change your password (requires current password).</li>
         <li><strong>Contacts</strong> &mdash; send contact requests, accept or decline incoming requests, and manage your contact list.</li>
         <li><strong>Calendar subscription</strong> &mdash; copy your all-lists ICS URL or regenerate the token. See <a href="#calendar">Calendar Subscription</a>.</li>
+        <li><strong>List API tokens</strong> &mdash; review which lists have active API tokens and revoke any you no longer need. See <a href="#api-access">API Access</a>.</li>
         <li><strong>Delete account</strong> &mdash; permanently delete your account and all your owned lists.</li>
       </ul>
       <p>Admin users also see a user administration section where they can create, edit, and delete other users.</p>

@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.13.6";
+const KLAAR_VERSION = "0.14.0";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -3391,6 +3391,7 @@ function showListContextMenu(e, listId, listName, ownerId) {
   const isOwner = !ownerId || ownerId === currentUserId;
   document.getElementById("list-ctx-rename").style.display = isOwner ? "" : "none";
   document.getElementById("list-ctx-delete").style.display = isOwner ? "" : "none";
+  document.getElementById("list-ctx-api-access").style.display = isOwner ? "" : "none";
   document.getElementById("list-ctx-leave").style.display = isOwner ? "none" : "";
 
   if (mobileQuery.matches) {
@@ -3471,6 +3472,159 @@ document.getElementById("list-ctx-copy-cal").addEventListener("click", async (e)
   } catch (err) {
     flash("Copy failed");
   }
+});
+
+// -------------------------------------------------------------------
+// API access modal — list-scoped API token management
+// -------------------------------------------------------------------
+
+const apiAccessModal = document.getElementById("api-access-modal");
+let apiAccessListId = null;
+let apiAccessListName = null;
+
+function apiEndpointFor(listId) {
+  return window.location.origin + "/api/lists/" + listId;
+}
+
+function setApiAccessMsg(text, isError) {
+  const el = document.getElementById("api-access-msg");
+  el.textContent = text || "";
+  el.style.color = isError ? "var(--accent-red, #c0392b)" : "var(--text-secondary)";
+}
+
+function renderApiAccessState(info) {
+  const emptyEl = document.getElementById("api-access-empty");
+  const activeEl = document.getElementById("api-access-active");
+  const regenBtn = document.getElementById("api-access-regenerate");
+  const revokeBtn = document.getElementById("api-access-revoke");
+  if (info && info.token) {
+    emptyEl.classList.add("hidden");
+    activeEl.classList.remove("hidden");
+    regenBtn.classList.remove("hidden");
+    revokeBtn.classList.remove("hidden");
+    document.getElementById("api-access-url").value = apiEndpointFor(info.list_id);
+    const tokenInput = document.getElementById("api-access-token");
+    tokenInput.value = info.token;
+    tokenInput.type = "password";
+    document.getElementById("api-access-show").textContent = "Show";
+    document.getElementById("api-access-created").textContent =
+      info.created_at ? new Date(info.created_at).toLocaleString() : "—";
+    document.getElementById("api-access-last-used").textContent =
+      info.last_used_at ? new Date(info.last_used_at).toLocaleString() : "never";
+  } else {
+    emptyEl.classList.remove("hidden");
+    activeEl.classList.add("hidden");
+    regenBtn.classList.add("hidden");
+    revokeBtn.classList.add("hidden");
+  }
+}
+
+async function showApiAccessModal(listId, listName) {
+  apiAccessListId = listId;
+  apiAccessListName = listName;
+  document.getElementById("api-access-title").textContent = "API access: " + listName;
+  setApiAccessMsg("");
+  renderApiAccessState(null);
+  apiAccessModal.classList.remove("hidden");
+  const info = await api(`/lists/${listId}/api-token`);
+  if (!info || info.error) {
+    setApiAccessMsg(info?.error || "Failed to load token info.", true);
+    return;
+  }
+  renderApiAccessState(info);
+}
+
+document.getElementById("list-ctx-api-access").addEventListener("click", () => {
+  hideListContextMenu();
+  showApiAccessModal(listCtxId, listCtxName);
+});
+
+document.getElementById("api-access-close").addEventListener("click", () => {
+  apiAccessModal.classList.add("hidden");
+});
+apiAccessModal.addEventListener("click", (e) => {
+  if (e.target === apiAccessModal) apiAccessModal.classList.add("hidden");
+});
+
+document.getElementById("api-access-generate").addEventListener("click", async () => {
+  setApiAccessMsg("Generating…");
+  const info = await api(`/lists/${apiAccessListId}/api-token`, { method: "POST" });
+  if (!info || info.error) {
+    setApiAccessMsg(info?.error || "Failed to generate.", true);
+    return;
+  }
+  renderApiAccessState(info);
+  setApiAccessMsg("Token generated. Copy it now — Show reveals it any time.");
+});
+
+document.getElementById("api-access-regenerate").addEventListener("click", async () => {
+  if (!confirm("Regenerate this list's API token? Any tool currently using the old token will stop working until updated.")) return;
+  setApiAccessMsg("Regenerating…");
+  const info = await api(`/lists/${apiAccessListId}/api-token`, { method: "POST" });
+  if (!info || info.error) {
+    setApiAccessMsg(info?.error || "Failed to regenerate.", true);
+    return;
+  }
+  renderApiAccessState(info);
+  setApiAccessMsg("New token issued. Old token is no longer valid.");
+});
+
+document.getElementById("api-access-revoke").addEventListener("click", async () => {
+  if (!confirm("Revoke this list's API token? Anything using it will lose access immediately.")) return;
+  setApiAccessMsg("Revoking…");
+  const res = await api(`/lists/${apiAccessListId}/api-token`, { method: "DELETE" });
+  if (res && res.error) {
+    setApiAccessMsg(res.error, true);
+    return;
+  }
+  renderApiAccessState(null);
+  setApiAccessMsg("Token revoked.");
+});
+
+document.getElementById("api-access-show").addEventListener("click", () => {
+  const tokenInput = document.getElementById("api-access-token");
+  const btn = document.getElementById("api-access-show");
+  if (tokenInput.type === "password") {
+    tokenInput.type = "text";
+    btn.textContent = "Hide";
+  } else {
+    tokenInput.type = "password";
+    btn.textContent = "Show";
+  }
+});
+
+async function copyToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+document.getElementById("api-access-copy-url").addEventListener("click", async () => {
+  const ok = await copyToClipboard(document.getElementById("api-access-url").value);
+  setApiAccessMsg(ok ? "URL copied." : "Copy failed.", !ok);
+});
+
+document.getElementById("api-access-copy-token").addEventListener("click", async () => {
+  const ok = await copyToClipboard(document.getElementById("api-access-token").value);
+  setApiAccessMsg(ok ? "Token copied." : "Copy failed.", !ok);
+});
+
+document.getElementById("api-access-copy-share").addEventListener("click", async () => {
+  const url = document.getElementById("api-access-url").value;
+  const token = document.getElementById("api-access-token").value;
+  const docs = window.location.origin + "/api/docs";
+  const msg =
+    `I'm granting you write access to one of my Klaar lists.\n\n` +
+    `API endpoint: ${url}\n` +
+    `Token: ${token}\n` +
+    `Auth: send "Authorization: Bearer <token>" on every request.\n` +
+    `API reference: ${docs}\n\n` +
+    `Please fetch the API reference first to learn the endpoints, then proceed.`;
+  const ok = await copyToClipboard(msg);
+  setApiAccessMsg(ok ? "Share message copied." : "Copy failed.", !ok);
 });
 
 // Close list context menu on outside click

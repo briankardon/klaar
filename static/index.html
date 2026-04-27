@@ -133,6 +133,7 @@
     <div class="context-menu-item" id="list-ctx-rename">Rename</div>
     <div class="context-menu-item" id="list-ctx-sharing">Sharing</div>
     <div class="context-menu-item" id="list-ctx-copy-cal">Copy calendar URL</div>
+    <div class="context-menu-item" id="list-ctx-api-access">API access&hellip;</div>
     <div class="context-menu-item" id="list-ctx-leave">Leave list</div>
     <div class="context-menu-item" id="list-ctx-delete">Delete</div>
   </div>
@@ -146,6 +147,52 @@
       <div id="sharing-no-contacts" style="font-size:0.85rem; color:var(--text-muted); margin:0.5rem 0;"></div>
       <div class="modal-buttons">
         <button id="sharing-close">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- API access modal -->
+  <div id="api-access-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <h3 id="api-access-title">API access</h3>
+      <p style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:0.6rem;">
+        Grant an external tool (e.g. an AI assistant) read/write access to
+        <em>just this list</em>. The token can be rotated or revoked at any
+        time. <a href="/api/docs" target="_blank" rel="noopener">API docs &rarr;</a>
+      </p>
+
+      <div id="api-access-empty" class="hidden" style="margin-bottom:0.8rem;">
+        <p style="font-size:0.9rem; margin-bottom:0.6rem;">No API token has been generated for this list.</p>
+        <button id="api-access-generate" class="btn-primary" type="button">Generate token</button>
+      </div>
+
+      <div id="api-access-active" class="hidden">
+        <div style="display:flex; flex-direction:column; gap:0.55rem; margin-bottom:0.7rem;">
+          <label style="font-size:0.8rem; color:var(--text-secondary);">API endpoint</label>
+          <div style="display:flex; gap:0.4rem;">
+            <input id="api-access-url" type="text" readonly style="flex:1; font-family:monospace; font-size:0.82rem;">
+            <button id="api-access-copy-url" type="button">Copy</button>
+          </div>
+          <label style="font-size:0.8rem; color:var(--text-secondary);">Token</label>
+          <div style="display:flex; gap:0.4rem;">
+            <input id="api-access-token" type="password" readonly style="flex:1; font-family:monospace; font-size:0.82rem;">
+            <button id="api-access-show" type="button" title="Show/hide">Show</button>
+            <button id="api-access-copy-token" type="button">Copy</button>
+          </div>
+          <button id="api-access-copy-share" type="button" style="align-self:flex-start;">Copy share message</button>
+          <div style="font-size:0.78rem; color:var(--text-muted);">
+            <div>Created: <span id="api-access-created">&mdash;</span></div>
+            <div>Last used: <span id="api-access-last-used">&mdash;</span></div>
+          </div>
+          <button id="api-access-revoke" type="button" style="align-self:flex-start; background:var(--accent-red); color:#fff; border:none; border-radius:4px; padding:0.35rem 0.7rem; cursor:pointer; font-size:0.85rem;">Revoke token</button>
+        </div>
+      </div>
+
+      <div id="api-access-msg" style="font-size:0.85rem; min-height:1.2em; margin-bottom:0.5rem;"></div>
+
+      <div class="modal-buttons">
+        <button id="api-access-regenerate" class="hidden" type="button" style="background:var(--accent-primary); color:#fff;">Regenerate</button>
+        <button id="api-access-close" type="button" style="background:var(--bg-modal-cancel); color:var(--text-modal-cancel);">Close</button>
       </div>
     </div>
   </div>

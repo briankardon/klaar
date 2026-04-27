@@ -85,6 +85,76 @@ async function loadCurrentUser() {
 
   loadContacts();
   loadCalendarUrl();
+  loadApiTokens();
+}
+
+// --- API tokens (per-list, for AI / external write access) ---
+async function loadApiTokens() {
+  const data = await api("/me/api-tokens");
+  if (!data || data.error) return;
+  renderApiTokens(data.tokens || []);
+}
+
+function renderApiTokens(tokens) {
+  const tbody = document.getElementById("api-tokens-list");
+  const table = document.getElementById("api-tokens-table");
+  const empty = document.getElementById("api-tokens-empty");
+  tbody.innerHTML = "";
+  if (tokens.length === 0) {
+    table.classList.add("hidden");
+    empty.classList.remove("hidden");
+    return;
+  }
+  table.classList.remove("hidden");
+  empty.classList.add("hidden");
+  for (const t of tokens) {
+    const tr = document.createElement("tr");
+    const created = t.created_at ? new Date(t.created_at).toLocaleString() : "—";
+    const lastUsed = t.last_used_at ? new Date(t.last_used_at).toLocaleString() : "never";
+    const nameTd = document.createElement("td");
+    const nameLink = document.createElement("a");
+    nameLink.href = "/#list=" + encodeURIComponent(t.list_id);
+    nameLink.textContent = t.list_name || "(unnamed)";
+    nameLink.style.color = "inherit";
+    nameTd.appendChild(nameLink);
+    tr.appendChild(nameTd);
+
+    const createdTd = document.createElement("td");
+    createdTd.textContent = created;
+    tr.appendChild(createdTd);
+
+    const lastUsedTd = document.createElement("td");
+    lastUsedTd.textContent = lastUsed;
+    tr.appendChild(lastUsedTd);
+
+    const actionsTd = document.createElement("td");
+    actionsTd.className = "actions";
+    const revokeBtn = document.createElement("button");
+    revokeBtn.className = "btn btn-danger btn-small";
+    revokeBtn.textContent = "Revoke";
+    revokeBtn.addEventListener("click", () => revokeApiToken(t.list_id, t.list_name));
+    actionsTd.appendChild(revokeBtn);
+    tr.appendChild(actionsTd);
+
+    tbody.appendChild(tr);
+  }
+}
+
+async function revokeApiToken(listId, listName) {
+  const ok = await confirmDialog(
+    "Revoke API token?",
+    `Anything currently using the API token for "${listName}" will lose access immediately. This cannot be undone (a new token can be generated, but the old one is gone).`
+  );
+  if (!ok) return;
+  const msgEl = document.getElementById("api-tokens-msg");
+  const res = await api(`/lists/${listId}/api-token`, { method: "DELETE" });
+  if (res && res.error) {
+    showMsg(msgEl, res.error, false);
+    return;
+  }
+  showMsg(msgEl, `Token for "${listName}" revoked.`, true);
+  setTimeout(() => hideMsg(msgEl), 2500);
+  loadApiTokens();
 }
 
 // --- Calendar subscription URL ---
