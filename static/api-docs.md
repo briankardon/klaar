@@ -102,6 +102,8 @@ Add a single item. Body:
 
 All fields except `text` are optional. Position defaults to end of list. `after_id` / `before_id` (if provided and matching an existing item) place the new item adjacent to that one.
 
+> ⚠️ **Hierarchy footgun:** position-and-depth defines parenting. If the named item has children and you insert at lower-or-equal depth, those children become children of *your* new item, not of the original. To insert *after a whole subtree*, append at the end, or place after the subtree's last descendant. Bulk-add (below) is usually a better fit when adding nested structure.
+
 Returns the created item with its assigned `id`.
 
 ### `POST /api/lists/<list_id>/items/bulk-add`
@@ -174,13 +176,11 @@ Tag *definitions* (the named columns) live on the list. Tag *values* live on ind
 
 This API does not currently support creating or editing tag definitions via list-token auth — you must use existing tag IDs from `GET /api/lists/<list_id>`. Ask the list owner to pre-create any tags you need.
 
-**Tag types:**
-- `text` — free-form string
-- `date` — ISO date string (`"YYYY-MM-DD"`); a date picker is presented in the web UI
-- `int` — integer value as string
-- `enum` — one of a fixed set of choices (defined per-tag)
+**Tags are typeless.** Every tag has just a `name` and a `color`; the `value` you set on an item is a free-form string. There is no schema enforcing what kind of data goes on which tag — that's a per-list convention you (and the list owner) decide.
 
-When setting a tag value, send the value as a string regardless of type. The server does not validate format strictly, but Klaar's UI treats values according to the tag's declared type. For dates in particular, use `YYYY-MM-DD`.
+The Klaar UI inspects values opportunistically:
+- A value matching `YYYY-MM-DD` (with optional time suffix) is treated as a date — it gets a date picker in the UI, contributes to the calendar feed, and renders as a friendly relative label ("Today", "Tomorrow", "Last Friday", etc.). Use this format any time you mean to convey a date.
+- Anything else is shown as plain text.
 
 To remove a tag from an item, omit it from the item's `tags` array on a PATCH (or send `value: null` to keep the tag attached but blank).
 
