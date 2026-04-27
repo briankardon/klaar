@@ -123,7 +123,7 @@ def _load_list(list_id: str) -> dict | None:
     with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
     _ensure_tags(data)
-    _ensure_owner(data)
+    _migrate_list_fields(data)
     return data
 
 
@@ -202,8 +202,10 @@ def _ensure_tags(data: dict) -> None:
         ]
 
 
-def _ensure_owner(data: dict) -> None:
-    """Ensure list has owner, shared_with, and views fields (migration)."""
+def _migrate_list_fields(data: dict) -> None:
+    """Backfill any list-data fields added in later versions onto on-disk
+    lists that predate them. Called from every code path that loads a list.
+    Add a new block here whenever a feature introduces a new list field."""
     if "owner" not in data:
         data["owner"] = None
     if "shared_with" not in data:
@@ -878,7 +880,7 @@ def get_lists():
         try:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            _ensure_owner(data)
+            _migrate_list_fields(data)
             if not _can_access(data, user):
                 continue
             lists.append({
@@ -1519,7 +1521,7 @@ def get_upcoming():
         try:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            _ensure_owner(data)
+            _migrate_list_fields(data)
             _ensure_tags(data)
         except (json.JSONDecodeError, KeyError, OSError):
             continue
@@ -1635,7 +1637,7 @@ def _collect_calendar_events(user: dict, list_filter_id: str | None) -> list[dic
         try:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            _ensure_owner(data)
+            _migrate_list_fields(data)
             _ensure_tags(data)
         except (json.JSONDecodeError, KeyError, OSError):
             continue
@@ -1918,7 +1920,7 @@ def list_my_api_tokens():
         try:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            _ensure_owner(data)
+            _migrate_list_fields(data)
         except (json.JSONDecodeError, KeyError, OSError):
             continue
         if not data.get("api_token"):
