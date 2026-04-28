@@ -440,6 +440,30 @@
       <div id="api-tokens-msg" class="msg hidden"></div>
     </div>
 
+    <!-- Backups section -->
+    <div class="section" id="backups-section">
+      <h2>Backups</h2>
+      <p style="font-size:0.9rem; color:var(--text-secondary); margin-bottom:0.6rem;">
+        Once a day, the server snapshots all lists into a compressed archive.
+        The most recent <strong>7</strong> snapshots are kept &mdash; older ones are pruned.
+        Browse a snapshot to restore a list as a new copy (never overwrites your current data).
+      </p>
+      <table class="user-table" id="backups-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Size</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="backups-list"></tbody>
+      </table>
+      <div id="backups-empty" class="hidden" style="font-size:0.85rem; color:var(--text-muted);">
+        No backups yet. The first one will be created on the next request after midnight UTC.
+      </div>
+      <div id="backups-msg" class="msg hidden"></div>
+    </div>
+
     <!-- Delete account section -->
     <div class="section">
       <h2>Delete Account</h2>
@@ -489,6 +513,22 @@
       <div id="create-msg" class="msg hidden"></div>
     </div>
   </main>
+
+  <!-- Backup browse modal -->
+  <div id="backup-browse-overlay" class="confirm-overlay hidden">
+    <div class="confirm-dialog" style="max-width:540px;">
+      <h3 id="backup-browse-title">Backup contents</h3>
+      <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:0.5rem;">
+        Restoring creates a new list named <em>&lt;original&gt; (restored from &lt;date&gt;)</em>.
+        Your current data is not touched.
+      </p>
+      <div id="backup-browse-list" style="max-height:50vh; overflow-y:auto; margin-bottom:0.8rem;"></div>
+      <div id="backup-browse-msg" class="msg hidden"></div>
+      <div class="form-actions" style="justify-content:flex-end;">
+        <button class="btn btn-cancel" id="backup-browse-close">Close</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Confirm dialog (reused) -->
   <div id="confirm-overlay" class="confirm-overlay hidden">

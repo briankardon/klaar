@@ -5,6 +5,7 @@ import json
 import os
 import re
 import secrets
+import tarfile
 import tempfile
 import uuid
 from collections import defaultdict
@@ -20,6 +21,8 @@ app = Flask(__name__, static_folder="static")
 DATA_DIR = Path("data")
 DATA_DIR.mkdir(exist_ok=True)
 USERS_FILE = DATA_DIR / "users.json"
+BACKUP_DIR = DATA_DIR / "backups"
+BACKUP_RETENTION_COUNT = 7
 
 # Generate or load a persistent secret key
 _secret_path = DATA_DIR / ".secret_key"
@@ -43,6 +46,74 @@ _SAFE_ID = re.compile(r"^[a-f0-9]{1,24}$")
 
 def _valid_id(id_str: str) -> bool:
     return bool(_SAFE_ID.match(id_str))
+
+
+# ---------------------------------------------------------------------------
+# Daily backups
+#
+# On the first request of each calendar day, we snapshot every JSON file in
+# data/ into data/backups/YYYY-MM-DD.tar.gz, then prune to the most recent
+# BACKUP_RETENTION_COUNT archives. Lazy trigger means days with no traffic
+# don't generate backups (nothing has changed anyway), and a long offline
+# period leaves the most recent N daily versions intact rather than rolling
+# them off by date.
+# ---------------------------------------------------------------------------
+
+_BACKUP_NAME_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})\.tar\.gz$")
+_last_backup_check_day: str = ""
+
+
+def _today_iso() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def _ensure_daily_backup() -> None:
+    """Create today's backup if not already present, and prune to the most
+    recent BACKUP_RETENTION_COUNT archives. Cheap on the hot path: once the
+    day's check has passed, this returns immediately for the rest of the day."""
+    global _last_backup_check_day
+    today = _today_iso()
+    if _last_backup_check_day == today:
+        return
+    BACKUP_DIR.mkdir(exist_ok=True)
+    target = BACKUP_DIR / f"{today}.tar.gz"
+    if not target.exists():
+        tmp_fd, tmp_name = tempfile.mkstemp(dir=BACKUP_DIR, suffix=".tar.gz.tmp")
+        os.close(tmp_fd)
+        tmp_path = Path(tmp_name)
+        try:
+            with tarfile.open(tmp_path, "w:gz") as tar:
+                for path in sorted(DATA_DIR.glob("*.json")):
+                    tar.add(path, arcname=path.name)
+            os.replace(tmp_path, target)
+        except BaseException:
+            if tmp_path.exists():
+                tmp_path.unlink()
+            raise
+    # Prune to keep only the most recent N archives
+    archives = sorted(
+        (p for p in BACKUP_DIR.glob("*.tar.gz") if _BACKUP_NAME_RE.match(p.name)),
+        key=lambda p: p.name,
+        reverse=True,
+    )
+    for old in archives[BACKUP_RETENTION_COUNT:]:
+        try:
+            old.unlink()
+        except OSError:
+            pass
+    _last_backup_check_day = today
+
+
+@app.before_request
+def _backup_hook():
+    """Lazy daily-backup trigger. Failure is logged-and-ignored so a backup
+    problem never blocks normal request handling."""
+    try:
+        _ensure_daily_backup()
+    except Exception as e:
+        # stderr only; don't propagate — keeping the app responsive matters
+        # more than failing loudly on a backup hiccup.
+        print(f"[klaar] daily backup failed: {e}", flush=True)
 
 
 # ---------------------------------------------------------------------------
@@ -1958,6 +2029,162 @@ def list_my_api_tokens():
         info.pop("token", None)  # don't leak token value via the list endpoint
         out.append(info)
     return jsonify({"tokens": out})
+
+
+# ---------------------------------------------------------------------------
+# Backups (browse + restore)
+# ---------------------------------------------------------------------------
+
+def _backup_path_for(date: str) -> Path | None:
+    """Return the archive path for a `YYYY-MM-DD` date, or None if the date
+    string is malformed (defensive against path traversal)."""
+    if not _BACKUP_NAME_RE.match(date + ".tar.gz"):
+        return None
+    return BACKUP_DIR / f"{date}.tar.gz"
+
+
+def _user_can_restore(data: dict, user: dict) -> bool:
+    """Whether `user` may restore the backup-stored list. Matches
+    _can_access semantics: list owner, legacy un-owned list, or admin."""
+    owner = data.get("owner")
+    if owner is None:
+        return True
+    return owner == user["id"] or user.get("admin", False)
+
+
+@app.get("/api/me/backups")
+@_require_auth
+def list_backups():
+    """Return available backups (date + size), most recent first."""
+    BACKUP_DIR.mkdir(exist_ok=True)
+    out = []
+    for path in sorted(BACKUP_DIR.glob("*.tar.gz"), reverse=True):
+        m = _BACKUP_NAME_RE.match(path.name)
+        if not m:
+            continue
+        try:
+            size = path.stat().st_size
+        except OSError:
+            continue
+        out.append({"date": m.group(1), "size": size})
+    return jsonify({"backups": out})
+
+
+@app.get("/api/me/backups/<date>/lists")
+@_require_auth
+def browse_backup(date: str):
+    """List the user's own lists found in the given backup, with item
+    counts and a flag for whether each list still exists in current data."""
+    path = _backup_path_for(date)
+    if path is None or not path.exists():
+        return jsonify({"error": "not found"}), 404
+    user = _current_user()
+    current_ids = {p.stem for p in DATA_DIR.glob("*.json") if p.name != "users.json"}
+    out = []
+    try:
+        with tarfile.open(path, "r:gz") as tar:
+            for member in tar.getmembers():
+                # Be paranoid about archive contents — only accept the same
+                # flat *.json filenames we wrote, no paths or symlinks.
+                if not member.isfile():
+                    continue
+                if "/" in member.name or member.name == "users.json":
+                    continue
+                if not member.name.endswith(".json"):
+                    continue
+                f = tar.extractfile(member)
+                if f is None:
+                    continue
+                try:
+                    data = json.load(f)
+                except json.JSONDecodeError:
+                    continue
+                if not _user_can_restore(data, user):
+                    continue
+                lid = data.get("id")
+                out.append({
+                    "id": lid,
+                    "name": data.get("name", "(unnamed)"),
+                    "item_count": len(data.get("items", [])),
+                    "tag_count": len(data.get("tags", [])),
+                    "still_exists": lid in current_ids,
+                })
+    except (tarfile.TarError, OSError) as e:
+        return jsonify({"error": f"could not read backup: {e}"}), 500
+    out.sort(key=lambda x: x["name"].lower())
+    return jsonify({"lists": out})
+
+
+@app.post("/api/me/backups/<date>/restore")
+@_require_auth
+def restore_from_backup(date: str):
+    """Restore one list from a backup as a brand-new list.
+
+    Always non-destructive: assigns a fresh ID, suffixes the name with the
+    backup date, strips API token + sharing, and saves. Never overwrites or
+    merges into anything currently live."""
+    path = _backup_path_for(date)
+    if path is None or not path.exists():
+        return jsonify({"error": "backup not found"}), 404
+    user = _current_user()
+    body = request.get_json(force=True)
+    list_id = body.get("list_id", "")
+    if not _valid_id(list_id):
+        return jsonify({"error": "invalid list id"}), 400
+
+    target = None
+    try:
+        with tarfile.open(path, "r:gz") as tar:
+            for member in tar.getmembers():
+                if not member.isfile():
+                    continue
+                if member.name != f"{list_id}.json":
+                    continue
+                f = tar.extractfile(member)
+                if f is None:
+                    break
+                try:
+                    target = json.load(f)
+                except json.JSONDecodeError:
+                    pass
+                break
+    except (tarfile.TarError, OSError) as e:
+        return jsonify({"error": f"could not read backup: {e}"}), 500
+    if target is None:
+        return jsonify({"error": "list not in this backup"}), 404
+    if not _user_can_restore(target, user):
+        return jsonify({"error": "forbidden"}), 403
+
+    new_id = uuid.uuid4().hex[:12]
+    target["id"] = new_id
+    target["name"] = f"{target.get('name', 'Untitled')} (restored from {date})"
+    target["created"] = _now()
+    target["version"] = 0
+    target["owner"] = user["id"]   # always own the restore, regardless of original ownership
+    target["shared_with"] = []     # don't carry forward sharing
+    target.pop("api_token", None)
+    target.pop("api_token_created_at", None)
+    target.pop("api_token_last_used_at", None)
+    _migrate_list_fields(target)
+    _ensure_tags(target)
+    _save_list(target)
+    return jsonify({"id": new_id, "name": target["name"]})
+
+
+@app.get("/api/admin/backups/<date>/download")
+@_require_auth
+def download_backup(date: str):
+    """Admin-only: download the raw archive. Restricted because archives
+    contain other users' lists and password hashes."""
+    user = _current_user()
+    if not user.get("admin"):
+        return jsonify({"error": "forbidden"}), 403
+    path = _backup_path_for(date)
+    if path is None or not path.exists():
+        return jsonify({"error": "not found"}), 404
+    return send_from_directory(
+        BACKUP_DIR.resolve(), f"{date}.tar.gz", as_attachment=True,
+    )
 
 
 @app.post("/api/lists/generate-test")

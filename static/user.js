@@ -86,7 +86,130 @@ async function loadCurrentUser() {
   loadContacts();
   loadCalendarUrl();
   loadApiTokens();
+  loadBackups();
 }
+
+// --- Daily backups ---
+function formatBackupSize(bytes) {
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+  return (bytes / (1024 * 1024)).toFixed(2) + " MB";
+}
+
+async function loadBackups() {
+  const data = await api("/me/backups");
+  if (!data || data.error) return;
+  const tbody = document.getElementById("backups-list");
+  const table = document.getElementById("backups-table");
+  const empty = document.getElementById("backups-empty");
+  tbody.innerHTML = "";
+  const backups = data.backups || [];
+  if (backups.length === 0) {
+    table.classList.add("hidden");
+    empty.classList.remove("hidden");
+    return;
+  }
+  table.classList.remove("hidden");
+  empty.classList.add("hidden");
+  for (const b of backups) {
+    const tr = document.createElement("tr");
+    const dateTd = document.createElement("td");
+    dateTd.textContent = b.date;
+    tr.appendChild(dateTd);
+    const sizeTd = document.createElement("td");
+    sizeTd.textContent = formatBackupSize(b.size);
+    tr.appendChild(sizeTd);
+    const actionsTd = document.createElement("td");
+    actionsTd.className = "actions";
+    const browseBtn = document.createElement("button");
+    browseBtn.className = "btn btn-primary btn-small";
+    browseBtn.textContent = "Browse";
+    browseBtn.addEventListener("click", () => browseBackup(b.date));
+    actionsTd.appendChild(browseBtn);
+    if (currentUser && currentUser.admin) {
+      const dlBtn = document.createElement("a");
+      dlBtn.className = "btn btn-cancel btn-small";
+      dlBtn.href = "/api/admin/backups/" + encodeURIComponent(b.date) + "/download";
+      dlBtn.textContent = "Download";
+      dlBtn.title = "Download raw archive (admin)";
+      dlBtn.style.textDecoration = "none";
+      dlBtn.style.display = "inline-block";
+      actionsTd.appendChild(dlBtn);
+    }
+    tr.appendChild(actionsTd);
+    tbody.appendChild(tr);
+  }
+}
+
+async function browseBackup(date) {
+  const overlay = document.getElementById("backup-browse-overlay");
+  const titleEl = document.getElementById("backup-browse-title");
+  const listEl = document.getElementById("backup-browse-list");
+  const msgEl = document.getElementById("backup-browse-msg");
+  titleEl.textContent = "Backup from " + date;
+  listEl.innerHTML = "<p style='font-size:0.85rem; color:var(--text-muted);'>Loading…</p>";
+  hideMsg(msgEl);
+  overlay.classList.remove("hidden");
+  const data = await api("/me/backups/" + encodeURIComponent(date) + "/lists");
+  if (!data || data.error) {
+    listEl.innerHTML = "";
+    showMsg(msgEl, data?.error || "Failed to read backup.", false);
+    return;
+  }
+  const lists = data.lists || [];
+  listEl.innerHTML = "";
+  if (lists.length === 0) {
+    listEl.innerHTML = "<p style='font-size:0.9rem; color:var(--text-muted);'>No lists of yours found in this backup.</p>";
+    return;
+  }
+  for (const l of lists) {
+    const row = document.createElement("div");
+    row.style.cssText = "display:flex; align-items:center; gap:0.6rem; padding:0.5rem 0; border-bottom:1px solid var(--border-lighter);";
+    const info = document.createElement("div");
+    info.style.cssText = "flex:1; min-width:0;";
+    const name = document.createElement("div");
+    name.textContent = l.name;
+    name.style.cssText = "font-weight:500; word-break:break-word;";
+    info.appendChild(name);
+    const meta = document.createElement("div");
+    meta.style.cssText = "font-size:0.78rem; color:var(--text-muted);";
+    const exists = l.still_exists
+      ? "<span style='color:var(--accent-green);'>✓ still in your lists</span>"
+      : "<span style='color:var(--accent-red);'>✗ not in your current lists</span>";
+    meta.innerHTML = `${l.item_count} item${l.item_count===1?"":"s"}, ${l.tag_count} tag${l.tag_count===1?"":"s"} &middot; ${exists}`;
+    info.appendChild(meta);
+    row.appendChild(info);
+    const restoreBtn = document.createElement("button");
+    restoreBtn.className = "btn btn-primary btn-small";
+    restoreBtn.textContent = "Restore as new list";
+    restoreBtn.addEventListener("click", () => restoreFromBackup(date, l.id, restoreBtn));
+    row.appendChild(restoreBtn);
+    listEl.appendChild(row);
+  }
+}
+
+async function restoreFromBackup(date, listId, btn) {
+  const msgEl = document.getElementById("backup-browse-msg");
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Restoring…";
+  const res = await api("/me/backups/" + encodeURIComponent(date) + "/restore", {
+    method: "POST",
+    body: { list_id: listId },
+  });
+  if (!res || res.error) {
+    btn.disabled = false;
+    btn.textContent = original;
+    showMsg(msgEl, res?.error || "Restore failed.", false);
+    return;
+  }
+  btn.textContent = "Restored ✓";
+  showMsg(msgEl, `Restored as "${res.name}".`, true);
+}
+
+document.getElementById("backup-browse-close").addEventListener("click", () => {
+  document.getElementById("backup-browse-overlay").classList.add("hidden");
+});
 
 // --- API tokens (per-list, for AI / external write access) ---
 async function loadApiTokens() {

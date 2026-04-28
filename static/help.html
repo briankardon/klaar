@@ -220,6 +220,7 @@
         <li><a href="#sharing">Sharing and Collaboration</a></li>
         <li><a href="#calendar">Calendar Subscription</a></li>
         <li><a href="#api-access">API Access</a></li>
+        <li><a href="#backups">Backups</a></li>
         <li><a href="#dark-mode">Dark Mode</a></li>
         <li><a href="#user-account">User Account</a></li>
         <li><a href="#mobile">Mobile</a></li>
@@ -612,6 +613,34 @@
       <p>The <a href="/api/docs" target="_blank" rel="noopener">API reference</a> documents endpoint shapes (item schema, depth-based hierarchy, bulk operations). The "Copy share message" button gives the AI assistant a link to it directly &mdash; you don't need to read it yourself unless you want to script against the API by hand.</p>
     </div>
 
+    <!-- Backups -->
+    <div class="section" id="backups">
+      <h2>Backups</h2>
+      <p>Klaar takes a daily snapshot of all lists into a compressed archive on the server. The most recent <strong>7</strong> snapshots are kept; older ones are pruned automatically. The intent is a low-effort safety net for accidental deletions or other regrets that survive past the in-session undo stack.</p>
+
+      <h3>How it works</h3>
+      <ul>
+        <li>Snapshots are <em>lazy</em>: the first request to Klaar each day triggers that day's backup. Days when nobody touches Klaar produce no backup (there'd be nothing new anyway).</li>
+        <li>Retention is <em>last 7 archives</em>, not last 7 days &mdash; so a stretch of inactivity doesn't roll old backups off the end. If you take a two-week break, you still come back to seven distinct daily versions.</li>
+        <li>Archives are stored on the server only. Admins can also download the raw <code>.tar.gz</code> if they want offline copies.</li>
+      </ul>
+
+      <h3>Browsing and restoring</h3>
+      <p>The <a href="/user">User settings page</a> has a <strong>Backups</strong> section listing each available snapshot by date with its size. Click <strong>Browse</strong> on any row to see your own lists at that point in time, with item and tag counts and an indicator of whether each list still exists in your current data.</p>
+
+      <p>Each list in a backup has a <strong>Restore as new list</strong> button. Restoring is always non-destructive:</p>
+      <ul>
+        <li>A brand-new list is created with the contents from the snapshot.</li>
+        <li>The new list's name is suffixed with <em>(restored from &lt;date&gt;)</em>.</li>
+        <li>The original list (if it still exists) is untouched.</li>
+        <li>Sharing and any old API tokens are stripped from the restored copy &mdash; you can re-share or generate fresh tokens if needed.</li>
+      </ul>
+      <p>If you want to fully replace a current list with a backup version, the workflow is two steps: delete the current list, then restore from a backup. That's deliberate &mdash; one-click in-place replacement is too easy to fire by accident.</p>
+
+      <h3>What's included</h3>
+      <p>An archive contains every <code>*.json</code> file in the data directory: every list, plus the user accounts file. It does <em>not</em> include the secret key or the archive directory itself. Per-list undo/redo stacks are <strong>not</strong> backed up &mdash; those live in server memory and reset on restart.</p>
+    </div>
+
     <!-- Dark Mode -->
     <div class="section" id="dark-mode">
       <h2>Dark Mode</h2>
@@ -629,6 +658,7 @@
         <li><strong>Contacts</strong> &mdash; send contact requests, accept or decline incoming requests, and manage your contact list.</li>
         <li><strong>Calendar subscription</strong> &mdash; copy your all-lists ICS URL or regenerate the token. See <a href="#calendar">Calendar Subscription</a>.</li>
         <li><strong>List API tokens</strong> &mdash; review which lists have active API tokens and revoke any you no longer need. See <a href="#api-access">API Access</a>.</li>
+        <li><strong>Backups</strong> &mdash; browse daily snapshots and restore individual lists as new copies. See <a href="#backups">Backups</a>.</li>
         <li><strong>Delete account</strong> &mdash; permanently delete your account and all your owned lists.</li>
       </ul>
       <p>Admin users also see a user administration section where they can create, edit, and delete other users.</p>
