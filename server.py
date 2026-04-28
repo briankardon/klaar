@@ -373,6 +373,14 @@ def _list_for_response(data: dict) -> dict:
     return out
 
 
+def _verbose_response() -> bool:
+    """True if the caller wants the full list back from a bulk-mutation
+    endpoint. Default is a compact ack to keep responses small for AI /
+    scripted consumers (the web UI ignores these responses and re-syncs
+    via a separate GET, so the trim is free)."""
+    return request.args.get("verbose") == "1"
+
+
 def _authorize_list_read(list_id: str):
     """Authorize a read operation on a list. Accepts session+access or a
     matching list API token. Returns (data, error_response).
@@ -1106,14 +1114,18 @@ def bulk_update_items(list_id: str):
             return jsonify({"error": "forbidden"}), 403
     body = request.get_json(force=True)
     updates = body.get("updates", [])
+    applied = 0
     for upd in updates:
         if perm == "check" and set(upd.keys()) - {"id", "done"}:
             return jsonify({"error": "forbidden"}), 403
         item = _find_item(data["items"], upd["id"])
         if item:
             _apply_item_fields(item, upd)
+            applied += 1
     _save_with_undo(data, snap)
-    return jsonify(_list_for_response(data))
+    if _verbose_response():
+        return jsonify(_list_for_response(data))
+    return jsonify({"ok": True, "version": data.get("version", 0), "updated": applied})
 
 
 @app.delete("/api/lists/<list_id>/items/<item_id>")
@@ -1137,9 +1149,13 @@ def bulk_delete_items(list_id: str):
         return err
     body = request.get_json(force=True)
     ids = set(body.get("item_ids", []))
+    before = len(data["items"])
     data["items"] = [it for it in data["items"] if it["id"] not in ids]
+    deleted = before - len(data["items"])
     _save_with_undo(data, snap)
-    return jsonify(_list_for_response(data))
+    if _verbose_response():
+        return jsonify(_list_for_response(data))
+    return jsonify({"ok": True, "version": data.get("version", 0), "deleted": deleted})
 
 
 @app.post("/api/lists/<list_id>/items/move-from")
@@ -1205,7 +1221,9 @@ def reorder_items(list_id: str):
             items.insert(target_index + i, it)
 
     _save_with_undo(data, snap)
-    return jsonify(_list_for_response(data))
+    if _verbose_response():
+        return jsonify(_list_for_response(data))
+    return jsonify({"ok": True, "version": data.get("version", 0)})
 
 
 # ---------------------------------------------------------------------------
@@ -1399,7 +1417,9 @@ def gather_items(list_id: str):
         indices_to_remove.add(i)
 
     if not indices_to_remove:
-        return jsonify(_list_for_response(data))
+        if _verbose_response():
+            return jsonify(_list_for_response(data))
+        return jsonify({"ok": True, "version": data.get("version", 0), "removed": 0})
 
     # Sort gathered children by original position
     children_to_gather.sort(key=lambda x: x[0])
@@ -1418,9 +1438,12 @@ def gather_items(list_id: str):
         if i == target_child_end - 1 or (target_child_end == target_idx + 1 and i == target_idx):
             new_items.extend(gathered)
 
+    removed_count = sum(1 for i in indices_to_remove if items[i]["depth"] == target_depth)
     data["items"] = new_items
     _save_with_undo(data, snap)
-    return jsonify(_list_for_response(data))
+    if _verbose_response():
+        return jsonify(_list_for_response(data))
+    return jsonify({"ok": True, "version": data.get("version", 0), "removed": removed_count})
 
 
 # ---------------------------------------------------------------------------
@@ -1440,6 +1463,7 @@ def bulk_add_items(list_id: str):
     body = request.get_json(force=True)
     new_items = body.get("items", [])
     valid_tag_ids = {t["id"] for t in data.get("tags", [])}
+    added_ids = []
     for ni in new_items:
         text = str(ni.get("text", "")).strip()[:1000]
         depth = max(0, min(MAX_DEPTH, int(ni.get("depth", 0))))
@@ -1454,8 +1478,11 @@ def bulk_add_items(list_id: str):
                     cleaned.append({"id": t["id"], "value": t.get("value")})
             item["tags"] = cleaned
         data["items"].append(item)
+        added_ids.append(item["id"])
     _save_with_undo(data, snap)
-    return jsonify(_list_for_response(data)), 201
+    if _verbose_response():
+        return jsonify(_list_for_response(data)), 201
+    return jsonify({"ok": True, "version": data.get("version", 0), "added_ids": added_ids}), 201
 
 
 _ISO_DATE_PREFIX = re.compile(r"^(\d{4}-\d{2}-\d{2})")

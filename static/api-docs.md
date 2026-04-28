@@ -30,6 +30,20 @@ All paths below are relative to your Klaar host, e.g. `https://klaar.example.com
 
 ---
 
+## Response shapes
+
+Bulk-mutation endpoints (`bulk-add`, bulk `PATCH`, `bulk-delete`, `reorder`) return a small ack by default:
+
+```json
+{"ok": true, "version": <int>, ...}
+```
+
+The `version` is the list's new version counter. Other fields (`added_ids`, `updated`, `deleted`) depend on the endpoint and are documented per-endpoint below.
+
+If you need the full updated list back in the response, append `?verbose=1` to the request URL — useful for clients that want to render new state without a follow-up GET. AI consumers should generally skip `verbose` to keep responses small; do a separate `GET /api/lists/<list_id>` if you need to verify state.
+
+---
+
 ## Read
 
 ### `GET /api/lists/<list_id>`
@@ -121,7 +135,9 @@ Add many items at once, in order. Body:
 }
 ```
 
-Items are appended at the end of the list, in array order. This is the most efficient way to build a hierarchical plan in one request. Returns the full updated list.
+Items are appended at the end of the list, in array order. This is the most efficient way to build a hierarchical plan in one request.
+
+**Response (compact, default):** `{"ok": true, "version": <int>, "added_ids": ["<id1>", ...]}`. The IDs are returned in the same order as the input items so you can map back to your structure if needed.
 
 ### `PATCH /api/lists/<list_id>/items/<item_id>`
 
@@ -151,7 +167,9 @@ Bulk update. Body:
 }
 ```
 
-Each update needs an `id` plus any fields to change. Returns the full updated list.
+Each update needs an `id` plus any fields to change.
+
+**Response (compact, default):** `{"ok": true, "version": <int>, "updated": <count>}`.
 
 ### `DELETE /api/lists/<list_id>/items/<item_id>`
 
@@ -159,7 +177,9 @@ Delete a single item. Children of the deleted item are **not** automatically rem
 
 ### `POST /api/lists/<list_id>/items/bulk-delete`
 
-Body: `{"item_ids": ["i_001", "i_002", ...]}`. Returns the updated list.
+Body: `{"item_ids": ["i_001", "i_002", ...]}`.
+
+**Response (compact, default):** `{"ok": true, "version": <int>, "deleted": <count>}`.
 
 ### `POST /api/lists/<list_id>/items/reorder`
 
@@ -167,6 +187,8 @@ Two forms:
 
 1. **Replace order entirely:** `{"order": ["i_a", "i_b", ...]}` — must contain every existing item ID exactly once.
 2. **Move a block:** `{"item_id": "i_x", "index": 5, "count": 3}` — move the item at the given ID, plus the next `count - 1` items, to position `index`.
+
+**Response (compact, default):** `{"ok": true, "version": <int>}`.
 
 ---
 
