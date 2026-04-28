@@ -162,7 +162,17 @@ async function browseBackup(date) {
     listEl.innerHTML = "<p style='font-size:0.9rem; color:var(--text-muted);'>No lists of yours found in this backup.</p>";
     return;
   }
+  let othersHeaderInserted = false;
   for (const l of lists) {
+    // For admins viewing a backup that contains other users' lists, drop a
+    // section header just before the first non-own row.
+    if (!l.is_mine && !othersHeaderInserted) {
+      const header = document.createElement("div");
+      header.textContent = "Other users' lists (read-only)";
+      header.style.cssText = "font-size:0.8rem; font-weight:600; color:var(--text-secondary); margin:0.8rem 0 0.3rem; padding-top:0.5rem; border-top:1px solid var(--border-light);";
+      listEl.appendChild(header);
+      othersHeaderInserted = true;
+    }
     const row = document.createElement("div");
     row.style.cssText = "display:flex; align-items:center; gap:0.6rem; padding:0.5rem 0; border-bottom:1px solid var(--border-lighter);";
     const info = document.createElement("div");
@@ -170,20 +180,26 @@ async function browseBackup(date) {
     const name = document.createElement("div");
     name.textContent = l.name;
     name.style.cssText = "font-weight:500; word-break:break-word;";
+    if (!l.is_mine) name.style.color = "var(--text-secondary)";
     info.appendChild(name);
     const meta = document.createElement("div");
     meta.style.cssText = "font-size:0.78rem; color:var(--text-muted);";
+    const ownerSpan = l.is_mine
+      ? ""
+      : `Owner: <strong>${l.owner_name}</strong> &middot; `;
     const exists = l.still_exists
-      ? "<span style='color:var(--accent-green);'>✓ still in your lists</span>"
-      : "<span style='color:var(--accent-red);'>✗ not in your current lists</span>";
-    meta.innerHTML = `${l.item_count} item${l.item_count===1?"":"s"}, ${l.tag_count} tag${l.tag_count===1?"":"s"} &middot; ${exists}`;
+      ? `<span style='color:var(--accent-green);'>✓ still in ${l.is_mine ? "your" : "their"} lists</span>`
+      : `<span style='color:var(--accent-red);'>✗ not in current lists</span>`;
+    meta.innerHTML = `${ownerSpan}${l.item_count} item${l.item_count===1?"":"s"}, ${l.tag_count} tag${l.tag_count===1?"":"s"} &middot; ${exists}`;
     info.appendChild(meta);
     row.appendChild(info);
-    const restoreBtn = document.createElement("button");
-    restoreBtn.className = "btn btn-primary btn-small";
-    restoreBtn.textContent = "Restore as new list";
-    restoreBtn.addEventListener("click", () => restoreFromBackup(date, l.id, restoreBtn));
-    row.appendChild(restoreBtn);
+    if (l.can_restore) {
+      const restoreBtn = document.createElement("button");
+      restoreBtn.className = "btn btn-primary btn-small";
+      restoreBtn.textContent = "Restore as new list";
+      restoreBtn.addEventListener("click", () => restoreFromBackup(date, l.id, restoreBtn));
+      row.appendChild(restoreBtn);
+    }
     listEl.appendChild(row);
   }
 }

@@ -2043,13 +2043,23 @@ def _backup_path_for(date: str) -> Path | None:
     return BACKUP_DIR / f"{date}.tar.gz"
 
 
-def _user_can_restore(data: dict, user: dict) -> bool:
-    """Whether `user` may restore the backup-stored list. Matches
-    _can_access semantics: list owner, legacy un-owned list, or admin."""
-    owner = data.get("owner")
-    if owner is None:
+def _user_can_browse_in_backup(data: dict, user: dict) -> bool:
+    """Whether `user` may see this backed-up list in the browse listing.
+    Admins see everything (for triage); regular users see their own and
+    legacy un-owned lists."""
+    if user.get("admin"):
         return True
-    return owner == user["id"] or user.get("admin", False)
+    owner = data.get("owner")
+    return owner is None or owner == user["id"]
+
+
+def _user_can_restore(data: dict, user: dict) -> bool:
+    """Whether `user` may actually restore this list. Admins do NOT get to
+    restore other users' lists — restoration always lands in the caller's
+    account, so allowing admin cross-restore would silently transfer
+    ownership of someone else's data."""
+    owner = data.get("owner")
+    return owner is None or owner == user["id"]
 
 
 @app.get("/api/me/backups")
@@ -2073,12 +2083,24 @@ def list_backups():
 @app.get("/api/me/backups/<date>/lists")
 @_require_auth
 def browse_backup(date: str):
-    """List the user's own lists found in the given backup, with item
-    counts and a flag for whether each list still exists in current data."""
+    """List backed-up lists visible to the user, with item counts, the
+    owner's display name, and a flag for whether each list still exists.
+    Regular users see only their own (and legacy un-owned) lists; admins
+    see everyone's, for triage."""
     path = _backup_path_for(date)
     if path is None or not path.exists():
         return jsonify({"error": "not found"}), 404
     user = _current_user()
+    users_by_id = {u["id"]: u for u in _load_users()}
+
+    def _owner_label(owner_id):
+        if owner_id is None:
+            return "(unowned)"
+        u = users_by_id.get(owner_id)
+        if not u:
+            return "(unknown user)"
+        return u.get("display_name") or u.get("username") or "(unknown user)"
+
     current_ids = {p.stem for p in DATA_DIR.glob("*.json") if p.name != "users.json"}
     out = []
     try:
@@ -2099,8 +2121,9 @@ def browse_backup(date: str):
                     data = json.load(f)
                 except json.JSONDecodeError:
                     continue
-                if not _user_can_restore(data, user):
+                if not _user_can_browse_in_backup(data, user):
                     continue
+                owner_id = data.get("owner")
                 lid = data.get("id")
                 out.append({
                     "id": lid,
@@ -2108,10 +2131,14 @@ def browse_backup(date: str):
                     "item_count": len(data.get("items", [])),
                     "tag_count": len(data.get("tags", [])),
                     "still_exists": lid in current_ids,
+                    "is_mine": owner_id is None or owner_id == user["id"],
+                    "owner_name": _owner_label(owner_id),
+                    "can_restore": _user_can_restore(data, user),
                 })
     except (tarfile.TarError, OSError) as e:
         return jsonify({"error": f"could not read backup: {e}"}), 500
-    out.sort(key=lambda x: x["name"].lower())
+    # Sort: mine first, then by owner name, then list name.
+    out.sort(key=lambda x: (not x["is_mine"], x["owner_name"].lower(), x["name"].lower()))
     return jsonify({"lists": out})
 
 
