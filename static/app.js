@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.15.3";
+const KLAAR_VERSION = "0.15.4";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -1109,7 +1109,7 @@ function createItemTextElement(item) {
           ke.preventDefault();
           handleItemEnter(inp, ke.shiftKey);
         }
-        if (ke.key === "Backspace" && inp.value === "") {
+        if ((ke.key === "Backspace" || ke.key === "Delete") && inp.value === "") {
           ke.preventDefault();
           mobileDeleted = true;
           deleteItem(item.id);
@@ -1166,7 +1166,7 @@ function createItemTextElement(item) {
           ke.preventDefault();
           handleItemEnter(inp, ke.shiftKey);
         }
-        if (ke.key === "Backspace" && inp.value === "") {
+        if ((ke.key === "Backspace" || ke.key === "Delete") && inp.value === "") {
           ke.preventDefault();
           mobileDeleted = true;
           deleteItem(item.id);
@@ -1201,15 +1201,18 @@ function createItemTextElement(item) {
       handleItemEnter(txt, e.shiftKey);
       return;
     }
-    if (e.key === "Backspace" && txt.value === "") {
+    if ((e.key === "Backspace" || e.key === "Delete") && txt.value === "") {
       e.preventDefault();
       deleted = true;
       const allItems = Array.from(itemsEl.querySelectorAll(".item"));
       const idx = allItems.findIndex((el) => el.dataset.id === item.id);
-      const prevId = idx > 0 ? allItems[idx - 1].dataset.id : null;
+      // Backspace conventionally merges with previous; Delete with next.
+      const focusId = e.key === "Delete"
+        ? (idx >= 0 && idx < allItems.length - 1 ? allItems[idx + 1].dataset.id : null)
+        : (idx > 0 ? allItems[idx - 1].dataset.id : null);
       deleteItem(item.id);
-      if (prevId) {
-        const el = itemsEl.querySelector(`.item[data-id="${prevId}"] .item-text`);
+      if (focusId) {
+        const el = itemsEl.querySelector(`.item[data-id="${focusId}"] .item-text`);
         if (el) el.focus();
       }
       return;
