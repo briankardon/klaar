@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.16.0";
+const KLAAR_VERSION = "0.16.1";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -924,7 +924,14 @@ function expandAll() {
 
 function handleSelectionClick(itemId, shiftKey, ctrlKey) {
   if (shiftKey && lastSelectedId) {
-    // Range select: from lastSelectedId to itemId among visible items
+    // Range select: from lastSelectedId to itemId among visible items.
+    // Default: also sweep in the full subtree of every item in the range,
+    // so hidden descendants (collapsed or filtered) come along too —
+    // otherwise a subsequent drag/delete/tag-set on the selection would
+    // silently leave hidden children behind. Filtered descendants pop
+    // into view via selection-trumps-filter; collapsed ones stay
+    // collapsed but join the selection invisibly.
+    // Ctrl+shift-click: precise mode — only the visible items in the range.
     const visibleIds = getVisibleItemIds();
     const anchorIdx = visibleIds.indexOf(lastSelectedId);
     const targetIdx = visibleIds.indexOf(itemId);
@@ -933,7 +940,17 @@ function handleSelectionClick(itemId, shiftKey, ctrlKey) {
       const to = Math.max(anchorIdx, targetIdx);
       selectedIds.clear();
       for (let i = from; i <= to; i++) {
-        selectedIds.add(visibleIds[i]);
+        const id = visibleIds[i];
+        selectedIds.add(id);
+        if (!ctrlKey) {
+          const dataIdx = currentItems.findIndex((it) => it.id === id);
+          if (dataIdx !== -1) {
+            const [, end] = getChildRange(dataIdx);
+            for (let k = dataIdx + 1; k < end; k++) {
+              selectedIds.add(currentItems[k].id);
+            }
+          }
+        }
       }
     }
   } else if (ctrlKey) {
