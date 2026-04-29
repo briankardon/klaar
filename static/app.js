@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.15.4";
+const KLAAR_VERSION = "0.16.0";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -3912,13 +3912,10 @@ function startDrag(e, itemId, startY, ctrlKey) {
   let blockIds;
   let useFullReorder = false;
 
-  if (ctrlKey) {
-    // Ctrl+drag: include children
-    const dataIdx = currentItems.findIndex((it) => it.id === itemId);
-    const [, end] = getChildRange(dataIdx);
-    blockIds = new Set(currentItems.slice(dataIdx, end).map((it) => it.id));
-  } else if (selectedIds.size > 1 && selectedIds.has(itemId)) {
-    // Drag selection: consolidate selected items at the dragged item's position
+  if (selectedIds.size > 1 && selectedIds.has(itemId)) {
+    // Drag selection: consolidate selected items at the dragged item's position.
+    // Multi-select drag is intentional — the user picked exactly these items —
+    // so it never auto-expands to include hidden descendants.
     blockIds = new Set(selectedIds);
     useFullReorder = true;
     // Pull selected items out, preserving their relative order
@@ -3933,9 +3930,18 @@ function startDrag(e, itemId, startY, ctrlKey) {
     }
     rest.splice(insertAt, 0, ...selected);
     currentItems = rest;
-  } else {
-    // Single item drag
+  } else if (ctrlKey) {
+    // Ctrl+drag: precise mode — just this one item, leave any descendants
+    // (visible or hidden) in place. Use this when you really do want to
+    // peel a single item out of a hierarchy.
     blockIds = new Set([itemId]);
+  } else {
+    // Default: drag with the full subtree. Safer than dragging a parent
+    // alone, because hidden descendants (filtered out or just collapsed)
+    // would otherwise get orphaned at the source position.
+    const dataIdx = currentItems.findIndex((it) => it.id === itemId);
+    const [, end] = getChildRange(dataIdx);
+    blockIds = new Set(currentItems.slice(dataIdx, end).map((it) => it.id));
   }
 
   const blockSize = blockIds.size;
