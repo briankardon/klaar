@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.15.2";
+const KLAAR_VERSION = "0.15.3";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -2625,7 +2625,14 @@ function renderViewPane() {
   viewListEl.innerHTML = "";
   for (const view of currentViews) {
     const li = document.createElement("li");
-    li.className = "view-entry" + (activeViewId === view.id ? " active-view" : "");
+    li.className = "view-entry";
+
+    const marker = document.createElement("span");
+    marker.className = "view-active-marker";
+    if (activeViewId === view.id) {
+      marker.textContent = "\u{1F453}";
+      marker.title = "Currently applied";
+    }
 
     const name = document.createElement("span");
     name.className = "view-name";
@@ -2658,7 +2665,7 @@ function renderViewPane() {
       renderViewPane();
     });
 
-    li.append(name, saveBtn, delBtn);
+    li.append(marker, name, saveBtn, delBtn);
 
     // Click to apply (delayed to allow double-click)
     let viewClickTimer = null;
