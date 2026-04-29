@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.15.1";
+const KLAAR_VERSION = "0.15.2";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -1972,6 +1972,7 @@ function toggleSort(tagId) {
   } else {
     currentSort = null;
   }
+  markActiveViewDirty();
   renderItems();
   renderTagPane();
   scrollToItem(lastSelectedId);
@@ -1998,6 +1999,7 @@ function renderFilterBar() {
     bubble.title = "Click to remove filter";
     bubble.addEventListener("click", () => {
       textFilters.splice(i, 1);
+      markActiveViewDirty();
       renderFilterBar();
       renderItems();
       scrollToItem(lastSelectedId);
@@ -2032,6 +2034,7 @@ function renderFilterBar() {
       e.stopPropagation();
       if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
       tagFilters.splice(filterIdx, 1);
+      markActiveViewDirty();
       renderFilterBar();
       renderItems();
       renderTagPane();
@@ -2042,6 +2045,7 @@ function renderFilterBar() {
       clickTimer = setTimeout(() => {
         clickTimer = null;
         tagFilters[filterIdx] = { tagId, condition, exclude: !exclude };
+        markActiveViewDirty();
         renderFilterBar();
         renderItems();
         scrollToItem(lastSelectedId);
@@ -2066,6 +2070,7 @@ function renderFilterBar() {
       function commitFilter() {
         const val = inp.value.trim() || null;
         tagFilters[filterIdx] = { tagId, condition: val };
+        markActiveViewDirty();
         renderFilterBar();
         renderItems();
         scrollToItem(lastSelectedId);
@@ -2108,6 +2113,7 @@ searchInput.addEventListener("keydown", (e) => {
     try {
       const re = new RegExp(val, "i");
       textFilters.push({ pattern: val, regex: re });
+      markActiveViewDirty();
       searchInput.value = "";
       selectedIds.clear();
       renderFilterBar();
@@ -2129,6 +2135,7 @@ searchInput.addEventListener("keydown", (e) => {
 document.querySelectorAll(".comp-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
     completionFilter = btn.dataset.mode;
+    markActiveViewDirty();
     document.querySelectorAll(".comp-btn").forEach((b) =>
       b.classList.toggle("active", b.dataset.mode === completionFilter)
     );
@@ -2147,6 +2154,7 @@ document.getElementById("btn-date-filter").addEventListener("click", () => {
     currentSort = _stashedSort;
     _stashedSort = null;
   }
+  markActiveViewDirty();
   renderItems();
   renderTagPane();
   scrollToItem(lastSelectedId);
@@ -2154,6 +2162,7 @@ document.getElementById("btn-date-filter").addEventListener("click", () => {
 
 function toggleTagFilter(tagId) {
   tagFilters.push({ tagId, condition: null, exclude: false });
+  markActiveViewDirty();
   renderFilterBar();
   renderItems();
   renderTagPane();
@@ -2228,6 +2237,7 @@ function renderTagPane() {
     visBtn.addEventListener("click", () => {
       if (hiddenTagIds.has(tag.id)) hiddenTagIds.delete(tag.id);
       else hiddenTagIds.add(tag.id);
+      markActiveViewDirty();
       renderTagPane();
       renderItems();
     });
@@ -2527,6 +2537,18 @@ btnNewTag.addEventListener("click", () => {
 
 const viewListEl = document.getElementById("view-list");
 const btnSaveView = document.getElementById("btn-save-view");
+
+function markActiveViewDirty() {
+  // The user just diverged the live filter/sort state from the active view.
+  // Clear the active marker so the views pane reflects reality and a click
+  // on the formerly-active view re-applies it instead of toggling off (which
+  // would be a no-op the user can't see, requiring a confusing second click).
+  if (activeViewId !== null) {
+    activeViewId = null;
+    saveActiveViewToServer();
+    renderViewPane();
+  }
+}
 
 function captureViewState() {
   return {
