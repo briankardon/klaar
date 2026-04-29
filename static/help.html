@@ -283,18 +283,22 @@
       <p>A thin ruler above the items area has a draggable marker. Drag it left or right to change the width of the item text column; tags wrap to the next line if the text pushes past the marker. The chosen width is remembered per list.</p>
 
       <h3>Selection</h3>
+      <p>Klaar's selection model defaults to <em>operating on hierarchies</em>, so an item that has children (visible or not) is treated as the whole subtree. Hold <kbd>Ctrl</kbd> for the corresponding "precise" version that operates on hierarchies, or <kbd>Alt</kbd> for the "single item only" version.</p>
       <ul>
         <li><strong>Click</strong> an item to select it (clears previous selection).</li>
-        <li><strong>Ctrl+click</strong> to toggle an item in or out of the selection.</li>
-        <li><strong>Shift+click</strong> to select a range from the last-selected item to the clicked item.</li>
+        <li><strong>Ctrl+click</strong> to toggle an item <em>and its full subtree</em> in or out of the selection.</li>
+        <li><strong>Alt+click</strong> to toggle just the one clicked item in or out of the selection (rare; useful when you want a parent in the selection without its children).</li>
+        <li><strong>Shift+click</strong> to range-select from the last-selected item to the clicked item, sweeping in the full subtree of every item in the range. Hidden descendants (collapsed or filtered out) join the selection invisibly so subsequent operations don't leave them behind.</li>
+        <li><strong>Ctrl+Shift+click</strong> for the precise range select &mdash; only the visible items in the range, no hierarchy expansion.</li>
       </ul>
-      <p>Selected items are highlighted and exempt from filtering &mdash; they remain visible even if they do not match active filters.</p>
+      <p>Selected items are exempt from filtering &mdash; they remain visible even if they do not match active filters. Collapsed parents stay collapsed when their descendants are added to a selection; the descendants join silently and you can expand to see them if you want.</p>
 
       <h3>Drag and drop reordering</h3>
       <p>Click and drag an item to reorder it within the list. The item moves in real time as you drag.</p>
       <ul>
-        <li><strong>Ctrl+drag</strong> moves the item along with all its children.</li>
-        <li>Dragging with multiple items selected consolidates and moves the entire selection.</li>
+        <li><strong>Drag</strong> an item to move it <em>along with its full subtree</em>. This is the safe default &mdash; otherwise hidden descendants (collapsed or filtered) would be left behind and the hierarchy would get mangled.</li>
+        <li><strong>Ctrl+drag</strong> moves <em>just the one item</em>, leaving any descendants in place. Use this when you really do want to peel a single item out of a hierarchy.</li>
+        <li>Dragging with multiple items selected consolidates and moves the entire selection (no hierarchy expansion &mdash; the user picked the items explicitly).</li>
         <li>Drag an item onto a list name in the sidebar to move it to that list. Hover over a different list for one second to switch to that list while dragging, letting you position the item precisely.</li>
       </ul>
     </div>
@@ -361,8 +365,9 @@
         </thead>
         <tbody>
           <tr><td><kbd>Ctrl+click</kbd> delete button</td><td>Delete item with all its children.</td></tr>
-          <tr><td><kbd>Ctrl+drag</kbd></td><td>Drag an item along with all its children.</td></tr>
           <tr><td><kbd>Ctrl+click</kbd> checkbox</td><td>Toggle done status for item and all its children.</td></tr>
+          <tr><td><kbd>Drag</kbd></td><td>Move an item with its full subtree (default).</td></tr>
+          <tr><td><kbd>Ctrl+drag</kbd></td><td>Move just the one item, leaving any descendants in place.</td></tr>
           <tr><td><kbd>Escape</kbd> (in search field)</td><td>Clear the search and deselect all items.</td></tr>
         </tbody>
       </table>

@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.16.1";
+const KLAAR_VERSION = "0.16.2";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -922,7 +922,7 @@ function expandAll() {
 // Selection
 // -------------------------------------------------------------------
 
-function handleSelectionClick(itemId, shiftKey, ctrlKey) {
+function handleSelectionClick(itemId, shiftKey, ctrlKey, altKey) {
   if (shiftKey && lastSelectedId) {
     // Range select: from lastSelectedId to itemId among visible items.
     // Default: also sweep in the full subtree of every item in the range,
@@ -953,12 +953,26 @@ function handleSelectionClick(itemId, shiftKey, ctrlKey) {
         }
       }
     }
-  } else if (ctrlKey) {
-    // Toggle individual item in/out of selection
-    if (selectedIds.has(itemId)) {
-      selectedIds.delete(itemId);
-    } else {
-      selectedIds.add(itemId);
+  } else if (ctrlKey || altKey) {
+    // Ctrl-click: toggle the clicked item's full subtree in/out of selection.
+    // Alt-click: toggle just the one item (the precise version, when you
+    // really do want a parent in the selection without its children).
+    // For leaf items the two are indistinguishable.
+    const ids = [itemId];
+    if (ctrlKey && !altKey) {
+      const dataIdx = currentItems.findIndex((it) => it.id === itemId);
+      if (dataIdx !== -1) {
+        const [, end] = getChildRange(dataIdx);
+        for (let k = dataIdx + 1; k < end; k++) ids.push(currentItems[k].id);
+      }
+    }
+    // Toggle direction is decided by the clicked item: if it's in, remove
+    // the whole group; if it's out, add the whole group. This keeps the
+    // intent clear when descendants are partially-already-in.
+    const removing = selectedIds.has(itemId);
+    for (const id of ids) {
+      if (removing) selectedIds.delete(id);
+      else selectedIds.add(id);
     }
     lastSelectedId = itemId;
   } else {
@@ -3884,7 +3898,7 @@ function onItemMouseDown(e, itemId, isTextClick = false) {
     if (started) {
       document.body.style.userSelect = "";
       onDragEnd();
-    } else if (isTextClick && !ue.shiftKey && !ue.ctrlKey) {
+    } else if (isTextClick && !ue.shiftKey && !ue.ctrlKey && !ue.altKey) {
       // If the item is already the only selected one, selection isn't changing
       // — skip the re-render / style pass so we don't clobber the native text
       // selection created by double-click (word) or triple-click (line).
@@ -3912,7 +3926,7 @@ function onItemMouseDown(e, itemId, isTextClick = false) {
         applySelectionStyles();
       }
     } else {
-      handleSelectionClick(itemId, ue.shiftKey, ue.ctrlKey);
+      handleSelectionClick(itemId, ue.shiftKey, ue.ctrlKey, ue.altKey);
     }
   }
 
