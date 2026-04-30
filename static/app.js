@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.16.2";
+const KLAAR_VERSION = "0.16.3";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -3868,6 +3868,15 @@ let dragState = null;
 const DRAG_THRESHOLD = 5;
 
 function onItemMouseDown(e, itemId, isTextClick = false) {
+  // If the text input is already focused (i.e. the user is mid-edit) and
+  // they're clicking back inside that same input, this click is for native
+  // text selection — not item drag. Bail before installing the move/up
+  // listeners so the browser handles cursor placement and selection
+  // extension naturally. To start an item drag, click on a non-text part
+  // of the row (or click outside first to defocus the input).
+  if (isTextClick && document.activeElement === e.target) {
+    return;
+  }
   const startX = e.clientX;
   const startY = e.clientY;
   const ctrlKey = e.ctrlKey;
