@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.16.3";
+const KLAAR_VERSION = "0.16.4";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -979,6 +979,16 @@ function handleSelectionClick(itemId, shiftKey, ctrlKey, altKey) {
     selectedIds.clear();
     selectedIds.add(itemId);
     lastSelectedId = itemId;
+  }
+  // If we just expanded into a multi-selection, drop keyboard focus on
+  // any currently-edited item-text. Editing one item while several are
+  // selected isn't a real workflow, and a focused input would otherwise
+  // block dragging the group via that row.
+  if (selectedIds.size > 1) {
+    const a = document.activeElement;
+    if (a && a.classList && a.classList.contains("item-text")) {
+      a.blur();
+    }
   }
   if (hasActiveFilters()) {
     renderItems();
@@ -3354,6 +3364,18 @@ document.addEventListener("contextmenu", (e) => {
 
 document.addEventListener("keydown", (e) => {
   if (!currentListId) return;
+
+  // Escape on a focused item text input — blur it. Native browser default
+  // doesn't blur on Escape inside <input>; users hitting Escape generally
+  // mean "I'm done editing." The blur handler still fires, so any pending
+  // text edits are saved.
+  if (e.key === "Escape") {
+    const a = document.activeElement;
+    if (a && a.classList && a.classList.contains("item-text")) {
+      a.blur();
+      return;
+    }
+  }
 
   // Ctrl+. — toggle collapse on focused item
   if (e.ctrlKey && e.key === ".") {
