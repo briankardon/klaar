@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.16.4";
+const KLAAR_VERSION = "0.16.5";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -4718,6 +4718,9 @@ async function openItemDeepLink(listId, itemId) {
   if (currentListId !== listId) {
     await selectList(listId);
   }
+  // List-only deep link (e.g. #list=<id> from the user page): open the list
+  // and stop. No item to find/scroll/select.
+  if (!itemId) return true;
   const idx = currentItems.findIndex((it) => it.id === itemId);
   if (idx === -1) return false;
   // Expand any collapsed ancestors so the item is reachable.
@@ -4783,9 +4786,9 @@ function parseDeepLinkHash() {
   const params = new URLSearchParams(h);
   const listId = params.get("list");
   const itemId = params.get("item");
-  if (!listId || !itemId) return null;
-  if (!_DEEP_LINK_ID.test(listId) || !_DEEP_LINK_ID.test(itemId)) return null;
-  return { listId, itemId };
+  if (!listId || !_DEEP_LINK_ID.test(listId)) return null;
+  if (itemId && !_DEEP_LINK_ID.test(itemId)) return null;
+  return { listId, itemId: itemId || null };
 }
 async function maybeHandleDeepLink() {
   const dl = parseDeepLinkHash();
