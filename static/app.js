@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.16.5";
+const KLAAR_VERSION = "0.16.6";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -3842,26 +3842,68 @@ async function flushActiveEdit() {
   }
 }
 
+// Diff old vs new state to pick a single item worth scrolling to after
+// undo/redo. Priority: items the operation added, then items it modified
+// in place, then a neighbor of items it removed. Only returns an id that
+// is currently in the visible list — best-effort, so a change that lands
+// entirely on filtered/collapsed items just doesn't auto-scroll.
+function pickUndoRedoScrollTarget(oldItems, newItems) {
+  const oldById = new Map(oldItems.map((it) => [it.id, it]));
+  const newById = new Map(newItems.map((it) => [it.id, it]));
+  const visibleSet = new Set(visibleList.map((v) => v.item.id));
+  // 1. Added items (in new, not in old)
+  for (const it of newItems) {
+    if (!oldById.has(it.id) && visibleSet.has(it.id)) return it.id;
+  }
+  // 2. In-place changes (text, depth, done, tags)
+  for (const it of newItems) {
+    const o = oldById.get(it.id);
+    if (!o || !visibleSet.has(it.id)) continue;
+    if (o.text !== it.text || o.depth !== it.depth || o.done !== it.done) return it.id;
+    if (JSON.stringify(o.tags) !== JSON.stringify(it.tags)) return it.id;
+  }
+  // 3. Neighbor of a removed item (in old, not in new). Prefer previous,
+  //    fall back to next, find one that's currently visible.
+  for (let i = 0; i < oldItems.length; i++) {
+    if (newById.has(oldItems[i].id)) continue;
+    for (let j = i - 1; j >= 0; j--) {
+      const nid = oldItems[j].id;
+      if (newById.has(nid) && visibleSet.has(nid)) return nid;
+    }
+    for (let j = i + 1; j < oldItems.length; j++) {
+      const nid = oldItems[j].id;
+      if (newById.has(nid) && visibleSet.has(nid)) return nid;
+    }
+  }
+  return null;
+}
+
 async function performUndo() {
   if (!currentListId) return;
   await flushActiveEdit();
+  const oldItems = currentItems;
   const data = await api(`/lists/${currentListId}/undo`, { method: "POST" });
   if (data && !data.error) {
     currentItems = data.items;
     currentTags = data.tags || [];
     renderItems();
     renderTagPane();
+    const target = pickUndoRedoScrollTarget(oldItems, currentItems);
+    if (target) scrollToItem(target);
   }
 }
 
 async function performRedo() {
   if (!currentListId) return;
+  const oldItems = currentItems;
   const data = await api(`/lists/${currentListId}/redo`, { method: "POST" });
   if (data && !data.error) {
     currentItems = data.items;
     currentTags = data.tags || [];
     renderItems();
     renderTagPane();
+    const target = pickUndoRedoScrollTarget(oldItems, currentItems);
+    if (target) scrollToItem(target);
   }
 }
 
