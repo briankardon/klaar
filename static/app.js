@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.16.9";
+const KLAAR_VERSION = "0.16.10";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -1569,6 +1569,39 @@ document.getElementById("items-container").addEventListener("scroll", () => {
   if (_suppressScrollRender) return;
   if (visibleList.length > 0) renderViewport();
 });
+
+// --- TEMP DEBUG: trace scrollTop mutations on items-container ---
+// Wraps scrollTop setter to log every write with a source line, and listens
+// for scroll events to surface browser-initiated changes (anchoring, clamp,
+// etc.). Enable by setting window._scrollDebug = true in the console.
+(function () {
+  const container = document.getElementById("items-container");
+  const desc = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollTop")
+    || Object.getOwnPropertyDescriptor(Element.prototype, "scrollTop");
+  let lastSetValue = null;
+  let lastSetSource = "";
+  Object.defineProperty(container, "scrollTop", {
+    get() { return desc.get.call(this); },
+    set(v) {
+      if (window._scrollDebug) {
+        const src = (new Error().stack || "").split("\n")[2]?.trim() || "?";
+        console.log(`[scroll SET]  ${v.toFixed(1)}  ←  ${src}`);
+        lastSetValue = v;
+        lastSetSource = src;
+      }
+      desc.set.call(this, v);
+    },
+    configurable: true,
+  });
+  container.addEventListener("scroll", () => {
+    if (!window._scrollDebug) return;
+    const actual = container.scrollTop;
+    // Only flag drift — events that match what we just set are uninteresting.
+    if (lastSetValue == null || Math.abs(actual - lastSetValue) > 0.5) {
+      console.log(`[scroll EVT]  actual=${actual.toFixed(1)}  (last set=${lastSetValue == null ? "?" : lastSetValue.toFixed(1)} via ${lastSetSource})`);
+    }
+  });
+})();
 
 // Tooltip for truncated item text and date tag values (desktop only)
 if (!_isMobile) {
