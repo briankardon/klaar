@@ -643,6 +643,11 @@ main {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* Disable browser scroll anchoring. During drag, each splice + re-render
+     causes a layout shift; the browser would otherwise adjust scrollTop to
+     keep an "anchor" element visually fixed, which fights drag auto-scroll
+     and produces a rewind every time the cursor moves. */
+  overflow-anchor: none;
 }
 
 /* Word-style ruler marker for adjusting item text column width */
