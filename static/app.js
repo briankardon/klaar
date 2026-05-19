@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.16.10";
+const KLAAR_VERSION = "0.16.11";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -4184,6 +4184,9 @@ function updateAutoScroll(clientY) {
     const t = 1 - Math.max(0, distBottom) / AUTO_SCROLL_ZONE;
     speed = AUTO_SCROLL_MAX_SPEED * t * t;
   }
+  if (window._scrollDebug && dragState.autoScrollSpeed !== speed) {
+    console.log(`[upd ] clientY=${clientY} rect.top=${rect.top.toFixed(0)} rect.bot=${rect.bottom.toFixed(0)} distTop=${distTop.toFixed(0)} distBot=${distBottom.toFixed(0)} speed: ${dragState.autoScrollSpeed?.toFixed(0) || "0"} → ${speed.toFixed(0)}`);
+  }
   dragState.autoScrollSpeed = speed;
   if (speed !== 0 && _autoScrollFrame == null) {
     _autoScrollLastTs = performance.now();
@@ -4200,7 +4203,12 @@ function autoScrollTick(ts) {
   const container = document.getElementById("items-container");
   const maxScroll = container.scrollHeight - container.clientHeight;
   const before = container.scrollTop;
-  container.scrollTop = Math.max(0, Math.min(maxScroll, before + dragState.autoScrollSpeed * dt));
+  const intended = before + dragState.autoScrollSpeed * dt;
+  const clamped = Math.max(0, Math.min(maxScroll, intended));
+  if (window._scrollDebug) {
+    console.log(`[tick] before=${before.toFixed(1)} speed=${dragState.autoScrollSpeed.toFixed(0)} dt=${dt.toFixed(3)} intended=${intended.toFixed(1)} max=${maxScroll.toFixed(0)} → ${clamped.toFixed(1)} cursorY=${dragState.lastMouseClientY}`);
+  }
+  container.scrollTop = clamped;
   if (container.scrollTop !== before && dragState.lastMouseClientY != null) {
     // Re-run drop tracking with new scroll position — synthesize an event
     // from the saved mouse coordinates so the indicator follows correctly.
