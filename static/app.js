@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.16.7";
+const KLAAR_VERSION = "0.16.8";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -4245,7 +4245,17 @@ function onDragMove(e) {
   currentItems.splice(Math.max(0, insertIdx), 0, ...block);
 
   dragState.currentVisibleIdx = targetRow;
+  // Preserve scrollTop across the render. A reorder that moves the dragged
+  // item under a collapsed parent shrinks visibleList, which shrinks the
+  // scroll container's content height. The browser then clamps scrollTop
+  // downward to fit — fighting auto-scroll in a visible feedback loop.
+  // Snapshot before the render and re-apply if the browser shifted us.
+  const scrollContainer = document.getElementById("items-container");
+  const preservedScroll = scrollContainer.scrollTop;
   renderItems();
+  if (scrollContainer.scrollTop !== preservedScroll) {
+    scrollContainer.scrollTop = preservedScroll;
+  }
   markDragSource(blockIds);
 }
 
