@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.16.6";
+const KLAAR_VERSION = "0.16.7";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -4127,9 +4127,72 @@ function clearSidebarHighlight() {
   listIndex.querySelectorAll("li.drag-target").forEach((el) => el.classList.remove("drag-target"));
 }
 
+// Drag-edge auto-scroll. Quadratic ramp from 0 at the outer zone edge to
+// AUTO_SCROLL_MAX_SPEED at the very container edge. Uses requestAnimationFrame
+// so it works even when the mouse is stationary inside the hot zone, and
+// re-fires onDragMove with the saved mouse position each tick so the drop
+// indicator stays accurate as items slide under the cursor.
+const AUTO_SCROLL_ZONE = 60;        // px from container edge
+const AUTO_SCROLL_MAX_SPEED = 700;  // px/sec at the very edge
+let _autoScrollFrame = null;
+let _autoScrollLastTs = 0;
+
+function updateAutoScroll(clientY) {
+  if (!dragState) { stopAutoScroll(); return; }
+  const container = document.getElementById("items-container");
+  const rect = container.getBoundingClientRect();
+  const distTop = clientY - rect.top;
+  const distBottom = rect.bottom - clientY;
+  let speed = 0;
+  if (distTop < AUTO_SCROLL_ZONE) {
+    const t = 1 - Math.max(0, distTop) / AUTO_SCROLL_ZONE;
+    speed = -AUTO_SCROLL_MAX_SPEED * t * t;
+  } else if (distBottom < AUTO_SCROLL_ZONE) {
+    const t = 1 - Math.max(0, distBottom) / AUTO_SCROLL_ZONE;
+    speed = AUTO_SCROLL_MAX_SPEED * t * t;
+  }
+  dragState.autoScrollSpeed = speed;
+  if (speed !== 0 && _autoScrollFrame == null) {
+    _autoScrollLastTs = performance.now();
+    _autoScrollFrame = requestAnimationFrame(autoScrollTick);
+  }
+}
+
+function autoScrollTick(ts) {
+  _autoScrollFrame = null;
+  if (!dragState || !dragState.autoScrollSpeed) return;
+  // Clamp dt so a backgrounded tab returning doesn't jump the scroll
+  const dt = Math.min(0.05, (ts - _autoScrollLastTs) / 1000);
+  _autoScrollLastTs = ts;
+  const container = document.getElementById("items-container");
+  const maxScroll = container.scrollHeight - container.clientHeight;
+  const before = container.scrollTop;
+  container.scrollTop = Math.max(0, Math.min(maxScroll, before + dragState.autoScrollSpeed * dt));
+  if (container.scrollTop !== before && dragState.lastMouseClientY != null) {
+    // Re-run drop tracking with new scroll position — synthesize an event
+    // from the saved mouse coordinates so the indicator follows correctly.
+    onDragMove({ clientX: dragState.lastMouseClientX, clientY: dragState.lastMouseClientY });
+  }
+  if (dragState && dragState.autoScrollSpeed !== 0) {
+    _autoScrollFrame = requestAnimationFrame(autoScrollTick);
+  }
+}
+
+function stopAutoScroll() {
+  if (_autoScrollFrame != null) {
+    cancelAnimationFrame(_autoScrollFrame);
+    _autoScrollFrame = null;
+  }
+}
+
 function onDragMove(e) {
   if (!dragState) return;
   const { ghost, itemId, blockIds, blockSize, offsetY, itemHeight } = dragState;
+
+  // Save mouse position so auto-scroll ticks can re-run drop tracking
+  // with the current cursor location even when the mouse is stationary.
+  dragState.lastMouseClientX = e.clientX;
+  dragState.lastMouseClientY = e.clientY;
 
   // Move ghost to follow mouse
   ghost.style.left = (e.clientX - dragState.offsetX) + "px";
@@ -4142,6 +4205,9 @@ function onDragMove(e) {
   if (targetListEntry && targetListEntry.dataset.id !== dragState.sourceListId) {
     targetListEntry.classList.add("drag-target");
     dragState.crossListTarget = targetListEntry.dataset.id;
+    // Suppress auto-scroll while hovering the sidebar — the gesture is
+    // about switching lists, not scrolling the source.
+    dragState.autoScrollSpeed = 0;
 
     // Hover-to-switch: start timer to switch to hovered list
     if (dragState.hoverListId !== targetListEntry.dataset.id) {
@@ -4158,6 +4224,8 @@ function onDragMove(e) {
   if (dragState.hoverTimer) { clearTimeout(dragState.hoverTimer); dragState.hoverTimer = null; }
   dragState.hoverListId = null;
   dragState.crossListTarget = null;
+
+  updateAutoScroll(e.clientY);
 
   // Live rect each move: caching itemsEl's rect at drag start bakes in the
   // drag-start scrollTop, which is then double-counted when we add scrollTop.
@@ -4219,6 +4287,7 @@ function onDragEnd() {
   if (!dragState) return;
   document.removeEventListener("mousemove", onDragMove);
   document.removeEventListener("mouseup", onDragEnd);
+  stopAutoScroll();
 
   const { itemId, blockIds, blockSize, useFullReorder, ghost, sourceListId, crossListTarget, switchedList } = dragState;
   ghost.remove();
