@@ -426,7 +426,7 @@
       <ul>
         <li>Text filters</li>
         <li>Tag filters (include/exclude, with conditions)</li>
-        <li>Completion filter (All / Active / Done)</li>
+        <li>Completion filter (Active / Done toggles)</li>
         <li>Date filter (📅 toggle)</li>
         <li>Sort order &mdash; either a tag sort (tag + direction) or the virtual date sort</li>
         <li>Hidden tag IDs</li>
@@ -468,12 +468,15 @@
       <p>Multiple filters for the same tag can be added for complex conditions.</p>
 
       <h3>Completion filter</h3>
-      <p>The three buttons next to the search bar filter by completion status:</p>
+      <p>Two toggle buttons next to the search bar independently control which completion states are shown:</p>
       <ul>
-        <li><strong>All</strong> &mdash; show all items.</li>
-        <li><strong>Active</strong> &mdash; show only uncompleted items.</li>
-        <li><strong>Done</strong> &mdash; show only completed items.</li>
+        <li><strong>Active</strong> &mdash; include uncompleted items.</li>
+        <li><strong>Done</strong> &mdash; include completed items.</li>
       </ul>
+      <p>Both on (the default) shows everything; turning one off hides that group. You can't turn both off &mdash; clicking the last one still on flips the other on instead, so the list is never empty.</p>
+
+      <h3>Completion sort (✓↕)</h3>
+      <p>The small button after the Active/Done toggles sorts by completion status. Click to cycle: completed items last → completed items first → off. Like the tag and date sorts, only one sort is active at a time, so turning this on replaces any tag/date sort (and vice versa).</p>
 
       <h3>Date filter (📅)</h3>
       <p>The calendar button next to the completion filter toggles a tag-agnostic date filter: only items with at least one date-valued tag are shown, sorted by the item's earliest date (oldest first). If you had a different sort active when you enabled the date filter, that sort is remembered and restored when you disable the filter. Picking a different tag sort while the date filter is on overrides the memory &mdash; your deliberate choice wins.</p>

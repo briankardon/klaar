@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.16.12";
+const KLAAR_VERSION = "0.17.0";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -59,9 +59,13 @@ let lastSelectedId = null;       // anchor for shift-click range selection
 const hiddenTagIds = new Set();  // client-side tag visibility state
 const textFilters = [];          // [{pattern: string, regex: RegExp}]
 const tagFilters = [];           // [{tagId, condition}] — multiple per tag allowed
-let currentSort = null;          // {tagId, direction: "asc"|"desc"} or {type: "date", direction} or null
+let currentSort = null;          // {tagId, direction} | {type:"date"|"done", direction} | null
 let _stashedSort = null;         // sort saved when date filter is toggled on; restored on toggle off
-let completionFilter = "all";    // "all" | "active" | "done"
+// Completion filter is two independent toggles. An item passes if it's active
+// and showActive, or done and showDone. The UI never lets both go false (it
+// flips the other on), so "nothing shows" is unreachable through clicks.
+let showActive = true;
+let showDone = true;
 let dateFilterActive = false;    // when true, only items with any date-valued tag match
 let currentViews = [];           // [{id, name, ...state}]
 let activeViewId = null;         // currently applied view
@@ -534,7 +538,8 @@ async function selectList(id) {
   tagFilters.length = 0;
   currentSort = null;
   _stashedSort = null;
-  completionFilter = "all";
+  showActive = true;
+  showDone = true;
   dateFilterActive = false;
   document.getElementById("btn-date-filter")?.classList.remove("active");
   selectedIds.clear();
@@ -1056,6 +1061,7 @@ function computeVisibleList() {
 
 function renderItems() {
   visibleList = computeVisibleList();
+  syncCompletionUI();
   const maxDepth = currentItems.reduce((m, it) => Math.max(m, it.depth), 0);
   updateCollapseBar(maxDepth);
 
@@ -1878,7 +1884,7 @@ function deleteItem(itemId) {
 // -------------------------------------------------------------------
 
 function hasActiveFilters() {
-  return textFilters.length > 0 || tagFilters.length > 0 || completionFilter !== "all" || dateFilterActive;
+  return textFilters.length > 0 || tagFilters.length > 0 || !(showActive && showDone) || dateFilterActive;
 }
 
 function itemHasDateTag(item) {
@@ -1912,8 +1918,8 @@ function matchesCondition(itemValue, condition) {
 
 function itemMatchesFilters(item) {
   if (selectedIds.has(item.id)) return true;
-  if (completionFilter === "active" && item.done) return false;
-  if (completionFilter === "done" && !item.done) return false;
+  if (item.done && !showDone) return false;
+  if (!item.done && !showActive) return false;
   if (dateFilterActive && !itemHasDateTag(item)) return false;
   for (const f of textFilters) {
     if (!f.regex.test(item.text)) return false;
@@ -1986,8 +1992,9 @@ function getSortedItems() {
   }
 
   const { direction } = currentSort;
-  const valueFor = currentSort.type === "date"
-    ? (item) => earliestDateTagValue(item)
+  const valueFor =
+    currentSort.type === "date" ? (item) => earliestDateTagValue(item)
+    : currentSort.type === "done" ? (item) => (item.done ? 1 : 0)
     : (item) => itemTagValue(item, currentSort.tagId);
 
   // Sort blocks by the lead item's sort value
@@ -2176,16 +2183,58 @@ searchInput.addEventListener("keydown", (e) => {
   }
 });
 
+// Sync the Active/Done toggle buttons and the completion-sort button to
+// current state. Cheap; safe to call from renderItems.
+function syncCompletionUI() {
+  const activeBtn = document.querySelector('.comp-btn[data-mode="active"]');
+  const doneBtn = document.querySelector('.comp-btn[data-mode="done"]');
+  if (activeBtn) activeBtn.classList.toggle("active", showActive);
+  if (doneBtn) doneBtn.classList.toggle("active", showDone);
+  const sortBtn = document.getElementById("btn-completion-sort");
+  if (sortBtn) {
+    const isDoneSort = currentSort && currentSort.type === "done";
+    const dir = isDoneSort ? currentSort.direction : null;
+    sortBtn.classList.toggle("active", !!isDoneSort);
+    sortBtn.textContent = dir === "asc" ? "✓▲" : dir === "desc" ? "✓▼" : "✓↕";
+    sortBtn.title = dir === "asc" ? "Completed items last (click to flip)"
+      : dir === "desc" ? "Completed items first (click to clear)"
+      : "Sort by completion status";
+  }
+}
+
 document.querySelectorAll(".comp-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
-    completionFilter = btn.dataset.mode;
+    const mode = btn.dataset.mode;
+    if (mode === "active") showActive = !showActive;
+    else if (mode === "done") showDone = !showDone;
+    // Never allow "nothing shows" via clicks — flip the opposing toggle on.
+    if (!showActive && !showDone) {
+      if (mode === "active") showDone = true;
+      else showActive = true;
+    }
     markActiveViewDirty();
-    document.querySelectorAll(".comp-btn").forEach((b) =>
-      b.classList.toggle("active", b.dataset.mode === completionFilter)
-    );
+    syncCompletionUI();
     renderItems();
     scrollToItem(lastSelectedId);
   });
+});
+
+document.getElementById("btn-completion-sort").addEventListener("click", () => {
+  // Cycle: off → completed-last (asc) → completed-first (desc) → off.
+  // Mutually exclusive with tag/date sorts, matching the single-sort model.
+  _stashedSort = null;
+  if (!currentSort || currentSort.type !== "done") {
+    currentSort = { type: "done", direction: "asc" };
+  } else if (currentSort.direction === "asc") {
+    currentSort = { type: "done", direction: "desc" };
+  } else {
+    currentSort = null;
+  }
+  markActiveViewDirty();
+  syncCompletionUI();
+  renderItems();
+  renderTagPane();
+  scrollToItem(lastSelectedId);
 });
 
 document.getElementById("btn-date-filter").addEventListener("click", () => {
@@ -2598,7 +2647,8 @@ function captureViewState() {
   return {
     textFilters: textFilters.map((f) => f.pattern),
     tagFilters: tagFilters.map((f) => ({ tagId: f.tagId, condition: f.condition, exclude: f.exclude || false })),
-    completionFilter,
+    showActive,
+    showDone,
     dateFilterActive,
     sort: currentSort ? { ...currentSort } : null,
     hiddenTagIds: [...hiddenTagIds],
@@ -2623,22 +2673,30 @@ function applyViewState(view) {
     }
   }
 
-  completionFilter = view.completionFilter || "all";
-  document.querySelectorAll(".comp-btn").forEach((b) =>
-    b.classList.toggle("active", b.dataset.mode === completionFilter)
-  );
+  // Completion filter: new views store showActive/showDone; migrate old
+  // views that stored completionFilter ("all"/"active"/"done").
+  if ("showActive" in view || "showDone" in view) {
+    showActive = view.showActive !== false;
+    showDone = view.showDone !== false;
+  } else {
+    const cf = view.completionFilter || "all";
+    showActive = cf === "all" || cf === "active";
+    showDone = cf === "all" || cf === "done";
+  }
+  if (!showActive && !showDone) { showActive = true; showDone = true; }
 
   dateFilterActive = !!view.dateFilterActive;
   document.getElementById("btn-date-filter").classList.toggle("active", dateFilterActive);
 
-  if (view.sort && view.sort.type === "date") {
-    currentSort = { type: "date", direction: view.sort.direction || "asc" };
+  if (view.sort && (view.sort.type === "date" || view.sort.type === "done")) {
+    currentSort = { type: view.sort.type, direction: view.sort.direction || "asc" };
   } else if (view.sort && validTagIds.has(view.sort.tagId)) {
     currentSort = { tagId: view.sort.tagId, direction: view.sort.direction };
   } else {
     currentSort = null;
   }
   _stashedSort = null;
+  syncCompletionUI();
 
   hiddenTagIds.clear();
   for (const id of (view.hiddenTagIds || [])) {
@@ -2724,14 +2782,13 @@ function renderViewPane() {
           tagFilters.length = 0;
           currentSort = null;
           _stashedSort = null;
-          completionFilter = "all";
-          document.querySelectorAll(".comp-btn").forEach((b) =>
-            b.classList.toggle("active", b.dataset.mode === "all")
-          );
+          showActive = true;
+          showDone = true;
           dateFilterActive = false;
           document.getElementById("btn-date-filter").classList.remove("active");
           hiddenTagIds.clear();
           searchInput.value = "";
+          syncCompletionUI();
           renderFilterBar();
           renderItems();
           renderTagPane();
