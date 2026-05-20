@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.16.11";
+const KLAAR_VERSION = "0.16.12";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -1569,39 +1569,6 @@ document.getElementById("items-container").addEventListener("scroll", () => {
   if (_suppressScrollRender) return;
   if (visibleList.length > 0) renderViewport();
 });
-
-// --- TEMP DEBUG: trace scrollTop mutations on items-container ---
-// Wraps scrollTop setter to log every write with a source line, and listens
-// for scroll events to surface browser-initiated changes (anchoring, clamp,
-// etc.). Enable by setting window._scrollDebug = true in the console.
-(function () {
-  const container = document.getElementById("items-container");
-  const desc = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollTop")
-    || Object.getOwnPropertyDescriptor(Element.prototype, "scrollTop");
-  let lastSetValue = null;
-  let lastSetSource = "";
-  Object.defineProperty(container, "scrollTop", {
-    get() { return desc.get.call(this); },
-    set(v) {
-      if (window._scrollDebug) {
-        const src = (new Error().stack || "").split("\n")[2]?.trim() || "?";
-        console.log(`[scroll SET]  ${v.toFixed(1)}  ←  ${src}`);
-        lastSetValue = v;
-        lastSetSource = src;
-      }
-      desc.set.call(this, v);
-    },
-    configurable: true,
-  });
-  container.addEventListener("scroll", () => {
-    if (!window._scrollDebug) return;
-    const actual = container.scrollTop;
-    // Only flag drift — events that match what we just set are uninteresting.
-    if (lastSetValue == null || Math.abs(actual - lastSetValue) > 0.5) {
-      console.log(`[scroll EVT]  actual=${actual.toFixed(1)}  (last set=${lastSetValue == null ? "?" : lastSetValue.toFixed(1)} via ${lastSetSource})`);
-    }
-  });
-})();
 
 // Tooltip for truncated item text and date tag values (desktop only)
 if (!_isMobile) {
@@ -4184,10 +4151,11 @@ function updateAutoScroll(clientY) {
     const t = 1 - Math.max(0, distBottom) / AUTO_SCROLL_ZONE;
     speed = AUTO_SCROLL_MAX_SPEED * t * t;
   }
-  if (window._scrollDebug && dragState.autoScrollSpeed !== speed) {
-    console.log(`[upd ] clientY=${clientY} rect.top=${rect.top.toFixed(0)} rect.bot=${rect.bottom.toFixed(0)} distTop=${distTop.toFixed(0)} distBot=${distBottom.toFixed(0)} speed: ${dragState.autoScrollSpeed?.toFixed(0) || "0"} → ${speed.toFixed(0)}`);
-  }
   dragState.autoScrollSpeed = speed;
+  // Kick off the loop only if it isn't already running. _autoScrollFrame
+  // stays non-null for the entire life of the loop (including inside the
+  // tick), so this guard prevents scheduling duplicate, self-multiplying
+  // rAF chains.
   if (speed !== 0 && _autoScrollFrame == null) {
     _autoScrollLastTs = performance.now();
     _autoScrollFrame = requestAnimationFrame(autoScrollTick);
@@ -4195,20 +4163,22 @@ function updateAutoScroll(clientY) {
 }
 
 function autoScrollTick(ts) {
-  _autoScrollFrame = null;
-  if (!dragState || !dragState.autoScrollSpeed) return;
+  // NB: do NOT null _autoScrollFrame here. The tick calls onDragMove below,
+  // which calls updateAutoScroll; if the handle were null at that point,
+  // updateAutoScroll would schedule a second loop, and each tick would spawn
+  // two — an exponential rAF explosion. Keeping the handle non-null until we
+  // re-arm (or stop) at the end guarantees exactly one loop.
+  if (!dragState || !dragState.autoScrollSpeed) {
+    _autoScrollFrame = null;
+    return;
+  }
   // Clamp dt so a backgrounded tab returning doesn't jump the scroll
   const dt = Math.min(0.05, (ts - _autoScrollLastTs) / 1000);
   _autoScrollLastTs = ts;
   const container = document.getElementById("items-container");
   const maxScroll = container.scrollHeight - container.clientHeight;
   const before = container.scrollTop;
-  const intended = before + dragState.autoScrollSpeed * dt;
-  const clamped = Math.max(0, Math.min(maxScroll, intended));
-  if (window._scrollDebug) {
-    console.log(`[tick] before=${before.toFixed(1)} speed=${dragState.autoScrollSpeed.toFixed(0)} dt=${dt.toFixed(3)} intended=${intended.toFixed(1)} max=${maxScroll.toFixed(0)} → ${clamped.toFixed(1)} cursorY=${dragState.lastMouseClientY}`);
-  }
-  container.scrollTop = clamped;
+  container.scrollTop = Math.max(0, Math.min(maxScroll, before + dragState.autoScrollSpeed * dt));
   if (container.scrollTop !== before && dragState.lastMouseClientY != null) {
     // Re-run drop tracking with new scroll position — synthesize an event
     // from the saved mouse coordinates so the indicator follows correctly.
@@ -4216,6 +4186,8 @@ function autoScrollTick(ts) {
   }
   if (dragState && dragState.autoScrollSpeed !== 0) {
     _autoScrollFrame = requestAnimationFrame(autoScrollTick);
+  } else {
+    _autoScrollFrame = null;
   }
 }
 
