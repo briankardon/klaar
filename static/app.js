@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.17.0";
+const KLAAR_VERSION = "0.17.1";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -507,6 +507,70 @@ function onListMouseDown(e, dragLi) {
       // Save new order
       const order = Array.from(listIndex.children).map(li => li.dataset.id);
       api("/me", { method: "PATCH", body: { list_order: order } });
+    }
+  }
+
+  document.addEventListener("mousemove", onMove);
+  document.addEventListener("mouseup", onUp);
+}
+
+// View panel drag-and-drop reordering. Mirrors onListMouseDown. Sets
+// _viewDragged so the click that follows a reorder doesn't also apply the
+// view (which would clobber the user's current filters).
+let _viewDragged = false;
+function onViewMouseDown(e, dragLi) {
+  if (e.button !== 0 || mobileQuery.matches) return;
+  if (e.target.closest("button") || e.target.tagName === "INPUT") return;
+  const startY = e.clientY;
+  let started = false;
+  let ghost = null;
+  const items = Array.from(viewListEl.children);
+  const itemHeight = dragLi.getBoundingClientRect().height;
+  const listRect = viewListEl.getBoundingClientRect();
+
+  function onMove(me) {
+    const dy = Math.abs(me.clientY - startY);
+    if (!started && dy >= 5) {
+      started = true;
+      document.body.style.userSelect = "none";
+      ghost = document.createElement("div");
+      ghost.className = "drag-ghost";
+      ghost.style.width = dragLi.getBoundingClientRect().width + "px";
+      ghost.textContent = dragLi.querySelector(".view-name")?.textContent || "";
+      ghost.style.left = dragLi.getBoundingClientRect().left + "px";
+      ghost.style.top = dragLi.getBoundingClientRect().top + "px";
+      document.body.appendChild(ghost);
+      dragLi.classList.add("drag-source");
+    }
+    if (!started) return;
+    ghost.style.top = (me.clientY - (itemHeight / 2)) + "px";
+    const relY = me.clientY - listRect.top + viewListEl.scrollTop;
+    let targetIdx = Math.round(relY / itemHeight);
+    targetIdx = Math.max(0, Math.min(targetIdx, items.length - 1));
+    const currentIdx = items.indexOf(dragLi);
+    if (targetIdx !== currentIdx) {
+      items.splice(currentIdx, 1);
+      items.splice(targetIdx, 0, dragLi);
+      viewListEl.innerHTML = "";
+      items.forEach((li) => viewListEl.appendChild(li));
+    }
+  }
+
+  function onUp() {
+    document.removeEventListener("mousemove", onMove);
+    document.removeEventListener("mouseup", onUp);
+    if (started) {
+      document.body.style.userSelect = "";
+      if (ghost) ghost.remove();
+      dragLi.classList.remove("drag-source");
+      // Reorder currentViews to match the new DOM order, then persist.
+      const order = Array.from(viewListEl.children).map((li) => li.dataset.id);
+      const orderMap = new Map(order.map((id, i) => [id, i]));
+      currentViews.sort((a, b) => orderMap.get(a.id) - orderMap.get(b.id));
+      saveViewsToServer();
+      // Suppress the click that fires right after this mouseup.
+      _viewDragged = true;
+      setTimeout(() => { _viewDragged = false; }, 0);
     }
   }
 
@@ -2728,6 +2792,8 @@ function renderViewPane() {
   for (const view of currentViews) {
     const li = document.createElement("li");
     li.className = "view-entry";
+    li.dataset.id = view.id;
+    li.addEventListener("mousedown", (e) => onViewMouseDown(e, li));
 
     const marker = document.createElement("span");
     marker.className = "view-active-marker";
@@ -2772,6 +2838,7 @@ function renderViewPane() {
     // Click to apply (delayed to allow double-click)
     let viewClickTimer = null;
     li.addEventListener("click", () => {
+      if (_viewDragged) return;  // a reorder drag just ended; don't apply
       if (viewClickTimer) clearTimeout(viewClickTimer);
       viewClickTimer = setTimeout(() => {
         viewClickTimer = null;
