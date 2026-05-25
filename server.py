@@ -601,9 +601,95 @@ def register():
     }
     users.append(new_user)
     _save_users(users)
+    # A token-scoped invite is single-use: consume its marker on success so a
+    # leaked link can't be reused. Global open registration (no token) stays.
+    if invite:
+        marker = _invite_marker_path(invite)
+        if marker is not None and marker.exists():
+            try:
+                marker.unlink()
+            except OSError:
+                pass
     session.permanent = True
     session["user_id"] = new_user["id"]
     return jsonify({"ok": True}), 201
+
+
+# ---------------------------------------------------------------------------
+# Invite tokens (admin-only) — markers live as data/.registration_open_<token>
+# ---------------------------------------------------------------------------
+
+_INVITE_PREFIX = ".registration_open_"
+_INVITE_TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{4,64}$")
+
+
+def _invite_marker_path(token: str) -> Path | None:
+    """Path for an invite token's marker, or None if the token is malformed
+    (guards against path traversal via the token)."""
+    if not token or not _INVITE_TOKEN_RE.match(token):
+        return None
+    return DATA_DIR / f"{_INVITE_PREFIX}{token}"
+
+
+@app.get("/api/admin/invites")
+@_require_auth
+def list_invites():
+    user = _current_user()
+    if not user.get("admin"):
+        return jsonify({"error": "forbidden"}), 403
+    out = []
+    for p in sorted(DATA_DIR.glob(f"{_INVITE_PREFIX}*")):
+        token = p.name[len(_INVITE_PREFIX):]
+        if not _INVITE_TOKEN_RE.match(token):
+            continue
+        meta = {}
+        try:
+            meta = json.loads(p.read_text(encoding="utf-8") or "{}")
+        except (json.JSONDecodeError, OSError):
+            meta = {}
+        out.append({
+            "token": token,
+            "label": meta.get("label", ""),
+            "created_at": meta.get("created_at"),
+        })
+    return jsonify({
+        "invites": out,
+        "global_open": (DATA_DIR / ".registration_open").exists(),
+    })
+
+
+@app.post("/api/admin/invites")
+@_require_auth
+def create_invite():
+    user = _current_user()
+    if not user.get("admin"):
+        return jsonify({"error": "forbidden"}), 403
+    body = request.get_json(force=True) or {}
+    label = str(body.get("label", "")).strip()[:100]
+    token = secrets.token_urlsafe(12)
+    path = _invite_marker_path(token)
+    if path is None:
+        return jsonify({"error": "token generation failed"}), 500
+    meta = {"label": label, "created_at": _now(), "created_by": user["id"]}
+    path.write_text(json.dumps(meta), encoding="utf-8")
+    return jsonify({"token": token, "label": label, "created_at": meta["created_at"]})
+
+
+@app.delete("/api/admin/invites/<token>")
+@_require_auth
+def delete_invite(token: str):
+    user = _current_user()
+    if not user.get("admin"):
+        return jsonify({"error": "forbidden"}), 403
+    path = _invite_marker_path(token)
+    if path is None:
+        return jsonify({"error": "invalid token"}), 400
+    if path.exists():
+        try:
+            path.unlink()
+        except OSError:
+            return jsonify({"error": "could not revoke"}), 500
+    return "", 204
 
 
 @app.post("/api/login")

@@ -81,6 +81,7 @@ async function loadCurrentUser() {
   if (data.admin) {
     document.getElementById("admin-section").classList.remove("hidden");
     loadUsers();
+    loadInvites();
   }
 
   loadContacts();
@@ -417,6 +418,107 @@ document.getElementById("btn-delete-account").addEventListener("click", async ()
   }
   window.location.href = "/";
 });
+
+// --- Admin: invite links ---
+function inviteUrlFor(token) {
+  return window.location.origin + "/?invite=" + encodeURIComponent(token);
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+async function loadInvites() {
+  const data = await api("/admin/invites");
+  if (!data || data.error) return;
+  renderInvites(data.invites || []);
+}
+
+function renderInvites(invites) {
+  const tbody = document.getElementById("invites-list");
+  const table = document.getElementById("invites-table");
+  const empty = document.getElementById("invites-empty");
+  tbody.innerHTML = "";
+  if (invites.length === 0) {
+    table.classList.add("hidden");
+    empty.classList.remove("hidden");
+    return;
+  }
+  table.classList.remove("hidden");
+  empty.classList.add("hidden");
+  for (const inv of invites) {
+    const tr = document.createElement("tr");
+
+    const labelTd = document.createElement("td");
+    labelTd.textContent = inv.label || "(no label)";
+    if (!inv.label) labelTd.style.color = "var(--text-muted)";
+    tr.appendChild(labelTd);
+
+    const createdTd = document.createElement("td");
+    createdTd.textContent = inv.created_at ? new Date(inv.created_at).toLocaleDateString() : "—";
+    tr.appendChild(createdTd);
+
+    const linkTd = document.createElement("td");
+    const copyBtn = document.createElement("button");
+    copyBtn.className = "btn btn-small btn-primary";
+    copyBtn.textContent = "Copy link";
+    copyBtn.addEventListener("click", async () => {
+      const ok = await copyText(inviteUrlFor(inv.token));
+      copyBtn.textContent = ok ? "Copied!" : "Copy failed";
+      setTimeout(() => { copyBtn.textContent = "Copy link"; }, 1500);
+    });
+    linkTd.appendChild(copyBtn);
+    tr.appendChild(linkTd);
+
+    const actionsTd = document.createElement("td");
+    actionsTd.className = "actions";
+    const revokeBtn = document.createElement("button");
+    revokeBtn.className = "btn btn-small btn-danger";
+    revokeBtn.textContent = "Revoke";
+    revokeBtn.addEventListener("click", () => revokeInvite(inv.token, inv.label));
+    actionsTd.appendChild(revokeBtn);
+    tr.appendChild(actionsTd);
+
+    tbody.appendChild(tr);
+  }
+}
+
+document.getElementById("btn-create-invite").addEventListener("click", async () => {
+  const labelEl = document.getElementById("invite-label");
+  const msgEl = document.getElementById("invite-msg");
+  const data = await api("/admin/invites", { method: "POST", body: { label: labelEl.value.trim() } });
+  if (!data || data.error) {
+    showMsg(msgEl, data?.error || "Failed to create invite.", false);
+    return;
+  }
+  labelEl.value = "";
+  const copied = await copyText(inviteUrlFor(data.token));
+  showMsg(msgEl, copied ? "Invite link created and copied to clipboard." : "Invite link created (use Copy link to grab it).", true);
+  setTimeout(() => hideMsg(msgEl), 3500);
+  loadInvites();
+});
+
+async function revokeInvite(token, label) {
+  const ok = await confirmDialog(
+    "Revoke invite link?",
+    `The invite link${label ? ` for "${label}"` : ""} will stop working immediately.`
+  );
+  if (!ok) return;
+  const msgEl = document.getElementById("invite-msg");
+  const res = await api(`/admin/invites/${encodeURIComponent(token)}`, { method: "DELETE" });
+  if (res && res.error) {
+    showMsg(msgEl, res.error, false);
+    return;
+  }
+  showMsg(msgEl, "Invite revoked.", true);
+  setTimeout(() => hideMsg(msgEl), 2000);
+  loadInvites();
+}
 
 // --- Admin: load users ---
 async function loadUsers() {

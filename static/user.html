@@ -511,6 +511,32 @@
         <button class="btn btn-primary" id="btn-create-user">Create user</button>
       </div>
       <div id="create-msg" class="msg hidden"></div>
+
+      <h2 style="margin-top:1.5rem;">Invite Links</h2>
+      <p style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:0.6rem;">
+        Create a link that lets someone register one account. Each link is
+        <strong>single-use</strong> &mdash; it's consumed automatically after one
+        successful signup. Revoke any unused links you no longer want active.
+      </p>
+      <div class="field-row">
+        <input class="field-input" type="text" id="invite-label" placeholder="Label (optional, e.g. Alice)" style="max-width:240px;">
+        <button class="btn btn-primary btn-small" id="btn-create-invite">Create invite link</button>
+      </div>
+      <table class="user-table" id="invites-table">
+        <thead>
+          <tr>
+            <th>Label</th>
+            <th>Created</th>
+            <th>Link</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="invites-list"></tbody>
+      </table>
+      <div id="invites-empty" class="hidden" style="font-size:0.85rem; color:var(--text-muted);">
+        No active invite links.
+      </div>
+      <div id="invite-msg" class="msg hidden"></div>
     </div>
   </main>
 
