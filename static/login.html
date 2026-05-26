@@ -22,6 +22,7 @@
     <form id="register-form" class="hidden">
       <h3 style="margin-bottom:0.5rem;">Create Account</h3>
       <input type="text" id="reg-username" placeholder="Username" autocomplete="username" autocapitalize="none" autocorrect="off" required>
+      <input type="email" id="reg-email" placeholder="Email" autocomplete="email" autocapitalize="none" autocorrect="off" required>
       <input type="text" id="reg-display" placeholder="Display name (optional)" autocomplete="name">
       <input type="password" id="reg-password" placeholder="Password (6+ characters)" autocomplete="new-password" required minlength="6">
       <button type="submit">Create account</button>
@@ -60,6 +61,7 @@
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({
           username: document.getElementById("reg-username").value,
+          email: document.getElementById("reg-email").value,
           display_name: document.getElementById("reg-display").value,
           password: document.getElementById("reg-password").value,
           invite_token: _inviteToken,

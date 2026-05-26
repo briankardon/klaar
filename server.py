@@ -1,10 +1,13 @@
 """Klaar - a collaborative todo list server."""
 
 import copy
+import hashlib
+import hmac
 import json
 import os
 import re
 import secrets
+import struct
 import tarfile
 import tempfile
 import uuid
@@ -33,6 +36,133 @@ else:
     _secret_path.write_bytes(app.secret_key)
 
 app.permanent_session_lifetime = timedelta(days=90)
+
+# ---------------------------------------------------------------------------
+# At-rest encryption of list / user data files
+#
+# Goal: the raw .json files on disk are opaque ciphertext, so the operator
+# can't casually browse and read users' lists. The master key lives OUTSIDE
+# the data dir (so it isn't swept into backups) — default ./.klaar_enc_key,
+# overridable via KLAAR_ENC_KEY_FILE. A leaked backup archive therefore
+# contains only ciphertext with no key inside it.
+#
+# Construction: HMAC-SHA256 used as a PRF in CTR mode for the keystream,
+# plus encrypt-then-MAC with a separate HMAC key (standard, well-understood
+# compositions of a vetted primitive). This avoids a third-party crypto
+# dependency, which matters because NFSN runs FreeBSD where the usual
+# `cryptography` wheel isn't available and a source build needs a Rust
+# toolchain. It is NOT a substitute for a real AEAD against a sophisticated
+# attacker, but it comfortably meets the "operator can't casually read the
+# files" threat model this was built for.
+# ---------------------------------------------------------------------------
+
+ENC_MAGIC = b"KLAARENC1\n"  # prefix marking an encrypted blob; also a version tag
+_ENC_KEY_PATH = Path(os.environ.get("KLAAR_ENC_KEY_FILE", str(DATA_DIR.parent / ".klaar_enc_key")))
+_enc_key_cache: bytes | None = None
+
+
+def _enc_master_key() -> bytes:
+    global _enc_key_cache
+    if _enc_key_cache is not None:
+        return _enc_key_cache
+    if _ENC_KEY_PATH.exists():
+        _enc_key_cache = _ENC_KEY_PATH.read_bytes()
+    else:
+        key = secrets.token_bytes(32)
+        _ENC_KEY_PATH.write_bytes(key)
+        try:
+            os.chmod(_ENC_KEY_PATH, 0o600)
+        except OSError:
+            pass
+        _enc_key_cache = key
+    return _enc_key_cache
+
+
+def _xor_bytes(a: bytes, b: bytes) -> bytes:
+    # Big-int XOR — far faster than a Python byte-by-byte loop on large lists.
+    return (int.from_bytes(a, "big") ^ int.from_bytes(b, "big")).to_bytes(len(a), "big")
+
+
+def _enc_keystream(enc_key: bytes, nonce: bytes, length: int) -> bytes:
+    out = bytearray()
+    counter = 0
+    while len(out) < length:
+        out += hmac.new(enc_key, nonce + struct.pack(">Q", counter), hashlib.sha256).digest()
+        counter += 1
+    return bytes(out[:length])
+
+
+def _encrypt_bytes(plaintext: bytes) -> bytes:
+    key = _enc_master_key()
+    nonce = os.urandom(16)
+    enc_key = hmac.new(key, nonce + b"enc", hashlib.sha256).digest()
+    mac_key = hmac.new(key, nonce + b"mac", hashlib.sha256).digest()
+    ciphertext = _xor_bytes(plaintext, _enc_keystream(enc_key, nonce, len(plaintext)))
+    tag = hmac.new(mac_key, nonce + ciphertext, hashlib.sha256).digest()
+    return ENC_MAGIC + nonce + tag + ciphertext
+
+
+def _decrypt_bytes(blob: bytes) -> bytes:
+    body = blob[len(ENC_MAGIC):]
+    nonce, tag, ciphertext = body[:16], body[16:48], body[48:]
+    key = _enc_master_key()
+    mac_key = hmac.new(key, nonce + b"mac", hashlib.sha256).digest()
+    expected = hmac.new(mac_key, nonce + ciphertext, hashlib.sha256).digest()
+    if not hmac.compare_digest(expected, tag):
+        raise ValueError("ciphertext authentication failed (wrong key or corrupt file)")
+    enc_key = hmac.new(key, nonce + b"enc", hashlib.sha256).digest()
+    return _xor_bytes(ciphertext, _enc_keystream(enc_key, nonce, len(ciphertext)))
+
+
+def _maybe_decrypt(raw: bytes) -> bytes:
+    """Decrypt if the blob carries the encryption magic; otherwise return it
+    unchanged (legacy plaintext, transparently readable during migration)."""
+    if raw.startswith(ENC_MAGIC):
+        return _decrypt_bytes(raw)
+    return raw
+
+
+def _read_data_file(path: Path):
+    """Read + decrypt a list/users JSON file and parse it."""
+    return json.loads(_maybe_decrypt(path.read_bytes()).decode("utf-8"))
+
+
+def _write_data_file(path: Path, obj) -> None:
+    """Encrypt + atomically write a list/users object as JSON."""
+    blob = _encrypt_bytes(json.dumps(obj, indent=2, ensure_ascii=False).encode("utf-8"))
+    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(blob)
+        os.replace(tmp, path)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
+
+
+def _migrate_encrypt_at_rest() -> None:
+    """One-time pass: encrypt any still-plaintext list/users files in place,
+    without altering their contents (no version bump). Idempotent — already
+    encrypted files are skipped."""
+    for path in DATA_DIR.glob("*.json"):
+        try:
+            raw = path.read_bytes()
+            if raw.startswith(ENC_MAGIC):
+                continue
+            blob = _encrypt_bytes(raw)
+            fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+            try:
+                with os.fdopen(fd, "wb") as f:
+                    f.write(blob)
+                os.replace(tmp, path)
+            except BaseException:
+                if os.path.exists(tmp):
+                    os.unlink(tmp)
+                raise
+        except Exception as e:
+            print(f"[klaar] encrypt-at-rest migration failed for {path.name}: {e}", flush=True)
+
 
 UNDO_LIMIT = 50
 MIN_PASSWORD_LENGTH = 6
@@ -123,19 +253,11 @@ def _backup_hook():
 def _load_users() -> list[dict]:
     if not USERS_FILE.exists():
         return []
-    with open(USERS_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
+    return _read_data_file(USERS_FILE)
 
 
 def _save_users(users: list[dict]) -> None:
-    fd, tmp = tempfile.mkstemp(dir=DATA_DIR, suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(users, f, indent=2, ensure_ascii=False)
-        os.replace(tmp, USERS_FILE)
-    except BaseException:
-        os.unlink(tmp)
-        raise
+    _write_data_file(USERS_FILE, users)
 
 
 def _find_user(username: str) -> dict | None:
@@ -191,8 +313,7 @@ def _load_list(list_id: str) -> dict | None:
     path = _list_path(list_id)
     if not path.exists():
         return None
-    with open(path, "r", encoding="utf-8") as f:
-        data = json.load(f)
+    data = _read_data_file(path)
     _ensure_tags(data)
     _migrate_list_fields(data)
     return data
@@ -227,15 +348,7 @@ def _save_with_undo(data: dict, snapshot: dict) -> None:
 
 def _save_list(data: dict) -> None:
     data["version"] = data.get("version", 0) + 1
-    path = _list_path(data["id"])
-    fd, tmp = tempfile.mkstemp(dir=DATA_DIR, suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-        os.replace(tmp, path)
-    except BaseException:
-        os.unlink(tmp)
-        raise
+    _write_data_file(_list_path(data["id"]), data)
 
 
 def _new_item(text: str, depth: int = 0) -> dict:
@@ -320,11 +433,10 @@ def _delete_user_data(uid: str, users: list) -> None:
         if path.name == "users.json":
             continue
         try:
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
+            data = _read_data_file(path)
             if data.get("owner") == uid:
                 path.unlink()
-        except (json.JSONDecodeError, KeyError):
+        except (ValueError, KeyError):
             pass
     for other in users:
         if other["id"] == uid:
@@ -544,12 +656,11 @@ def setup():
         if path.name == "users.json":
             continue
         try:
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
+            data = _read_data_file(path)
             if data.get("owner") is None:
                 data["owner"] = user["id"]
                 _save_list(data)
-        except (json.JSONDecodeError, KeyError):
+        except (ValueError, KeyError):
             pass
     session.permanent = True
     session["user_id"] = user["id"]
@@ -575,6 +686,13 @@ def registration_status():
     return jsonify({"open": _registration_is_open(invite)})
 
 
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def _valid_email(s: str) -> bool:
+    return bool(_EMAIL_RE.match(s or ""))
+
+
 @app.post("/api/register")
 def register():
     body = request.get_json(force=True)
@@ -584,8 +702,11 @@ def register():
     username = body.get("username", "").strip()
     password = body.get("password", "")
     display = body.get("display_name", "").strip() or username
+    email = body.get("email", "").strip()
     if not username or not password:
         return jsonify({"error": "username and password required"}), 400
+    if not _valid_email(email):
+        return jsonify({"error": "a valid email address is required"}), 400
     if len(password) < MIN_PASSWORD_LENGTH:
         return jsonify({"error": f"password must be at least {MIN_PASSWORD_LENGTH} characters"}), 400
     if _find_user(username):
@@ -596,6 +717,7 @@ def register():
         "username": username,
         "password_hash": generate_password_hash(password),
         "display_name": display,
+        "email": email,
         "admin": False,
         "created": _now(),
     }
@@ -645,7 +767,7 @@ def list_invites():
         meta = {}
         try:
             meta = json.loads(p.read_text(encoding="utf-8") or "{}")
-        except (json.JSONDecodeError, OSError):
+        except (ValueError, OSError):
             meta = {}
         out.append({
             "token": token,
@@ -720,6 +842,7 @@ def me():
         "id": user["id"],
         "username": user["username"],
         "display_name": user["display_name"],
+        "email": user.get("email", ""),
         "admin": user.get("admin", False),
         "pending_contacts": len(user["contact_requests_in"]),
     })
@@ -737,6 +860,7 @@ def list_users():
         "id": u["id"],
         "username": u["username"],
         "display_name": u["display_name"],
+        "email": u.get("email", ""),
         "admin": u.get("admin", False),
     } for u in users])
 
@@ -757,6 +881,12 @@ def update_me():
         if dn:
             u["display_name"] = dn
 
+    if "email" in body:
+        em = str(body["email"]).strip()
+        if not _valid_email(em):
+            return jsonify({"error": "a valid email address is required"}), 400
+        u["email"] = em
+
     if "new_password" in body:
         current_pw = body.get("current_password", "")
         if not check_password_hash(u["password_hash"], current_pw):
@@ -774,6 +904,7 @@ def update_me():
         "id": u["id"],
         "username": u["username"],
         "display_name": u["display_name"],
+        "email": u.get("email", ""),
         "admin": u.get("admin", False),
     })
 
@@ -836,6 +967,11 @@ def admin_update_user(user_id: str):
         dn = str(body["display_name"]).strip()[:200]
         if dn:
             target["display_name"] = dn
+    if "email" in body:
+        em = str(body["email"]).strip()
+        if not _valid_email(em):
+            return jsonify({"error": "a valid email address is required"}), 400
+        target["email"] = em
     if "admin" in body:
         target["admin"] = bool(body["admin"])
     if "password" in body:
@@ -849,6 +985,7 @@ def admin_update_user(user_id: str):
         "id": target["id"],
         "username": target["username"],
         "display_name": target["display_name"],
+        "email": target.get("email", ""),
         "admin": target.get("admin", False),
     })
 
@@ -864,8 +1001,11 @@ def create_user():
     username = body.get("username", "").strip()
     password = body.get("password", "")
     display = body.get("display_name", "").strip() or username
+    email = body.get("email", "").strip()
     if not username or not password:
         return jsonify({"error": "username and password required"}), 400
+    if email and not _valid_email(email):
+        return jsonify({"error": "email address is not valid"}), 400
     if len(password) < MIN_PASSWORD_LENGTH:
         return jsonify({"error": f"password must be at least {MIN_PASSWORD_LENGTH} characters"}), 400
     if _find_user(username):
@@ -876,12 +1016,13 @@ def create_user():
         "username": username,
         "password_hash": generate_password_hash(password),
         "display_name": display,
+        "email": email,
         "admin": bool(body.get("admin", False)),
         "created": _now(),
     }
     users.append(new_user)
     _save_users(users)
-    return jsonify({"id": new_user["id"], "username": username, "display_name": display}), 201
+    return jsonify({"id": new_user["id"], "username": username, "display_name": display, "email": email}), 201
 
 
 # ---------------------------------------------------------------------------
@@ -1043,8 +1184,7 @@ def get_lists():
         if path.name == "users.json":
             continue
         try:
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
+            data = _read_data_file(path)
             _migrate_list_fields(data)
             if not _can_access(data, user):
                 continue
@@ -1055,7 +1195,7 @@ def get_lists():
                 "owner": data.get("owner"),
                 "shared": len(data.get("shared_with", [])) > 0,
             })
-        except (json.JSONDecodeError, KeyError):
+        except (ValueError, KeyError):
             continue
     # Sort by user's saved list order, pruning stale IDs
     order = user.get("list_order", [])
@@ -1703,11 +1843,10 @@ def get_upcoming():
         if path.name == "users.json":
             continue
         try:
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
+            data = _read_data_file(path)
             _migrate_list_fields(data)
             _ensure_tags(data)
-        except (json.JSONDecodeError, KeyError, OSError):
+        except (ValueError, KeyError, OSError):
             continue
         if not _can_access(data, user):
             continue
@@ -1819,11 +1958,10 @@ def _collect_calendar_events(user: dict, list_filter_id: str | None) -> list[dic
         if path.name == "users.json":
             continue
         try:
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
+            data = _read_data_file(path)
             _migrate_list_fields(data)
             _ensure_tags(data)
-        except (json.JSONDecodeError, KeyError, OSError):
+        except (ValueError, KeyError, OSError):
             continue
         if not _can_access(data, user):
             continue
@@ -2102,10 +2240,9 @@ def list_my_api_tokens():
         if path.name == "users.json":
             continue
         try:
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
+            data = _read_data_file(path)
             _migrate_list_fields(data)
-        except (json.JSONDecodeError, KeyError, OSError):
+        except (ValueError, KeyError, OSError):
             continue
         if not data.get("api_token"):
             continue
@@ -2204,8 +2341,8 @@ def browse_backup(date: str):
                 if f is None:
                     continue
                 try:
-                    data = json.load(f)
-                except json.JSONDecodeError:
+                    data = json.loads(_maybe_decrypt(f.read()).decode("utf-8"))
+                except (ValueError, OSError):
                     continue
                 if not _user_can_browse_in_backup(data, user):
                     continue
@@ -2257,8 +2394,8 @@ def restore_from_backup(date: str):
                 if f is None:
                     break
                 try:
-                    target = json.load(f)
-                except json.JSONDecodeError:
+                    target = json.loads(_maybe_decrypt(f.read()).decode("utf-8"))
+                except (ValueError, OSError):
                     pass
                 break
     except (tarfile.TarError, OSError) as e:
@@ -2326,6 +2463,10 @@ def generate_test_list():
 # ---------------------------------------------------------------------------
 # Run
 # ---------------------------------------------------------------------------
+
+# Encrypt any legacy plaintext data files in place on startup (idempotent).
+# Runs under gunicorn (import time) too, not just `python server.py`.
+_migrate_encrypt_at_rest()
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)

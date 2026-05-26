@@ -77,6 +77,7 @@ async function loadCurrentUser() {
   document.getElementById("header-user").textContent = data.display_name || data.username;
   document.getElementById("profile-username").textContent = data.username;
   document.getElementById("profile-display-name").value = data.display_name || "";
+  document.getElementById("profile-email").value = data.email || "";
 
   if (data.admin) {
     document.getElementById("admin-section").classList.remove("hidden");
@@ -361,6 +362,22 @@ document.getElementById("btn-save-display").addEventListener("click", async () =
   currentUser.display_name = data.display_name;
 });
 
+document.getElementById("btn-save-email").addEventListener("click", async () => {
+  const msgEl = document.getElementById("email-msg");
+  hideMsg(msgEl);
+  const email = document.getElementById("profile-email").value.trim();
+  const data = await api("/me", {
+    method: "PATCH",
+    body: { email },
+  });
+  if (!data || data.error) {
+    showMsg(msgEl, data?.error || "Failed to update email.", false);
+    return;
+  }
+  showMsg(msgEl, "Email updated.", true);
+  currentUser.email = data.email;
+});
+
 // --- Change password ---
 document.getElementById("btn-change-pw").addEventListener("click", async () => {
   const msgEl = document.getElementById("pw-msg");
@@ -537,6 +554,11 @@ async function loadUsers() {
     tdDisplay.textContent = u.display_name || "";
     tr.appendChild(tdDisplay);
 
+    const tdEmail = document.createElement("td");
+    tdEmail.textContent = u.email || "—";
+    if (!u.email) tdEmail.style.color = "var(--text-muted)";
+    tr.appendChild(tdEmail);
+
     const tdRole = document.createElement("td");
     if (u.admin) {
       const badge = document.createElement("span");
@@ -573,6 +595,13 @@ async function loadUsers() {
       editBtn.textContent = "Edit name";
       editBtn.addEventListener("click", () => editUserDisplayName(u));
       tdActions.appendChild(editBtn);
+
+      // Edit email button
+      const emailBtn = document.createElement("button");
+      emailBtn.className = "btn btn-small btn-primary";
+      emailBtn.textContent = "Edit email";
+      emailBtn.addEventListener("click", () => editUserEmail(u));
+      tdActions.appendChild(emailBtn);
 
       // Delete button
       const delBtn = document.createElement("button");
@@ -655,6 +684,27 @@ async function editUserDisplayName(user) {
   loadUsers();
 }
 
+// --- Admin: edit email ---
+async function editUserEmail(user) {
+  const ok = await confirmDialog(
+    "Edit email for " + user.username,
+    "Enter a new email address.",
+    '<div class="form-group" style="margin-top:0.5rem;"><label for="edit-email-input">Email</label><input class="field-input" type="email" id="edit-email-input" value="' + (user.email || "").replace(/"/g, "&quot;") + '" autocomplete="off" autocapitalize="none"></div>'
+  );
+  if (!ok) return;
+
+  const email = document.getElementById("edit-email-input")?.value.trim() || "";
+  const data = await api(`/users/${user.id}`, {
+    method: "PATCH",
+    body: { email },
+  });
+  if (!data || data.error) {
+    alert(data?.error || "Failed to update email.");
+    return;
+  }
+  loadUsers();
+}
+
 // --- Admin: delete user ---
 async function deleteUser(user) {
   const ok = await confirmDialog(
@@ -678,6 +728,7 @@ document.getElementById("btn-create-user").addEventListener("click", async () =>
   hideMsg(msgEl);
 
   const username = document.getElementById("new-username").value.trim();
+  const email = document.getElementById("new-email").value.trim();
   const displayName = document.getElementById("new-display").value.trim();
   const password = document.getElementById("new-password").value;
   const admin = document.getElementById("new-admin").checked;
@@ -693,7 +744,7 @@ document.getElementById("btn-create-user").addEventListener("click", async () =>
 
   const data = await api("/users", {
     method: "POST",
-    body: { username, display_name: displayName || username, password, admin },
+    body: { username, email, display_name: displayName || username, password, admin },
   });
   if (!data || data.error) {
     showMsg(msgEl, data?.error || "Failed to create user.", false);
@@ -702,6 +753,7 @@ document.getElementById("btn-create-user").addEventListener("click", async () =>
 
   showMsg(msgEl, "User " + data.username + " created.", true);
   document.getElementById("new-username").value = "";
+  document.getElementById("new-email").value = "";
   document.getElementById("new-display").value = "";
   document.getElementById("new-password").value = "";
   document.getElementById("new-admin").checked = false;

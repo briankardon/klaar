@@ -340,6 +340,12 @@
         <button class="btn btn-primary btn-small" id="btn-save-display">Save</button>
       </div>
       <div id="display-msg" class="msg hidden"></div>
+      <div class="field-row">
+        <span class="field-label">Email</span>
+        <input class="field-input" type="email" id="profile-email" placeholder="Email" autocapitalize="none" autocorrect="off">
+        <button class="btn btn-primary btn-small" id="btn-save-email">Save</button>
+      </div>
+      <div id="email-msg" class="msg hidden"></div>
     </div>
 
     <!-- Change password section -->
@@ -481,6 +487,7 @@
           <tr>
             <th>Username</th>
             <th>Display Name</th>
+            <th>Email</th>
             <th>Role</th>
             <th>Actions</th>
           </tr>
@@ -492,6 +499,10 @@
       <div class="form-group">
         <label for="new-username">Username</label>
         <input class="field-input" type="text" id="new-username" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label for="new-email">Email</label>
+        <input class="field-input" type="email" id="new-email" autocomplete="off" autocapitalize="none">
       </div>
       <div class="form-group">
         <label for="new-display">Display name</label>
