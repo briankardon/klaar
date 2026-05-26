@@ -83,6 +83,7 @@ async function loadCurrentUser() {
     document.getElementById("admin-section").classList.remove("hidden");
     loadUsers();
     loadInvites();
+    loadEncryptionStatus();
   }
 
   loadContacts();
@@ -536,6 +537,70 @@ async function revokeInvite(token, label) {
   setTimeout(() => hideMsg(msgEl), 2000);
   loadInvites();
 }
+
+// --- Admin: encryption at rest ---
+async function loadEncryptionStatus() {
+  const data = await api("/admin/encryption");
+  if (!data || data.error) return;
+  renderEncryptionStatus(data);
+}
+
+function renderEncryptionStatus(d) {
+  const statusEl = document.getElementById("encryption-status");
+  const btn = document.getElementById("btn-encrypt-now");
+  if (!d.key_present) {
+    statusEl.innerHTML = `<span style="color:var(--accent-red);">Encryption is OFF.</span> `
+      + `${d.plaintext_files} file(s) stored as plaintext.`;
+    btn.textContent = "Encrypt existing data";
+  } else if (d.plaintext_files > 0) {
+    statusEl.innerHTML = `<span style="color:var(--accent-orange,#e67e22);">Partially encrypted.</span> `
+      + `${d.encrypted_files} encrypted, ${d.plaintext_files} still plaintext.`;
+    btn.textContent = "Encrypt remaining data";
+  } else {
+    statusEl.innerHTML = `<span style="color:var(--accent-green);">Encryption is ON.</span> `
+      + `All ${d.encrypted_files} file(s) encrypted. Key at <code>${d.key_path}</code>.`;
+    btn.textContent = "Re-run encryption (no-op)";
+  }
+  // Offer the key for backup whenever it's readable.
+  if (d.key_b64) showEncryptionKeyBackup(d.key_b64);
+}
+
+function showEncryptionKeyBackup(keyB64) {
+  document.getElementById("encryption-key-backup").classList.remove("hidden");
+  document.getElementById("encryption-key-value").value = keyB64;
+}
+
+document.getElementById("btn-encrypt-now").addEventListener("click", async () => {
+  const msgEl = document.getElementById("encryption-msg");
+  const ok = await confirmDialog(
+    "Encrypt data on disk?",
+    "This generates the encryption key (if not already present) and encrypts "
+    + "any plaintext list/account files in place. Safe to re-run. After it "
+    + "completes, back up the key shown — losing it means losing the data."
+  );
+  if (!ok) return;
+  hideMsg(msgEl);
+  const btn = document.getElementById("btn-encrypt-now");
+  btn.disabled = true;
+  const data = await api("/admin/encryption/encrypt-now", { method: "POST" });
+  btn.disabled = false;
+  if (!data || data.error) {
+    showMsg(msgEl, data?.error || "Encryption failed.", false);
+    return;
+  }
+  showMsg(msgEl, `Done. ${data.newly_encrypted} file(s) newly encrypted; `
+    + `${data.encrypted_files} total encrypted.`, true);
+  if (data.key_b64) showEncryptionKeyBackup(data.key_b64);
+  loadEncryptionStatus();
+});
+
+document.getElementById("btn-copy-enc-key").addEventListener("click", async () => {
+  const val = document.getElementById("encryption-key-value").value;
+  const ok = await copyText(val);
+  const btn = document.getElementById("btn-copy-enc-key");
+  btn.textContent = ok ? "Copied!" : "Copy failed";
+  setTimeout(() => { btn.textContent = "Copy"; }, 1500);
+});
 
 // --- Admin: load users ---
 async function loadUsers() {

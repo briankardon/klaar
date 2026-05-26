@@ -26,36 +26,58 @@ holds the key and can read everything; it's a "files aren't plaintext" layer.
 - Lives in a single key file, **outside** the `data/` directory so it is never
   swept into backups. Default location: `./.klaar_enc_key` (a sibling of
   `data/`). Override with the `KLAAR_ENC_KEY_FILE` environment variable.
-- It is **never generated automatically.** You create it once, explicitly.
+- It is **never generated automatically on startup.** It's created by an
+  explicit action (the admin UI button, or the CLI below).
 - **If the key is lost, all encrypted lists and user accounts are permanently
   unrecoverable.** Back it up somewhere safe (e.g. a password manager),
   separately from your data backups.
 
-### First-time setup
+> **Where to put the key:** point `KLAAR_ENC_KEY_FILE` at a location that is
+> (a) writable/readable by the user the web server runs as, and (b) *not* under
+> the public web root. On NearlyFreeSpeech, `/home/private/klaar_enc_key` is
+> ideal — persistent and never web-served. Set the env var consistently for the
+> gunicorn process (and any CLI use).
 
-From the app directory (the one containing `data/`):
+### Enabling encryption (recommended: in-app)
+
+The web server runs as its own user (e.g. `web` on NFSN) and owns the data
+files. The simplest, ownership-safe way to enable encryption is from inside
+that process:
+
+1. Make sure no stale key file exists that the web user can't read (if you
+   created one as a different SSH user, remove it).
+2. Start the server. With no key and no encrypted data yet, it boots in
+   **plaintext bootstrap mode** and logs a warning.
+3. As an admin, open the user page → **Encryption at Rest** → **Encrypt
+   existing data**. This generates the key as the server's own user and
+   encrypts all plaintext files in place.
+4. **Copy the key shown and back it up** (password manager). The key file is
+   owned by the web user, so you generally can't read it over SSH — the UI
+   surfaces it for exactly this reason.
+
+This is idempotent — re-running skips already-encrypted files and never
+regenerates an existing key.
+
+### Enabling encryption (CLI alternative)
+
+If you can run commands *as the web user* (so file ownership matches), from the
+app directory:
 
 ```
-python server.py --gen-key          # create the master key (won't overwrite)
-python server.py --encrypt-existing  # encrypt any existing plaintext data
+python server.py --gen-key           # create the key (won't overwrite)
+python server.py --encrypt-existing  # encrypt existing plaintext data
 ```
-
-Then start the server normally. `--encrypt-existing` is idempotent and only
-needs to be run once (or again if plaintext files ever appear); it encrypts
-files in place without changing their contents.
-
-> **Tip:** run these from the *same working directory* the server runs in, so
-> the default key path resolves to the same place. To avoid any ambiguity, set
-> `KLAAR_ENC_KEY_FILE` to an absolute path and use it consistently for the CLI
-> commands, the dev server, and the gunicorn process.
 
 ### Normal startup behavior
 
 On startup (dev server or gunicorn import) the server:
 
-1. **Refuses to boot if the key file is missing** — it exits with a fatal error
-   rather than minting a fresh key that couldn't read existing data.
-2. **Refuses to boot if the key can't decrypt existing data** — catches the
+1. **Boots in plaintext bootstrap mode** if there's no key *and* no encrypted
+   data yet — so you can reach the admin action to enable encryption. It does
+   not silently mint a key.
+2. **Refuses to boot if encrypted data exists but the key is missing** — rather
+   than stranding it behind a fresh key.
+3. **Refuses to boot if the key can't decrypt existing data** — catches the
    "wrong key restored" case before serving anything.
 
 So if a restart ever fails with a key error, **stop and restore the correct
@@ -64,8 +86,8 @@ key** rather than letting anything regenerate.
 ### Restoring from a backup
 
 Data backups (in `data/backups/`) contain only ciphertext — the key is not in
-them by design. To restore, you need both the backup **and** the matching
-`.klaar_enc_key`. Keep them in separate safe places.
+them by design. To restore, you need both the backup **and** the matching key
+file. Keep them in separate safe places.
 
 ## Backups
 

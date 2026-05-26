@@ -548,6 +548,31 @@
         No active invite links.
       </div>
       <div id="invite-msg" class="msg hidden"></div>
+
+      <h2 style="margin-top:1.5rem;">Encryption at Rest</h2>
+      <p style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:0.6rem;">
+        Encrypts all list and account files on disk so they can't be read by
+        browsing the filesystem. Clicking <strong>Encrypt existing data</strong>
+        generates the key (if needed) as the server's own user and encrypts any
+        plaintext files in place. It's safe to re-run &mdash; already-encrypted
+        files are skipped.
+      </p>
+      <div id="encryption-status" style="font-size:0.85rem; margin-bottom:0.6rem;"></div>
+      <div class="form-actions">
+        <button class="btn btn-primary" id="btn-encrypt-now">Encrypt existing data</button>
+      </div>
+      <div id="encryption-msg" class="msg hidden"></div>
+      <div id="encryption-key-backup" class="hidden" style="margin-top:0.8rem; padding:0.8rem; border:1px solid var(--accent-red); border-radius:6px;">
+        <p style="font-size:0.85rem; color:var(--text-primary); margin-bottom:0.4rem;">
+          <strong>Back up this key now.</strong> It is the only thing that can
+          decrypt your data (and your backups). If it's lost, the data is gone.
+          Store it in a password manager, separate from your data backups.
+        </p>
+        <div class="field-row">
+          <input class="field-input" type="text" id="encryption-key-value" readonly style="max-width:420px; font-family:monospace;">
+          <button class="btn btn-primary btn-small" id="btn-copy-enc-key">Copy</button>
+        </div>
+      </div>
     </div>
   </main>
 

@@ -1,5 +1,6 @@
 """Klaar - a collaborative todo list server."""
 
+import base64
 import copy
 import hashlib
 import hmac
@@ -133,8 +134,10 @@ def _read_data_file(path: Path):
 
 
 def _write_data_file(path: Path, obj) -> None:
-    """Encrypt + atomically write a list/users object as JSON."""
-    blob = _encrypt_bytes(json.dumps(obj, indent=2, ensure_ascii=False).encode("utf-8"))
+    """Atomically write a list/users object as JSON. Encrypts if a key exists;
+    otherwise writes plaintext (bootstrap mode, before encryption is enabled)."""
+    payload = json.dumps(obj, indent=2, ensure_ascii=False).encode("utf-8")
+    blob = _encrypt_bytes(payload) if _ENC_KEY_PATH.exists() else payload
     fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
     try:
         with os.fdopen(fd, "wb") as f:
@@ -173,18 +176,68 @@ def _migrate_encrypt_at_rest() -> int:
     return count
 
 
+def _encrypted_data_exists() -> bool:
+    """True if any data file on disk is already encrypted."""
+    for path in DATA_DIR.glob("*.json"):
+        try:
+            with open(path, "rb") as f:
+                if f.read(len(ENC_MAGIC)) == ENC_MAGIC:
+                    return True
+        except OSError:
+            continue
+    return False
+
+
+def _ensure_key_exists() -> bytes:
+    """Return the master key bytes, generating the file if it doesn't exist.
+    When called from the server process this produces a key owned by the same
+    user the server runs as (so the server can read it). Never clobbers."""
+    global _enc_key_cache
+    if not _ENC_KEY_PATH.exists():
+        _ENC_KEY_PATH.write_bytes(secrets.token_bytes(32))
+        try:
+            os.chmod(_ENC_KEY_PATH, 0o600)
+        except OSError:
+            pass
+        _enc_key_cache = None  # force reload from the new file
+    return _enc_master_key()
+
+
 def _require_key_or_exit() -> None:
-    """Fatal-exit if the encryption key is missing. Called on normal startup so
-    a missing key crashes the server loudly instead of minting a fresh one."""
+    """Fatal-exit if the encryption key is missing. Used by the --encrypt-existing
+    CLI path, which needs a key to encrypt with."""
     if not _ENC_KEY_PATH.exists():
         sys.stderr.write(
             f"\n[klaar] FATAL: encryption key not found at {_ENC_KEY_PATH}\n"
             f"  Generate one with:   python server.py --gen-key\n"
-            f"  (or point KLAAR_ENC_KEY_FILE at an existing key)\n"
-            f"  Refusing to start so existing encrypted data isn't stranded\n"
-            f"  behind a freshly minted key.\n\n"
+            f"  (or use the admin 'Encrypt existing data' action in the web UI)\n\n"
         )
         raise SystemExit(1)
+
+
+def _startup_encryption_check() -> None:
+    """Run at startup (dev server and gunicorn import).
+
+    - Key present  -> verify it can decrypt existing data (crash if wrong).
+    - No key, but encrypted data exists -> crash (don't strand it).
+    - No key and no encrypted data -> bootstrap: boot in plaintext mode and
+      warn. Encryption is enabled later via the admin 'Encrypt existing data'
+      action (or the CLI), which generates the key as the server's own user.
+    """
+    if _ENC_KEY_PATH.exists():
+        _verify_key_or_exit()
+    elif _encrypted_data_exists():
+        sys.stderr.write(
+            f"\n[klaar] FATAL: encrypted data is present but the key at\n"
+            f"  {_ENC_KEY_PATH} is missing. Refusing to start. Restore the key.\n\n"
+        )
+        raise SystemExit(1)
+    else:
+        print(
+            "[klaar] No encryption key present - data is stored as PLAINTEXT. "
+            "Enable encryption via the admin 'Encrypt existing data' action.",
+            flush=True,
+        )
 
 
 def _verify_key_or_exit() -> None:
@@ -2497,6 +2550,82 @@ def download_backup(date: str):
     )
 
 
+# ---------------------------------------------------------------------------
+# At-rest encryption management (admin-only)
+# ---------------------------------------------------------------------------
+
+def _encryption_counts() -> tuple[int, int]:
+    """(encrypted_files, plaintext_files) among data/*.json."""
+    enc = plain = 0
+    for path in DATA_DIR.glob("*.json"):
+        try:
+            with open(path, "rb") as f:
+                head = f.read(len(ENC_MAGIC))
+        except OSError:
+            continue
+        if head == ENC_MAGIC:
+            enc += 1
+        else:
+            plain += 1
+    return enc, plain
+
+
+def _key_b64_or_none():
+    if not _ENC_KEY_PATH.exists():
+        return None
+    try:
+        return base64.b64encode(_enc_master_key()).decode("ascii")
+    except Exception:
+        return None  # present but unreadable (e.g. owned by another user)
+
+
+@app.get("/api/admin/encryption")
+@_require_auth
+def encryption_status():
+    """Admin-only: report encryption state and (for backup) the key value."""
+    user = _current_user()
+    if not user.get("admin"):
+        return jsonify({"error": "forbidden"}), 403
+    enc, plain = _encryption_counts()
+    key_present = _ENC_KEY_PATH.exists()
+    return jsonify({
+        "key_present": key_present,
+        "key_readable": _key_b64_or_none() is not None if key_present else False,
+        "key_b64": _key_b64_or_none(),
+        "key_path": str(_ENC_KEY_PATH),
+        "encrypted_files": enc,
+        "plaintext_files": plain,
+    })
+
+
+@app.post("/api/admin/encryption/encrypt-now")
+@_require_auth
+def encryption_encrypt_now():
+    """Admin-only: enable encryption. Generates the key if absent (owned by the
+    server's own user), then encrypts any plaintext data files in place.
+
+    Safe to re-run: already-encrypted files are skipped (no double-encryption),
+    and the key is never regenerated if one already exists."""
+    user = _current_user()
+    if not user.get("admin"):
+        return jsonify({"error": "forbidden"}), 403
+    key_created = not _ENC_KEY_PATH.exists()
+    try:
+        _ensure_key_exists()
+    except OSError as e:
+        return jsonify({"error": f"could not create/read key: {e}"}), 500
+    encrypted = _migrate_encrypt_at_rest()
+    enc, plain = _encryption_counts()
+    return jsonify({
+        "key_created": key_created,
+        "newly_encrypted": encrypted,
+        "encrypted_files": enc,
+        "plaintext_files": plain,
+        "key_b64": _key_b64_or_none(),
+        "key_path": str(_ENC_KEY_PATH),
+    })
+
+
 @app.post("/api/lists/generate-test")
 @_require_auth
 def generate_test_list():
@@ -2532,13 +2661,8 @@ if __name__ == "__main__":
         n = _migrate_encrypt_at_rest()
         print(f"Encrypted {n} plaintext file(s) in {DATA_DIR}/.")
     else:
-        # Dev server: enforce the key just like production.
-        _require_key_or_exit()
-        _verify_key_or_exit()
+        _startup_encryption_check()
         app.run(debug=True, port=5000)
 else:
-    # Imported by gunicorn — enforce key presence (and correctness) at load
-    # time so a missing/wrong key fails the worker boot loudly instead of
-    # silently generating a new one and stranding existing data.
-    _require_key_or_exit()
-    _verify_key_or_exit()
+    # Imported by gunicorn — verify encryption state at worker-boot time.
+    _startup_encryption_check()
