@@ -69,11 +69,18 @@ _ENC_KEY_PATH = Path(os.environ.get("KLAAR_ENC_KEY_FILE", str(DATA_DIR.parent / 
 _enc_key_cache: bytes | None = None
 
 
+def _key_present() -> bool:
+    """Whether the key file exists and is accessible. os.path.exists swallows
+    permission errors (returns False), so a key path the server's user can't
+    reach degrades to 'no key' rather than raising at the call site."""
+    return os.path.exists(_ENC_KEY_PATH)
+
+
 def _enc_master_key() -> bytes:
     global _enc_key_cache
     if _enc_key_cache is not None:
         return _enc_key_cache
-    if not _ENC_KEY_PATH.exists():
+    if not _key_present():
         raise RuntimeError(
             f"Encryption key not found at {_ENC_KEY_PATH}. "
             f"Generate one with `python server.py --gen-key` (or point "
@@ -137,7 +144,7 @@ def _write_data_file(path: Path, obj) -> None:
     """Atomically write a list/users object as JSON. Encrypts if a key exists;
     otherwise writes plaintext (bootstrap mode, before encryption is enabled)."""
     payload = json.dumps(obj, indent=2, ensure_ascii=False).encode("utf-8")
-    blob = _encrypt_bytes(payload) if _ENC_KEY_PATH.exists() else payload
+    blob = _encrypt_bytes(payload) if _key_present() else payload
     fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
     try:
         with os.fdopen(fd, "wb") as f:
@@ -193,7 +200,7 @@ def _ensure_key_exists() -> bytes:
     When called from the server process this produces a key owned by the same
     user the server runs as (so the server can read it). Never clobbers."""
     global _enc_key_cache
-    if not _ENC_KEY_PATH.exists():
+    if not _key_present():
         _ENC_KEY_PATH.write_bytes(secrets.token_bytes(32))
         try:
             os.chmod(_ENC_KEY_PATH, 0o600)
@@ -206,7 +213,7 @@ def _ensure_key_exists() -> bytes:
 def _require_key_or_exit() -> None:
     """Fatal-exit if the encryption key is missing. Used by the --encrypt-existing
     CLI path, which needs a key to encrypt with."""
-    if not _ENC_KEY_PATH.exists():
+    if not _key_present():
         sys.stderr.write(
             f"\n[klaar] FATAL: encryption key not found at {_ENC_KEY_PATH}\n"
             f"  Generate one with:   python server.py --gen-key\n"
@@ -224,7 +231,7 @@ def _startup_encryption_check() -> None:
       warn. Encryption is enabled later via the admin 'Encrypt existing data'
       action (or the CLI), which generates the key as the server's own user.
     """
-    if _ENC_KEY_PATH.exists():
+    if _key_present():
         _verify_key_or_exit()
     elif _encrypted_data_exists():
         sys.stderr.write(
@@ -264,7 +271,7 @@ def _verify_key_or_exit() -> None:
 
 def _gen_key_file() -> None:
     """Create a new master key, refusing to clobber an existing one."""
-    if _ENC_KEY_PATH.exists():
+    if _key_present():
         print(f"Key already exists at {_ENC_KEY_PATH} - not overwriting.")
         return
     _ENC_KEY_PATH.write_bytes(secrets.token_bytes(32))
@@ -2571,7 +2578,7 @@ def _encryption_counts() -> tuple[int, int]:
 
 
 def _key_b64_or_none():
-    if not _ENC_KEY_PATH.exists():
+    if not _key_present():
         return None
     try:
         return base64.b64encode(_enc_master_key()).decode("ascii")
@@ -2587,7 +2594,7 @@ def encryption_status():
     if not user.get("admin"):
         return jsonify({"error": "forbidden"}), 403
     enc, plain = _encryption_counts()
-    key_present = _ENC_KEY_PATH.exists()
+    key_present = _key_present()
     return jsonify({
         "key_present": key_present,
         "key_readable": _key_b64_or_none() is not None if key_present else False,
@@ -2609,7 +2616,7 @@ def encryption_encrypt_now():
     user = _current_user()
     if not user.get("admin"):
         return jsonify({"error": "forbidden"}), 403
-    key_created = not _ENC_KEY_PATH.exists()
+    key_created = not _key_present()
     try:
         _ensure_key_exists()
     except OSError as e:

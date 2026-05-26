@@ -33,10 +33,14 @@ holds the key and can read everything; it's a "files aren't plaintext" layer.
   separately from your data backups.
 
 > **Where to put the key:** point `KLAAR_ENC_KEY_FILE` at a location that is
-> (a) writable/readable by the user the web server runs as, and (b) *not* under
-> the public web root. On NearlyFreeSpeech, `/home/private/klaar_enc_key` is
-> ideal — persistent and never web-served. Set the env var consistently for the
-> gunicorn process (and any CLI use).
+> (a) writable/readable by the user the web server runs as, and (b) not in
+> backups / not web-served. On NearlyFreeSpeech the daemon runs as the `web`
+> user, so the key must be web-writable. The `data/` directory works well: the
+> daemon already writes there, a dotfile like `data/.klaar_enc_key` is excluded
+> from backups (those archive only `*.json`), and it isn't web-served (same dir
+> as `.secret_key`). **Do not** use `/home/private` — that's the member's own
+> `0700` home directory and the `web` user can't access it, which will crash
+> the daemon at startup.
 
 ### Enabling encryption (recommended: in-app)
 
