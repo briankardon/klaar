@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.18.0";
+const KLAAR_VERSION = "0.18.1";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -1076,6 +1076,33 @@ function clearSelection() {
   applySelectionStyles();
 }
 
+// Grow-only keyboard selection: Shift+Down adds the item just below the
+// current selection's bottom edge; Shift+Up adds the item just above its top.
+// (No shrinking — there's no cursor/focus end to track once editing blurs.)
+function growSelectionByArrow(direction) {
+  const visIds = getVisibleItemIds();
+  if (!visIds.length) return;
+  const idxs = [];
+  for (let i = 0; i < visIds.length; i++) {
+    if (selectedIds.has(visIds[i])) idxs.push(i);
+  }
+  let addIdx;
+  if (idxs.length === 0) {
+    // Nothing selected yet — seed at the edge we're growing from.
+    addIdx = direction < 0 ? visIds.length - 1 : 0;
+  } else {
+    addIdx = direction < 0 ? idxs[0] - 1 : idxs[idxs.length - 1] + 1;
+  }
+  if (addIdx < 0 || addIdx >= visIds.length) return;  // already at the edge
+  selectedIds.add(visIds[addIdx]);
+  // Drop any editing focus so this is a pure multi-selection (and group
+  // operations like Tab/Delete on the document handler take over).
+  const a = document.activeElement;
+  if (a && a.classList && a.classList.contains("item-text")) a.blur();
+  renderItems();
+  scrollToItem(visIds[addIdx]);
+}
+
 function applySelectionStyles() {
   itemsEl.querySelectorAll(".item").forEach((el) => {
     el.classList.toggle("selected", selectedIds.has(el.dataset.id));
@@ -1326,6 +1353,28 @@ function createItemTextElement(item) {
         const el = itemsEl.querySelector(`.item[data-id="${focusId}"] .item-text`);
         if (el) el.focus();
       }
+      return;
+    }
+    if (e.shiftKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+      // Grow the selection instead of moving the edit cursor. Commit any
+      // pending text edit first (mirrors the focus-move path below).
+      e.preventDefault();
+      const val = txt.value.trim();
+      if (val !== item.text) {
+        skipBlur = true;
+        item.text = val;
+        api(`/lists/${currentListId}/items/${item.id}`, {
+          method: "PATCH",
+          body: { text: val },
+        }).then(() => scheduleSyncFromServer()).catch(() => refreshItems());
+      }
+      // Anchor the grow on the item being edited if it isn't already selected.
+      if (!selectedIds.has(item.id)) {
+        selectedIds.clear();
+        selectedIds.add(item.id);
+        lastSelectedId = item.id;
+      }
+      growSelectionByArrow(e.key === "ArrowUp" ? -1 : 1);
       return;
     }
     if (e.key === "ArrowUp" || e.key === "ArrowDown" ||
@@ -3552,6 +3601,17 @@ document.addEventListener("keydown", (e) => {
   if (e.ctrlKey && ((e.key === "z" && e.shiftKey) || (e.key === "y" && !e.shiftKey)) && !e.altKey) {
     e.preventDefault();
     performRedo();
+    return;
+  }
+
+  // Shift+Up / Shift+Down — grow the selection (desktop). The first press
+  // while editing is caught by the input's own keydown (which blurs); these
+  // subsequent presses arrive here with no item-text focused.
+  if (e.shiftKey && (e.key === "ArrowUp" || e.key === "ArrowDown")
+      && !mobileQuery.matches
+      && !document.activeElement?.classList?.contains("item-text")) {
+    e.preventDefault();
+    growSelectionByArrow(e.key === "ArrowUp" ? -1 : 1);
     return;
   }
 
