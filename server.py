@@ -8,6 +8,7 @@ import os
 import re
 import secrets
 import struct
+import sys
 import tarfile
 import tempfile
 import uuid
@@ -46,6 +47,12 @@ app.permanent_session_lifetime = timedelta(days=90)
 # overridable via KLAAR_ENC_KEY_FILE. A leaked backup archive therefore
 # contains only ciphertext with no key inside it.
 #
+# The key is NEVER generated automatically. It is created once, explicitly,
+# via `python server.py --gen-key`, and existing plaintext data is encrypted
+# explicitly via `python server.py --encrypt-existing` (see README). On normal
+# startup, a missing key is a fatal error: the server refuses to boot rather
+# than silently minting a fresh key that couldn't decrypt existing data.
+#
 # Construction: HMAC-SHA256 used as a PRF in CTR mode for the keystream,
 # plus encrypt-then-MAC with a separate HMAC key (standard, well-understood
 # compositions of a vetted primitive). This avoids a third-party crypto
@@ -65,16 +72,14 @@ def _enc_master_key() -> bytes:
     global _enc_key_cache
     if _enc_key_cache is not None:
         return _enc_key_cache
-    if _ENC_KEY_PATH.exists():
-        _enc_key_cache = _ENC_KEY_PATH.read_bytes()
-    else:
-        key = secrets.token_bytes(32)
-        _ENC_KEY_PATH.write_bytes(key)
-        try:
-            os.chmod(_ENC_KEY_PATH, 0o600)
-        except OSError:
-            pass
-        _enc_key_cache = key
+    if not _ENC_KEY_PATH.exists():
+        raise RuntimeError(
+            f"Encryption key not found at {_ENC_KEY_PATH}. "
+            f"Generate one with `python server.py --gen-key` (or point "
+            f"KLAAR_ENC_KEY_FILE at an existing key). The key is never created "
+            f"automatically."
+        )
+    _enc_key_cache = _ENC_KEY_PATH.read_bytes()
     return _enc_key_cache
 
 
@@ -141,10 +146,12 @@ def _write_data_file(path: Path, obj) -> None:
         raise
 
 
-def _migrate_encrypt_at_rest() -> None:
-    """One-time pass: encrypt any still-plaintext list/users files in place,
-    without altering their contents (no version bump). Idempotent — already
-    encrypted files are skipped."""
+def _migrate_encrypt_at_rest() -> int:
+    """Encrypt any still-plaintext list/users files in place, without altering
+    their contents (no version bump). Idempotent — already-encrypted files are
+    skipped. Returns the number of files newly encrypted. Invoked explicitly
+    via `--encrypt-existing`, never automatically."""
+    count = 0
     for path in DATA_DIR.glob("*.json"):
         try:
             raw = path.read_bytes()
@@ -160,8 +167,61 @@ def _migrate_encrypt_at_rest() -> None:
                 if os.path.exists(tmp):
                     os.unlink(tmp)
                 raise
+            count += 1
         except Exception as e:
-            print(f"[klaar] encrypt-at-rest migration failed for {path.name}: {e}", flush=True)
+            print(f"[klaar] encrypt-at-rest failed for {path.name}: {e}", flush=True)
+    return count
+
+
+def _require_key_or_exit() -> None:
+    """Fatal-exit if the encryption key is missing. Called on normal startup so
+    a missing key crashes the server loudly instead of minting a fresh one."""
+    if not _ENC_KEY_PATH.exists():
+        sys.stderr.write(
+            f"\n[klaar] FATAL: encryption key not found at {_ENC_KEY_PATH}\n"
+            f"  Generate one with:   python server.py --gen-key\n"
+            f"  (or point KLAAR_ENC_KEY_FILE at an existing key)\n"
+            f"  Refusing to start so existing encrypted data isn't stranded\n"
+            f"  behind a freshly minted key.\n\n"
+        )
+        raise SystemExit(1)
+
+
+def _verify_key_or_exit() -> None:
+    """If any encrypted data file exists, confirm the loaded key can actually
+    decrypt it — catches the 'wrong key restored' case before serving."""
+    for path in DATA_DIR.glob("*.json"):
+        try:
+            raw = path.read_bytes()
+        except OSError:
+            continue
+        if not raw.startswith(ENC_MAGIC):
+            continue  # plaintext (not yet migrated) — nothing to verify
+        try:
+            _decrypt_bytes(raw)
+            return  # one good decrypt is enough
+        except Exception:
+            sys.stderr.write(
+                f"\n[klaar] FATAL: key at {_ENC_KEY_PATH} cannot decrypt {path.name}.\n"
+                f"  The wrong key is almost certainly present. Refusing to start\n"
+                f"  to avoid stranding or corrupting data. Restore the correct key.\n\n"
+            )
+            raise SystemExit(1)
+
+
+def _gen_key_file() -> None:
+    """Create a new master key, refusing to clobber an existing one."""
+    if _ENC_KEY_PATH.exists():
+        print(f"Key already exists at {_ENC_KEY_PATH} - not overwriting.")
+        return
+    _ENC_KEY_PATH.write_bytes(secrets.token_bytes(32))
+    try:
+        os.chmod(_ENC_KEY_PATH, 0o600)
+    except OSError:
+        pass
+    print(f"Generated new encryption key at {_ENC_KEY_PATH}")
+    print("BACK THIS UP somewhere safe (e.g. a password manager). If it is lost,")
+    print("all encrypted lists and user accounts become permanently unreadable.")
 
 
 UNDO_LIMIT = 50
@@ -2464,9 +2524,21 @@ def generate_test_list():
 # Run
 # ---------------------------------------------------------------------------
 
-# Encrypt any legacy plaintext data files in place on startup (idempotent).
-# Runs under gunicorn (import time) too, not just `python server.py`.
-_migrate_encrypt_at_rest()
-
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    if "--gen-key" in sys.argv:
+        _gen_key_file()
+    elif "--encrypt-existing" in sys.argv:
+        _require_key_or_exit()
+        n = _migrate_encrypt_at_rest()
+        print(f"Encrypted {n} plaintext file(s) in {DATA_DIR}/.")
+    else:
+        # Dev server: enforce the key just like production.
+        _require_key_or_exit()
+        _verify_key_or_exit()
+        app.run(debug=True, port=5000)
+else:
+    # Imported by gunicorn — enforce key presence (and correctness) at load
+    # time so a missing/wrong key fails the worker boot loudly instead of
+    # silently generating a new one and stranding existing data.
+    _require_key_or_exit()
+    _verify_key_or_exit()
