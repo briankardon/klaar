@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.19.1";
+const KLAAR_VERSION = "0.19.2";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -1601,6 +1601,12 @@ function createMenuButton(item) {
   btn.title = "Actions";
   btn.addEventListener("click", (e) => {
     e.stopPropagation();
+    // Make the menu's target item obvious by selecting it (replaces any
+    // existing selection — the popover acts on a single item).
+    selectedIds.clear();
+    selectedIds.add(item.id);
+    lastSelectedId = item.id;
+    applySelectionStyles();
     showItemMenu(item.id, btn);
   });
   return btn;
@@ -1630,7 +1636,22 @@ function createDeleteButton(item) {
 }
 
 function renderReorderDropZones(startRow, endRow) {
+  // Find the visible-row span covered by the source block so we can skip the
+  // drop zones that would leave it where it already is: the zone immediately
+  // above the block, any zone inside the block, and the zone immediately
+  // below it. (For collapsed/filtered blocks with no visible rows, nothing
+  // is skipped — those would all be real moves anyway.)
+  let firstBlockRow = -1, lastBlockRow = -1;
+  if (reorderBlockIds) {
+    for (let r = 0; r < visibleList.length; r++) {
+      if (reorderBlockIds.has(visibleList[r].item.id)) {
+        if (firstBlockRow === -1) firstBlockRow = r;
+        lastBlockRow = r;
+      }
+    }
+  }
   for (let row = startRow; row <= endRow && row <= visibleList.length; row++) {
+    if (firstBlockRow !== -1 && row >= firstBlockRow && row <= lastBlockRow + 1) continue;
     const dz = document.createElement("div");
     dz.className = "reorder-dropzone";
     dz.style.position = "absolute";
@@ -4843,15 +4864,16 @@ itemMenuEl.addEventListener("click", (e) => {
   }
 });
 
-// Dismiss the popover on any outside tap. Anchor clicks are handled by their
-// own listener (with stopPropagation) so they won't reach this and won't
-// close-then-reopen.
+// Dismiss the popover on any outside tap. Register in the CAPTURE phase so
+// item text click handlers (which stopPropagation in the bubble phase) can't
+// hide outside taps from us. Anchor clicks set up the popover separately
+// (their target check below excludes them so we don't close-then-reopen).
 document.addEventListener("click", (e) => {
   if (itemMenuEl.classList.contains("hidden")) return;
   if (e.target.closest("#item-menu")) return;
   if (e.target.closest(".item-menu-btn-anchor")) return;
   hideItemMenu();
-});
+}, true);
 
 // -------------------------------------------------------------------
 // Mobile add-mode: two glow drop-zones (above + below the chosen item)
@@ -4867,14 +4889,16 @@ function enterAddMode(itemId) {
   addModeItemId = itemId;
   renderItems();
   // Defer the doc-level cancel handler so the click that opened add mode
-  // doesn't immediately close it via bubbling.
-  setTimeout(() => document.addEventListener("click", _addModeOutsideHandler), 0);
+  // doesn't immediately close it. Register in capture phase so item text
+  // click handlers (which stopPropagation in bubble) can't hide the cancel
+  // from us.
+  setTimeout(() => document.addEventListener("click", _addModeOutsideHandler, true), 0);
 }
 
 function exitAddMode() {
   if (!addModeItemId) return;
   addModeItemId = null;
-  document.removeEventListener("click", _addModeOutsideHandler);
+  document.removeEventListener("click", _addModeOutsideHandler, true);
   renderItems();
 }
 
@@ -4896,6 +4920,16 @@ function renderAddDropZones() {
     dz.style.zIndex = "50";
     dz.addEventListener("click", (e) => {
       e.stopPropagation();
+      // iOS: focus an offscreen input synchronously inside the user-gesture
+      // chain to keep the keyboard alive across the async add API call —
+      // otherwise focusNewItem can't bring the keyboard back up.
+      if (mobileQuery.matches) {
+        if (_keyboardHolder) _keyboardHolder.remove();
+        _keyboardHolder = document.createElement("input");
+        _keyboardHolder.style.cssText = "position:fixed;top:-9999px;opacity:0;font-size:16px;";
+        document.body.appendChild(_keyboardHolder);
+        _keyboardHolder.focus();
+      }
       exitAddMode();
       action();
     });
