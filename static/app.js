@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.18.5";
+const KLAAR_VERSION = "0.19.0";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -1076,6 +1076,31 @@ function clearSelection() {
   applySelectionStyles();
 }
 
+// Mobile range-extend: snap the selection to span from the far end of the
+// current selection to the touched item. Long-press while a selection exists
+// uses this so the user doesn't have to fiddle with multi-tap on touch.
+function extendSelectionToItem(itemId) {
+  const visIds = getVisibleItemIds();
+  const tgt = visIds.indexOf(itemId);
+  if (tgt === -1) return false;
+  const selIdxs = [...selectedIds]
+    .map((id) => visIds.indexOf(id))
+    .filter((i) => i !== -1)
+    .sort((a, b) => a - b);
+  if (selIdxs.length === 0) return false;
+  // Anchor at the FARTHEST end from the press so existing selection isn't
+  // discarded — extends the range out toward the touched item.
+  const top = selIdxs[0], bot = selIdxs[selIdxs.length - 1];
+  const anchor = tgt < top ? bot : top;
+  const from = Math.min(anchor, tgt), to = Math.max(anchor, tgt);
+  selectedIds.clear();
+  for (let i = from; i <= to; i++) selectedIds.add(visIds[i]);
+  lastSelectedId = visIds[tgt];
+  renderItems();
+  scrollToItem(itemId);
+  return true;
+}
+
 // Grow-only keyboard selection: Shift+Down adds the item just below the
 // current selection's bottom edge; Shift+Up adds the item just above its top.
 // (No shrinking — there's no cursor/focus end to track once editing blurs.)
@@ -1566,6 +1591,21 @@ function createTagBubbles(item, displayIdx) {
   return tagsContainer;
 }
 
+function createMenuButton(item) {
+  // Mobile-only: replaces the per-row "x" delete with a hamburger that opens
+  // a small icon popover (move/add/copy/delete). The hamburger lives on the
+  // right edge so its position is predictable independent of tag count.
+  const btn = document.createElement("button");
+  btn.className = "item-menu-btn-anchor";
+  btn.textContent = "\u2630";  // \u2630
+  btn.title = "Actions";
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    showItemMenu(item.id, btn);
+  });
+  return btn;
+}
+
 function createDeleteButton(item) {
   const btnDel = document.createElement("button");
   btnDel.className = "btn-icon";
@@ -1660,7 +1700,6 @@ function renderViewport() {
     const cb = createItemCheckbox(item, displayIdx);
     const txt = createItemTextElement(item);
     const tagsContainer = createTagBubbles(item, displayIdx);
-    const btnDel = createDeleteButton(item);
 
     // Child count badge
     const badge = document.createElement("span");
@@ -1674,12 +1713,19 @@ function renderViewport() {
     leftGroup.className = "item-left";
     if (item.depth > 0) leftGroup.style.paddingLeft = (item.depth * 1.5) + "rem";
     leftGroup.append(cb, txt);
-    li.append(leftGroup, btnDel, tagsContainer, badge);
+    if (mobileQuery.matches) {
+      // Mobile: hamburger replaces the per-row "x" and lives at the far right,
+      // past the tags, so its position is predictable.
+      li.append(leftGroup, tagsContainer, badge, createMenuButton(item));
+    } else {
+      li.append(leftGroup, createDeleteButton(item), tagsContainer, badge);
+    }
     if (reorderItemId) li.classList.toggle("drag-source", reorderBlockIds.has(item.id));
     itemsEl.appendChild(li);
   }
 
   if (reorderItemId) renderReorderDropZones(startRow, endRow);
+  if (addModeItemId) renderAddDropZones();
 }
 
 // Wire up scroll-based viewport rendering
@@ -4585,6 +4631,13 @@ function setupItemTouch(li, itemId) {
       if (document.activeElement?.classList?.contains("item-text")) {
         document.activeElement.blur();
       }
+      // If a selection already exists and the long-pressed item is outside
+      // it, treat the gesture as "extend the selection to here" (range from
+      // the far end of the existing selection to the pressed item). Then
+      // auto-open the bottom sheet so the user can act on the new selection.
+      if (selectedIds.size > 0 && !selectedIds.has(itemId)) {
+        extendSelectionToItem(itemId);
+      }
       showContextMenu(
         { preventDefault() {}, clientX: touch.clientX, clientY: touch.clientY },
         itemId, false
@@ -4735,6 +4788,122 @@ document.getElementById("ctx-add-below").addEventListener("click", () => {
   hideContextMenu();
   if (item) addItemAfter(itemId, item.depth);
 });
+
+// -------------------------------------------------------------------
+// Mobile per-item action popover (hamburger ☰ on each row opens it)
+// -------------------------------------------------------------------
+
+let itemMenuFor = null;
+const itemMenuEl = document.getElementById("item-menu");
+
+function showItemMenu(itemId, anchorEl) {
+  // No popover during reorder/add — those modes use full-row drop zones and
+  // overlapping menus would conflict.
+  if (reorderItemId || addModeItemId) return;
+  itemMenuFor = itemId;
+  // Render off-screen first so we can measure, then position.
+  itemMenuEl.style.left = "-9999px";
+  itemMenuEl.style.top = "-9999px";
+  itemMenuEl.classList.remove("hidden");
+  const ar = anchorEl.getBoundingClientRect();
+  const mr = itemMenuEl.getBoundingClientRect();
+  const vw = window.innerWidth, vh = window.innerHeight;
+  // Horizontal: right-align to the anchor; clamp inside viewport.
+  let left = ar.right - mr.width;
+  if (left < 4) left = 4;
+  if (left + mr.width > vw - 4) left = vw - 4 - mr.width;
+  // Vertical: below if there's room, else above.
+  let top = (ar.bottom + mr.height + 8 <= vh) ? ar.bottom + 4 : ar.top - mr.height - 4;
+  if (top < 4) top = 4;
+  itemMenuEl.style.left = left + "px";
+  itemMenuEl.style.top = top + "px";
+}
+
+function hideItemMenu() {
+  itemMenuEl.classList.add("hidden");
+  itemMenuFor = null;
+}
+
+itemMenuEl.addEventListener("click", (e) => {
+  const btn = e.target.closest(".item-menu-btn");
+  if (!btn || !itemMenuFor) return;
+  e.stopPropagation();
+  const act = btn.dataset.act;
+  const id = itemMenuFor;
+  hideItemMenu();
+  if (act === "move") {
+    enterReorderMode(id, true);  // include hierarchy — matches desktop drag default
+  } else if (act === "delete") {
+    deleteItem(id);
+  } else if (act === "copy") {
+    const it = currentItems.find((x) => x.id === id);
+    if (it) navigator.clipboard?.writeText(it.text || "").catch(() => {});
+  } else if (act === "add") {
+    enterAddMode(id);
+  }
+});
+
+// Dismiss the popover on any outside tap. Anchor clicks are handled by their
+// own listener (with stopPropagation) so they won't reach this and won't
+// close-then-reopen.
+document.addEventListener("click", (e) => {
+  if (itemMenuEl.classList.contains("hidden")) return;
+  if (e.target.closest("#item-menu")) return;
+  if (e.target.closest(".item-menu-btn-anchor")) return;
+  hideItemMenu();
+});
+
+// -------------------------------------------------------------------
+// Mobile add-mode: two glow drop-zones (above + below the chosen item)
+// -------------------------------------------------------------------
+
+let addModeItemId = null;
+function _addModeOutsideHandler(e) {
+  if (e.target.closest(".add-dropzone")) return;
+  exitAddMode();
+}
+
+function enterAddMode(itemId) {
+  addModeItemId = itemId;
+  renderItems();
+  // Defer the doc-level cancel handler so the click that opened add mode
+  // doesn't immediately close it via bubbling.
+  setTimeout(() => document.addEventListener("click", _addModeOutsideHandler), 0);
+}
+
+function exitAddMode() {
+  if (!addModeItemId) return;
+  addModeItemId = null;
+  document.removeEventListener("click", _addModeOutsideHandler);
+  renderItems();
+}
+
+function renderAddDropZones() {
+  const id = addModeItemId;
+  const row = visibleList.findIndex((v) => v.item.id === id);
+  if (row === -1) return;
+  const item = currentItems.find((it) => it.id === id);
+  if (!item) return;
+  const depth = item.depth;
+  const mk = (topPx, action) => {
+    const dz = document.createElement("div");
+    dz.className = "add-dropzone";
+    dz.style.position = "absolute";
+    dz.style.top = topPx + "px";
+    dz.style.left = "0";
+    dz.style.right = "0";
+    dz.style.height = "20px";
+    dz.style.zIndex = "50";
+    dz.addEventListener("click", (e) => {
+      e.stopPropagation();
+      exitAddMode();
+      action();
+    });
+    itemsEl.appendChild(dz);
+  };
+  mk(row * ITEM_HEIGHT - 10, () => addItemBefore(id, depth));
+  mk((row + 1) * ITEM_HEIGHT - 10, () => addItemAfter(id, depth));
+}
 
 // -------------------------------------------------------------------
 // Auth

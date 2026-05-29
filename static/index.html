@@ -37,6 +37,14 @@
     <span id="reorder-label"></span>
     <button id="reorder-cancel">Cancel</button>
   </div>
+
+  <!-- Mobile per-item quick-action popover (anchored to a tapped hamburger) -->
+  <div id="item-menu" class="hidden">
+    <button class="item-menu-btn" data-act="move" title="Move">&#x21C5;</button>
+    <button class="item-menu-btn" data-act="add" title="Add">&#xFF0B;</button>
+    <button class="item-menu-btn" data-act="copy" title="Copy">&#x1F4CB;</button>
+    <button class="item-menu-btn" data-act="delete" title="Delete">&#x1F5D1;</button>
+  </div>
   <main>
     <!-- Sidebar: list of todo lists -->
     <nav id="sidebar">

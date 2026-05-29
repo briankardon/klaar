@@ -692,16 +692,28 @@
       <h3>Touch interactions</h3>
       <ul>
         <li><strong>Tap</strong> an item's text to open an inline editor.</li>
-        <li><strong>Long-press</strong> (500ms) an item to open the context menu as a bottom sheet.</li>
+        <li><strong>Tap the &#x2630;</strong> (hamburger) on the right of an item to open a quick-action popover with icons for Move, Add, Copy, and Delete.</li>
+        <li><strong>Long-press</strong> (500ms) an item to open the full context menu as a bottom sheet (more options than the popover).</li>
+        <li><strong>Long-press an unselected item while another is selected</strong> to range-select from your existing selection to the long-pressed item (the bottom sheet auto-opens on the new selection so you can act on it). The range extends out from the far end of the existing selection.</li>
         <li><strong>Long-press</strong> a list name in the sidebar to open the list context menu.</li>
         <li><strong>Swipe right / left</strong> on a selected item to indent / outdent it (replaces <kbd>Tab</kbd>/<kbd>Shift+Tab</kbd> on touch). If multiple items are selected, all of them move. The gesture has to be clearly horizontal to engage, so you won't accidentally trigger it while scrolling.</li>
       </ul>
 
-      <h3>Context menu</h3>
-      <p>On mobile, the context menu appears as a bottom sheet rather than a floating menu. See the <a href="#items">Items &rarr; Context menu</a> list for what's in it.</p>
+      <h3>Quick-action popover (&#x2630; hamburger)</h3>
+      <p>Tapping the hamburger on an item shows a small icon popover anchored next to it (flips above or below depending on viewport position):</p>
+      <ul>
+        <li><strong>&#x21C5; Move</strong> &mdash; enters reorder mode (moves the item plus its children).</li>
+        <li><strong>&#xFF0B; Add</strong> &mdash; shows two green glow zones above and below the item; tap one to insert a new item there. The new item opens in edit mode immediately.</li>
+        <li><strong>&#x1F4CB; Copy</strong> &mdash; copies the item's text to the clipboard.</li>
+        <li><strong>&#x1F5D1; Delete</strong> &mdash; deletes the item (no confirmation; use undo to recover).</li>
+      </ul>
+      <p>Tap anywhere outside the popover to dismiss it.</p>
+
+      <h3>Full context menu (long-press)</h3>
+      <p>The bottom-sheet context menu has the same actions plus less common ones (move just-this-item without children, tag editing, indent/outdent, etc.). See the <a href="#items">Items &rarr; Context menu</a> list for the full set.</p>
 
       <h3>Reorder mode</h3>
-      <p>Since drag and drop is not available on mobile, use the context menu's "Move" or "Move with children" option to enter reorder mode. A cursor line appears at the center of the screen. Scroll the list to position the cursor where you want the item, then tap "Place here" to confirm or "Cancel" to abort.</p>
+      <p>Since drag and drop is not available on mobile, use the popover's <strong>&#x21C5; Move</strong> button (or the bottom sheet's "Move" option) to enter reorder mode. Glow lines appear between every item; scroll to find the destination and tap a line to drop the item there, or tap <strong>Cancel</strong> in the banner to abort.</p>
 
       <h3>Debug panel</h3>
       <p>Long-press the "Klaar" title in the header to toggle an on-screen debug log, useful for troubleshooting mobile-specific issues.</p>
