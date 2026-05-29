@@ -1,5 +1,5 @@
 /* Klaar – front-end logic */
-const KLAAR_VERSION = "0.19.2";
+const KLAAR_VERSION = "0.19.3";
 console.log(`Klaar v${KLAAR_VERSION}`);
 
 // On-screen debug log (mobile only — long-press title to toggle)
@@ -4787,6 +4787,17 @@ function exitReorderMode() {
   renderItems();  // re-render without drop zones
 }
 document.getElementById("reorder-cancel").addEventListener("click", exitReorderMode);
+
+// While in reorder mode, any tap that isn't on a drop zone cancels the
+// move. Capture phase so item text click handlers (which stopPropagation in
+// bubble) can't hide outside taps from us. Bubble is left intact so the
+// canceling tap can still do its normal thing (e.g. select the tapped item,
+// or — on a double tap — open the editor on the second click).
+document.addEventListener("click", (e) => {
+  if (!reorderItemId) return;
+  if (e.target.closest(".reorder-dropzone")) return;
+  exitReorderMode();
+}, true);
 document.getElementById("ctx-move").addEventListener("click", () => {
   const itemId = ctxItemId;
   hideContextMenu();
